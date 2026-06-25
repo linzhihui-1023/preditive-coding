@@ -1,0 +1,15 @@
+/home/lin/predify/codexapp_sync_20260625/MANIFEST.txt
+/home/lin/predify/codexapp_sync_20260625/README_SYNC.md
+/home/lin/predify/codexapp_sync_20260625/chat/CHAT_RECORD_RECONSTRUCTED.md
+/home/lin/predify/codexapp_sync_20260625/code/predify2021_targetflow/mce_scores/calculate_kitti_targetflow_pair_smoke.py
+/home/lin/predify/codexapp_sync_20260625/code/predify2021_targetflow/mce_scores/kitti_pairs.py
+/home/lin/predify/codexapp_sync_20260625/code/predify2021_targetflow/mce_scores/train_kitti_targetflow_adjacent_pairs.py
+/home/lin/predify/codexapp_sync_20260625/code/predify2021_targetflow/model_factory/get_model.py
+/home/lin/predify/codexapp_sync_20260625/code/predify2021_targetflow/model_factory/pvgg16_targetflow.py
+/home/lin/predify/codexapp_sync_20260625/code/predify2021_targetflow/model_factory/targetflow/core.py
+/home/lin/predify/codexapp_sync_20260625/code/predify_core/modules/base.py
+/home/lin/predify/codexapp_sync_20260625/code/predify_core/networks/base.py
+/home/lin/predify/codexapp_sync_20260625/docs/HANDOFF_SUMMARY.md
+/home/lin/predify/codexapp_sync_20260625/docs/README_DYNAMIC_ERROR_KITTI.md
+/home/lin/predify/codexapp_sync_20260625/docs/RESULTS_SUMMARY_FOR_CODEX.md
+/home/lin/predify/codexapp_sync_20260625/tools/check_dynamic_error_formula.py

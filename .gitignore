@@ -138,3 +138,17 @@ dmypy.json
 cython_debug/
 
 .vscode/
+
+# Local research artifacts and datasets
+.codex
+.torch/
+ImageNet-C/
+imagenet2012/
+imagenet_devkit/
+kitti_raw/
+weights_pvgg16_imagenet/
+weights_pvgg16_imagenet.zip
+kitti_*.p
+kitti_*.pt
+snapshots/
+codexapp_bundle_20260625/
