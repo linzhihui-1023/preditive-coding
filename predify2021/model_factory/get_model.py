@@ -9,12 +9,15 @@ import predify
 
 MODEL_ALIASES = {
     "pvgg": "pvgg",
+    "pvgg_tf": "pvgg_tf",
+    "pvggtargetflow": "pvgg_tf",
     "peffb0": "peffb0",
     "pefficientnetb0": "peffb0",
 }
 
 MODEL_PCODER_COUNTS = {
     "pvgg": 5,
+    "pvgg_tf": 5,
     "peffb0": 8,
 }
 
@@ -111,6 +114,18 @@ def _load_pcoder_weights(net, checkpoint_paths):
         pmodule.load_state_dict(state_dict)
 
 
+def _load_targetflow_feedback_weights(net, checkpoint_paths):
+    # The target-flow skeleton uses stage-to-stage target modules aligned with
+    # legacy PCoders 2..5. PCoder 1 predicts the image and has no direct stage
+    # analogue here.
+    for module_idx, checkpoint_path in enumerate(checkpoint_paths[1:], 0):
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        module = net.feedback_modules[module_idx]
+        projector = module.projector
+        state_dict = _normalize_state_dict_for_module(projector, _extract_pmodule_state_dict(checkpoint))
+        projector.load_state_dict(state_dict)
+
+
 def set_hyperparams(net, hps):
     num = net.number_of_pcoders
 
@@ -122,7 +137,22 @@ def set_hyperparams(net, hps):
         setattr(net, f"erm{n}", torch.tensor(hps[n - 1]["erm"], dtype=torch.float64))
 
 
-def get_model(name, pretrained=False, deep_graph=False, timesteps=4, hyperparams=None, pcoder_weights=None):
+def get_model(
+    name,
+    pretrained=False,
+    deep_graph=False,
+    timesteps=4,
+    hyperparams=None,
+    pcoder_weights=None,
+    target_flow_mode="quasi_steady",
+    compute_local_param_grads=False,
+    temporal_target_mode="next_top",
+    temporal_horizons=(1,),
+    dynamic_error=True,
+    error_sample_time=1.0,
+    error_time_constant=1.0,
+    error_gain=1.0,
+):
     canonical_name = canonicalize_model_name(name)
 
     if canonical_name == "pvgg":
@@ -151,6 +181,24 @@ def get_model(name, pretrained=False, deep_graph=False, timesteps=4, hyperparams
                 fb_multiplier=0.33,
                 er_multiplier=0.01,
             )
+
+    elif canonical_name == "pvgg_tf":
+        import torchvision
+        from .pvgg16_targetflow import PVGG16TargetFlow
+
+        weights = torchvision.models.VGG16_Weights.IMAGENET1K_V1 if pretrained else None
+        backbone = torchvision.models.vgg16(weights=weights)
+        pnet = PVGG16TargetFlow(
+            backbone=backbone,
+            target_flow_mode=target_flow_mode,
+            compute_local_param_grads=compute_local_param_grads,
+            temporal_target_mode=temporal_target_mode,
+            temporal_horizons=temporal_horizons,
+            dynamic_error=dynamic_error,
+            error_sample_time=error_sample_time,
+            error_time_constant=error_time_constant,
+            error_gain=error_gain,
+        )
 
     elif canonical_name == "peffb0":
         from timm.models import efficientnet_b0
@@ -185,9 +233,14 @@ def get_model(name, pretrained=False, deep_graph=False, timesteps=4, hyperparams
     if pretrained:
         checkpoint_paths = _resolve_weight_paths(pcoder_weights, pnet.number_of_pcoders)
         print(f"Loading feedback weights from {checkpoint_paths}")
-        _load_pcoder_weights(pnet, checkpoint_paths)
+        if canonical_name == "pvgg_tf":
+            _load_targetflow_feedback_weights(pnet, checkpoint_paths)
+        else:
+            _load_pcoder_weights(pnet, checkpoint_paths)
 
     if hyperparams is not None:
+        if canonical_name == "pvgg_tf":
+            raise ValueError("pvgg_tf does not use legacy PCoder hyperparameters.")
         set_hyperparams(pnet, hyperparams)
 
     return pnet.eval()

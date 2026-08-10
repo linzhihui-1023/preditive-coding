@@ -29,3 +29,15 @@ For Adversarial Attacks:
 [Link to the PEfficientNetB0 weights](https://www.dropbox.com/s/0np1pzp3o3qhonv/weights_pefficientNetB0_imagenet.zip?dl=0) 
 
 [Link to the PVGG_Weights](https://www.dropbox.com/s/8lzp6wfo6n3bymk/weights_pvgg16_imagenet.zip?dl=0)
+
+## Stateful KITTI target-flow research
+
+The active research branch extends PVGG16 with five-layer target-flow state and
+processes KITTI as an ordered video stream. Each frame executes the model once;
+state is initialized on the first frame and inherited until the drive boundary.
+
+Current status and reproducibility records are maintained in:
+
+- [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)
+- [`docs/DECISIONS.md`](docs/DECISIONS.md)
+- [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md)
