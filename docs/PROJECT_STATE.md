@@ -27,6 +27,8 @@ cancelled and is not part of the active experiment design.
     local-loss error source.
   - Defaults local optimization to instantaneous error so memory controls have
     identical current-frame local losses and gradient coefficients.
+  - Trains the four feedback decoder modules jointly with the forward stages
+    and temporal predictor.
   - Keeps per-layer error and prediction memories across `step_frame` calls.
   - Clears memories at sequence boundaries through `reset`.
   - Builds the causal temporal prediction context from the current top feature,
@@ -47,6 +49,10 @@ cancelled and is not part of the active experiment design.
     model executions.
   - Saves the best student checkpoint by validation temporal loss as well as
     the final student and teacher checkpoints.
+  - Computes optional collapse prevention across a sequence-local temporal
+    window of pooled top features instead of across the batch dimension.
+  - Detaches stored history so only the current frame receives variance
+    gradients; the default window is 16 frames.
 - `predify2021/mce_scores/calculate_kitti_targetflow_pair_smoke.py`
   - Provides a sequential stream smoke check.
 
@@ -80,6 +86,11 @@ the instantaneous control coefficient was 1. This changed the local gradient
 scale and optimization dynamics. Reset-each-frame also reset that filtered
 loss state. Consequently, neither the reported A/B nor A/C difference can be
 attributed cleanly to inherited memory.
+
+The feedback decoders were also absent from the optimizer despite retaining
+gradients. This has been corrected; all future recursive target-flow runs train
+the feedback decoders. The earlier variance regularizer was inactive at stream
+batch size 1 and is replaced by a temporal-window implementation.
 
 The earlier unseeded corrected run reached MSE 0.094732 at epoch 8, but its
 best weights were not saved. It remains exploratory evidence and is not used
@@ -120,6 +131,10 @@ must be rerun after the causal-context and positive-loss-weight correction.
 4. If the mechanism advantage is stable, run a tau sweep and then add more
    train and validation drives.
 5. Reserve a separate test-drive set before reporting final generalization.
+
+Every new run must explicitly record the variance weight. A weight of zero
+means the mechanism is disabled. A positive weight uses the temporal window
+and must satisfy `target_std > sqrt(eps)`.
 
 ## Repository policy
 

@@ -91,3 +91,28 @@ feature defines `T5`, then feedback modules propagate targets through
 higher-layer forward outputs below the top layer and therefore must not be
 described as five-layer future Target Flow. It remains available only as an
 explicit ablation.
+
+## 2026-08-10: Train the feedback decoder
+
+Status: accepted
+
+The feedback modules are learned components of recursive Target Flow and are
+included in the same Adam optimizer as the forward stages and temporal
+predictor. They must not retain gradients while being omitted from optimizer
+parameter groups. The EMA teacher continues to track their learned parameters.
+
+## 2026-08-10: Use temporal variance in stream mode
+
+Status: accepted
+
+Batch variance is invalid when stream execution enforces batch size 1. Optional
+collapse prevention therefore computes per-channel variance over a
+sequence-local window of pooled top features. Stored previous-frame features
+are detached, so the current frame receives a gradient without retaining a
+graph across optimizer steps. The window resets at each true drive boundary
+and defaults to 16 frames.
+
+The numerical guard requires `target_std > sqrt(eps)` whenever the variance
+weight is positive. The defaults are `target_std=0.01` and `eps=1e-6`; the old
+`eps=1e-4` made the hinge identically zero. A variance weight of zero is
+recorded explicitly as disabled rather than described as collapse prevention.

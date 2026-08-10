@@ -1,4 +1,5 @@
 import copy
+import math
 import os
 import pickle
 import random
@@ -62,7 +63,8 @@ USE_PRETRAINED = os.environ.get("PREDIFY_PRETRAINED", "1") == "1"
 PCODER_WEIGHTS = os.environ.get("PREDIFY_PCODER_WEIGHTS", "/home/lin/predify/weights_pvgg16_imagenet")
 TOP_VARIANCE_WEIGHT = float(os.environ.get("PREDIFY_TOP_VARIANCE_WEIGHT", "0.0"))
 TOP_VARIANCE_TARGET = float(os.environ.get("PREDIFY_TOP_VARIANCE_TARGET", "0.01"))
-TOP_VARIANCE_EPS = float(os.environ.get("PREDIFY_TOP_VARIANCE_EPS", "1e-4"))
+TOP_VARIANCE_EPS = float(os.environ.get("PREDIFY_TOP_VARIANCE_EPS", "1e-6"))
+TOP_VARIANCE_WINDOW = int(os.environ.get("PREDIFY_TOP_VARIANCE_WINDOW", "16"))
 TEMPORAL_PREDICTION_WEIGHT = float(os.environ.get("PREDIFY_TEMPORAL_PREDICTION_WEIGHT", "1.0"))
 LAYER_LOSS_WEIGHTS = tuple(
     float(value)
@@ -398,6 +400,7 @@ def build_train_val_loaders():
 def build_optimizer(student):
     trainable_parameters = []
     trainable_parameters.extend(student.forward_stages.parameters())
+    trainable_parameters.extend(student.feedback_modules.parameters())
     trainable_parameters.extend(student.temporal_predictor.parameters())
     return torch.optim.Adam(
         trainable_parameters,
@@ -443,15 +446,45 @@ def _pool_top_features(tensor):
     return tensor.mean(dim=tuple(range(2, tensor.dim())))
 
 
-def compute_top_variance_regularizer(top_forward_output):
-    pooled = _pool_top_features(top_forward_output)
-    if pooled.shape[0] < 2:
-        zero = pooled.new_zeros(())
+def _variance_loss_from_samples(samples):
+    if samples.shape[0] < 2:
+        zero = samples.sum() * 0.0
         return zero, 0.0
 
-    std_per_dim = torch.sqrt(pooled.var(dim=0, unbiased=False) + TOP_VARIANCE_EPS)
+    std_per_dim = torch.sqrt(samples.var(dim=0, unbiased=False) + TOP_VARIANCE_EPS)
     variance_loss = torch.relu(TOP_VARIANCE_TARGET - std_per_dim).mean()
     return variance_loss, float(std_per_dim.detach().mean().cpu().item())
+
+
+class TemporalFeatureVarianceWindow:
+    def __init__(self, window_size):
+        if window_size < 2:
+            raise ValueError("Temporal variance window must contain at least 2 frames.")
+        self.window_size = int(window_size)
+        self.history = []
+
+    def reset(self):
+        self.history = []
+
+    def compute(self, top_forward_output):
+        pooled = _pool_top_features(top_forward_output)
+        samples = torch.cat(self.history + [pooled], dim=0) if self.history else pooled
+        variance_loss, pooled_std = _variance_loss_from_samples(samples)
+
+        self.history.extend(sample.detach() for sample in pooled.split(1, dim=0))
+        max_history = self.window_size - 1
+        if len(self.history) > max_history:
+            self.history = self.history[-max_history:]
+        return variance_loss, pooled_std, int(samples.shape[0])
+
+
+def compute_top_variance_regularizer(top_forward_output, temporal_window=None):
+    if temporal_window is not None:
+        return temporal_window.compute(top_forward_output)
+
+    pooled = _pool_top_features(top_forward_output)
+    variance_loss, pooled_std = _variance_loss_from_samples(pooled)
+    return variance_loss, pooled_std, int(pooled.shape[0])
 
 
 def resolve_top_target(student, teacher, next_frames):
@@ -486,6 +519,7 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
     top_feature_std_history = []
     top_pooled_std_history = []
     top_variance_loss_history = []
+    top_variance_sample_count_history = []
     temporal_loss_history = []
     temporal_mae_history = []
     temporal_cosine_history = []
@@ -499,6 +533,9 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
 
     iterator = tqdm(total=total_batches, desc="train" if training else "val")
     for sequence in sequence_records:
+        temporal_variance_window = (
+            TemporalFeatureVarianceWindow(TOP_VARIANCE_WINDOW) if STREAM_MODE else None
+        )
         if STREAM_MODE:
             student.reset()
             if teacher is not None:
@@ -537,8 +574,11 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
                 )
                 per_layer_losses, total_local_loss = student.collect_learn_flow_losses()
                 _, weighted_loss = combine_local_losses(per_layer_losses, LAYER_LOSS_WEIGHTS)
-                top_variance_loss, top_pooled_std = compute_top_variance_regularizer(
-                    student.layer_states[-1].forward_output
+                top_variance_loss, top_pooled_std, top_variance_sample_count = (
+                    compute_top_variance_regularizer(
+                        student.layer_states[-1].forward_output,
+                        temporal_window=temporal_variance_window,
+                    )
                 )
                 temporal_loss = student.collect_temporal_prediction_loss()
                 if temporal_loss is None:
@@ -561,8 +601,11 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
                     )
                     per_layer_losses, total_local_loss = student.collect_learn_flow_losses()
                     _, weighted_loss = combine_local_losses(per_layer_losses, LAYER_LOSS_WEIGHTS)
-                    top_variance_loss, top_pooled_std = compute_top_variance_regularizer(
-                        student.layer_states[-1].forward_output
+                    top_variance_loss, top_pooled_std, top_variance_sample_count = (
+                        compute_top_variance_regularizer(
+                            student.layer_states[-1].forward_output,
+                            temporal_window=temporal_variance_window,
+                        )
                     )
                     temporal_loss = student.collect_temporal_prediction_loss()
                     if temporal_loss is None:
@@ -593,6 +636,7 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
             top_feature_std_history.append(_feature_std(student.layer_states[-1].forward_output))
             top_pooled_std_history.append(top_pooled_std)
             top_variance_loss_history.append(float(top_variance_loss.detach().cpu().item()))
+            top_variance_sample_count_history.append(top_variance_sample_count)
             temporal_loss_history.append(float(temporal_loss.detach().cpu().item()))
             temporal_mae_history.append(float(temporal_mae.detach().cpu().item()))
             temporal_cosine_history.append(float(temporal_cosine.detach().cpu().item()))
@@ -611,6 +655,8 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
         "mean_top_feature_std": _mean(top_feature_std_history),
         "mean_top_pooled_std": _mean(top_pooled_std_history),
         "mean_top_variance_loss": _mean(top_variance_loss_history),
+        "mean_top_variance_sample_count": _mean(top_variance_sample_count_history),
+        "max_top_variance_sample_count": max(top_variance_sample_count_history, default=0),
         "mean_temporal_loss": _mean(temporal_loss_history),
         "mean_temporal_mae": _mean(temporal_mae_history),
         "mean_temporal_cosine": _mean(temporal_cosine_history),
@@ -654,6 +700,19 @@ def main():
         raise ValueError("PREDIFY_ERROR_STATE_MODE must be instant, ema, or lag1.")
     if LOCAL_LOSS_ERROR_SOURCE not in {"instant", "state"}:
         raise ValueError("PREDIFY_LOCAL_LOSS_ERROR_SOURCE must be instant or state.")
+    if TOP_VARIANCE_WINDOW < 2:
+        raise ValueError("PREDIFY_TOP_VARIANCE_WINDOW must be at least 2.")
+    if TOP_VARIANCE_WEIGHT < 0:
+        raise ValueError("PREDIFY_TOP_VARIANCE_WEIGHT must be non-negative.")
+    if TOP_VARIANCE_TARGET <= 0:
+        raise ValueError("PREDIFY_TOP_VARIANCE_TARGET must be positive.")
+    if TOP_VARIANCE_EPS <= 0:
+        raise ValueError("PREDIFY_TOP_VARIANCE_EPS must be positive.")
+    if TOP_VARIANCE_WEIGHT > 0 and TOP_VARIANCE_TARGET <= math.sqrt(TOP_VARIANCE_EPS):
+        raise ValueError(
+            "PREDIFY_TOP_VARIANCE_TARGET must be greater than sqrt(PREDIFY_TOP_VARIANCE_EPS) "
+            "when temporal variance regularization is enabled."
+        )
 
     train_loader, val_loader, train_drives, val_drives = build_train_val_loaders()
     if STREAM_MODE:
@@ -686,8 +745,11 @@ def main():
         f"Starting target-flow training with pretrained={USE_PRETRAINED}, "
         f"target_flow_mode={TARGET_FLOW_MODE}, epochs={EPOCHS}, batchsize={BATCH_SIZE}, "
         f"lr={LEARNING_RATE}, ema_decay={EMA_DECAY}, top_target_source={TOP_TARGET_SOURCE}, device={device}, "
+        f"feedback_decoder_trainable=True, "
         f"layer_loss_weights={LAYER_LOSS_WEIGHTS}, top_variance_weight={TOP_VARIANCE_WEIGHT}, "
-        f"top_variance_target={TOP_VARIANCE_TARGET}, temporal_prediction_weight={TEMPORAL_PREDICTION_WEIGHT}, "
+        f"top_variance_target={TOP_VARIANCE_TARGET}, top_variance_eps={TOP_VARIANCE_EPS}, "
+        f"top_variance_window={TOP_VARIANCE_WINDOW}, "
+        f"temporal_prediction_weight={TEMPORAL_PREDICTION_WEIGHT}, "
         f"temporal_target_mode={TEMPORAL_TARGET_MODE}, temporal_horizons={TEMPORAL_HORIZONS}, "
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
         f"error_state_mode={ERROR_STATE_MODE}, local_loss_error_source={LOCAL_LOSS_ERROR_SOURCE}, "
@@ -725,6 +787,7 @@ def main():
             "weight_decay": WEIGHT_DECAY,
             "ema_decay": EMA_DECAY,
             "top_target_source": TOP_TARGET_SOURCE,
+            "feedback_decoder_trainable": True,
             "train_fraction": TRAIN_FRACTION,
             "target_flow_mode": TARGET_FLOW_MODE,
             "temporal_target_mode": TEMPORAL_TARGET_MODE,
@@ -741,6 +804,7 @@ def main():
             "top_variance_weight": TOP_VARIANCE_WEIGHT,
             "top_variance_target": TOP_VARIANCE_TARGET,
             "top_variance_eps": TOP_VARIANCE_EPS,
+            "top_variance_window": TOP_VARIANCE_WINDOW,
             "temporal_prediction_weight": TEMPORAL_PREDICTION_WEIGHT,
         },
         "epochs": [],
@@ -799,6 +863,7 @@ def main():
             f"train_top_std={train_metrics['mean_top_feature_std']:.6f} | "
             f"train_top_poolstd={train_metrics['mean_top_pooled_std']:.6f} | "
             f"train_varloss={train_metrics['mean_top_variance_loss']:.6f} | "
+            f"train_varframes={train_metrics['max_top_variance_sample_count']} | "
             f"train_temploss={train_metrics['mean_temporal_loss']:.6f} | "
             f"train_tempmae={train_metrics['mean_temporal_mae']:.6f} | "
             f"train_tempcos={train_metrics['mean_temporal_cosine']:.6f}",
@@ -813,6 +878,7 @@ def main():
                 f"val_top_std={val_metrics['mean_top_feature_std']:.6f} | "
                 f"val_top_poolstd={val_metrics['mean_top_pooled_std']:.6f} | "
                 f"val_varloss={val_metrics['mean_top_variance_loss']:.6f} | "
+                f"val_varframes={val_metrics['max_top_variance_sample_count']} | "
                 f"val_temploss={val_metrics['mean_temporal_loss']:.6f} | "
                 f"val_tempmae={val_metrics['mean_temporal_mae']:.6f} | "
                 f"val_tempcos={val_metrics['mean_temporal_cosine']:.6f}",

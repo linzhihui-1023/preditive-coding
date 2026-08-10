@@ -46,6 +46,25 @@ class TargetFlowCausalityTest(unittest.TestCase):
         self.assertTrue(torch.equal(prediction_a, prediction_b))
         self.assertFalse(torch.equal(error_a, error_b))
 
+    def test_recursive_local_losses_produce_feedback_gradients(self):
+        self.model.reset()
+        self.model.zero_grad(set_to_none=True)
+        future_top = self.model.extract_top_forward_feature(self.future_a)
+        self.model.step_frame(
+            self.current,
+            top_target=future_top,
+            temporal_target_override=self.ego_motion,
+        )
+
+        _, total_local_loss = self.model.collect_learn_flow_losses()
+        total_local_loss.backward()
+        feedback_gradient_sum = sum(
+            parameter.grad.detach().abs().sum().item()
+            for parameter in self.model.feedback_modules.parameters()
+            if parameter.grad is not None
+        )
+        self.assertGreater(feedback_gradient_sum, 0.0)
+
     def test_temporal_loss_produces_predictor_gradients(self):
         self.model.reset()
         self.model.zero_grad(set_to_none=True)

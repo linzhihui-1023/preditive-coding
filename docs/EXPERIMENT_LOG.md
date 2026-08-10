@@ -9,7 +9,9 @@ Git revision: `77f0ad042a031fb151e12cb1174c628f20e22a44`
 Retrospective validity: the runs are causal, but they are not clean mechanism
 controls and do not evaluate the active five-layer future target chain. All
 three used `target_flow_mode=quasi_steady` and optimized
-`mean(state_error ** 2)`.
+`mean(state_error ** 2)`. Their feedback decoders produced gradients but were
+omitted from the optimizer, so those gradients accumulated without updating
+the decoder parameters.
 
 Shared configuration:
 
@@ -40,7 +42,13 @@ executed. They cannot support claims for dynamic-error memory or state
 inheritance. In addition, `quasi_steady` supplied the future target only at the
 top layer; lower targets came from current-frame higher-layer forward outputs.
 The corrected controls must use `recursive` target flow and an identical
-instantaneous local loss in every memory condition.
+instantaneous local loss in every memory condition, with trainable feedback
+decoders.
+
+The old runs set the variance weight to zero, so the inactive variance term did
+not alter their reported objectives. However, the old batch-based implementation
+would also have been identically zero in stream mode, and its default
+`target=0.01, eps=1e-4` made the hinge zero for any batch size.
 
 Server artifacts, not tracked by Git:
 
