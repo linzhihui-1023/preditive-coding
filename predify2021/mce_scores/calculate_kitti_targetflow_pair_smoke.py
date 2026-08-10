@@ -21,10 +21,17 @@ KITTI_CAMERA = os.environ.get("PREDIFY_KITTI_CAMERA", "image_02")
 MAX_PAIRS = int(os.environ.get("PREDIFY_MAX_PAIRS", "0"))
 BATCH_SIZE = int(os.environ.get("PREDIFY_BATCHSIZE", "1"))
 NUM_WORKERS = int(os.environ.get("PREDIFY_NUM_WORKERS", "0"))
-TARGET_FLOW_MODE = os.environ.get("PREDIFY_TARGET_FLOW_MODE", "quasi_steady")
+TARGET_FLOW_MODE = os.environ.get("PREDIFY_TARGET_FLOW_MODE", "recursive")
 TEMPORAL_TARGET_MODE = os.environ.get("PREDIFY_TEMPORAL_TARGET_MODE", "next_top")
 TASK_ALIGNED_TARGET = os.environ.get("PREDIFY_TASK_ALIGNED_TARGET", "").strip()
 USE_DYNAMIC_ERROR = os.environ.get("PREDIFY_DYNAMIC_ERROR", "1") == "1"
+ERROR_STATE_MODE = os.environ.get("PREDIFY_ERROR_STATE_MODE", "").strip().lower()
+if not ERROR_STATE_MODE:
+    ERROR_STATE_MODE = "ema" if USE_DYNAMIC_ERROR else "instant"
+LOCAL_LOSS_ERROR_SOURCE = os.environ.get(
+    "PREDIFY_LOCAL_LOSS_ERROR_SOURCE",
+    "instant",
+).strip().lower()
 ERROR_TS_RAW = os.environ.get("PREDIFY_ERROR_TS", "").strip()
 ERROR_TAU_RAW = os.environ.get("PREDIFY_ERROR_TAU", "1.0").strip()
 ERROR_GAIN_RAW = os.environ.get("PREDIFY_ERROR_GAIN", "1.0").strip()
@@ -76,7 +83,9 @@ def build_model():
         compute_local_param_grads=COMPUTE_LOCAL_PARAM_GRADS,
         temporal_target_mode=TEMPORAL_TARGET_MODE,
         temporal_horizons=TEMPORAL_HORIZONS,
-        dynamic_error=USE_DYNAMIC_ERROR,
+        dynamic_error=ERROR_STATE_MODE != "instant",
+        error_state_mode=ERROR_STATE_MODE,
+        local_loss_error_source=LOCAL_LOSS_ERROR_SOURCE,
         error_sample_time=ERROR_SAMPLE_TIME,
         error_time_constant=ERROR_TIME_CONSTANT,
         error_gain=ERROR_GAIN,
@@ -243,7 +252,8 @@ def main():
         f"temporal_horizons={TEMPORAL_HORIZONS}, "
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
         f"compute_local_param_grads={COMPUTE_LOCAL_PARAM_GRADS}, device={device}, "
-        f"dynamic_error={USE_DYNAMIC_ERROR}, error_sample_time={ERROR_SAMPLE_TIME}, "
+        f"error_state_mode={ERROR_STATE_MODE}, local_loss_error_source={LOCAL_LOSS_ERROR_SOURCE}, "
+        f"error_sample_time={ERROR_SAMPLE_TIME}, "
         f"error_time_constant={ERROR_TIME_CONSTANT}, error_gain={ERROR_GAIN}",
         flush=True,
     )

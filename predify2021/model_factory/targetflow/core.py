@@ -3,7 +3,6 @@ from typing import Optional, Sequence
 
 import torch
 import torch.nn as nn
-import torch
 
 
 @dataclass
@@ -40,7 +39,9 @@ class TargetFlowLayerState:
     previous_prediction: Optional[torch.Tensor] = None
     instant_error: Optional[torch.Tensor] = None
     previous_error: Optional[torch.Tensor] = None
+    previous_instant_error: Optional[torch.Tensor] = None
     error: Optional[torch.Tensor] = None
+    loss_error: Optional[torch.Tensor] = None
     learn_signal: Optional[torch.Tensor] = None
     local_loss: Optional[torch.Tensor] = None
     parameter_grad_stats: Optional[dict] = None
@@ -51,7 +52,7 @@ def run_backward_target_flow(
     feedback_modules,
     *,
     top_target: Optional[torch.Tensor] = None,
-    mode: str = "quasi_steady",
+    mode: str = "recursive",
 ):
     """
     Populate target-flow state in-place.
@@ -134,15 +135,26 @@ def build_targetflow_error(
     time_constant: float = 1.0,
     error_gain: float = 1.0,
     dynamic: bool = False,
+    mode: Optional[str] = None,
+    previous_instant_error: Optional[torch.Tensor] = None,
 ):
+    """Build an instant, recursive-EMA, or one-step lagged error state."""
     instant_error = build_targetflow_instant_error(target_output, forward_output)
     if instant_error is None:
         return None
-    if not dynamic:
+    resolved_mode = mode or ("ema" if dynamic else "instant")
+    if resolved_mode == "instant":
         return instant_error
+    if resolved_mode == "ema":
+        memory_error = previous_error
+    elif resolved_mode == "lag1":
+        memory_error = previous_instant_error
+    else:
+        raise ValueError(f"Unsupported target-flow error state mode: {resolved_mode}")
+
     return build_dynamic_targetflow_error(
         instant_error,
-        previous_error,
+        memory_error,
         sample_time=sample_time,
         time_constant=time_constant,
         error_gain=error_gain,

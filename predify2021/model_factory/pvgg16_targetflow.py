@@ -86,11 +86,13 @@ class PVGG16TargetFlow(nn.Module):
     def __init__(
         self,
         backbone: nn.Module,
-        target_flow_mode: str = "quasi_steady",
+        target_flow_mode: str = "recursive",
         compute_local_param_grads: bool = False,
         temporal_target_mode: str = "next_top",
         temporal_horizons=(1,),
         dynamic_error: bool = True,
+        error_state_mode: str = None,
+        local_loss_error_source: str = "instant",
         error_sample_time: float = 1.0,
         error_time_constant=1.0,
         error_gain=1.0,
@@ -123,6 +125,14 @@ class PVGG16TargetFlow(nn.Module):
         self.number_of_pcoders = self.number_of_layers
         self.target_flow_mode = target_flow_mode
         self.compute_local_param_grads = compute_local_param_grads
+        self.error_state_mode = error_state_mode or ("ema" if dynamic_error else "instant")
+        if self.error_state_mode not in {"instant", "ema", "lag1"}:
+            raise ValueError(f"Unsupported error_state_mode: {self.error_state_mode}")
+        if local_loss_error_source not in {"instant", "state"}:
+            raise ValueError(
+                f"Unsupported local_loss_error_source: {local_loss_error_source}"
+            )
+        self.local_loss_error_source = local_loss_error_source
         expanded_time_constants = _expand_per_layer_values(
             error_time_constant,
             self.number_of_layers,
@@ -137,7 +147,7 @@ class PVGG16TargetFlow(nn.Module):
             sample_time=float(error_sample_time),
             time_constant=expanded_time_constants,
             error_gain=expanded_error_gains,
-            enabled=bool(dynamic_error),
+            enabled=self.error_state_mode != "instant",
         )
         self.register_buffer(
             "error_time_constants",
@@ -167,6 +177,7 @@ class PVGG16TargetFlow(nn.Module):
         )
         self.layer_states = []
         self.error_state_memory = [None for _ in range(self.number_of_layers)]
+        self.instant_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
@@ -175,6 +186,7 @@ class PVGG16TargetFlow(nn.Module):
     def reset(self):
         self.layer_states = []
         self.error_state_memory = [None for _ in range(self.number_of_layers)]
+        self.instant_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
@@ -182,6 +194,18 @@ class PVGG16TargetFlow(nn.Module):
 
     def _resolve_previous_error_state(self, layer_index: int, reference_tensor: torch.Tensor):
         previous_error = self.error_state_memory[layer_index]
+        if previous_error is None:
+            return None
+        if previous_error.shape != reference_tensor.shape:
+            return None
+        return previous_error.to(reference_tensor.device, reference_tensor.dtype)
+
+    def _resolve_previous_instant_error_state(
+        self,
+        layer_index: int,
+        reference_tensor: torch.Tensor,
+    ):
+        previous_error = self.instant_error_state_memory[layer_index]
         if previous_error is None:
             return None
         if previous_error.shape != reference_tensor.shape:
@@ -282,6 +306,10 @@ class PVGG16TargetFlow(nn.Module):
                 zero_based_idx,
                 state.forward_output,
             )
+            state.previous_instant_error = self._resolve_previous_instant_error_state(
+                zero_based_idx,
+                state.forward_output,
+            )
 
         # Predict before resolving any target derived from a future frame. At
         # time t the causal context may use F_t and state carried from t-1, but
@@ -335,15 +363,22 @@ class PVGG16TargetFlow(nn.Module):
                 sample_time=self.dynamic_error_config.sample_time,
                 time_constant=float(self.error_time_constants[zero_based_idx].item()),
                 error_gain=float(self.error_gains[zero_based_idx].item()),
-                dynamic=self.dynamic_error_config.enabled,
+                mode=self.error_state_mode,
+                previous_instant_error=state.previous_instant_error,
             )
-            state.learn_signal = build_targetflow_learn_signal_from_error(state.error)
-            state.local_loss = build_targetflow_local_loss_from_error(state.error)
+            state.loss_error = (
+                state.instant_error
+                if self.local_loss_error_source == "instant"
+                else state.error
+            )
+            state.learn_signal = build_targetflow_learn_signal_from_error(state.loss_error)
+            state.local_loss = build_targetflow_local_loss_from_error(state.loss_error)
             if self.compute_local_param_grads and torch.is_grad_enabled():
                 state.parameter_grad_stats = compute_module_grad_stats(stage, state.local_loss)
             else:
                 state.parameter_grad_stats = None
             self.error_state_memory[zero_based_idx] = state.error.detach()
+            self.instant_error_state_memory[zero_based_idx] = state.instant_error.detach()
             self.prediction_state_memory[zero_based_idx] = state.target_output.detach()
 
         if temporal_target_override is not None:

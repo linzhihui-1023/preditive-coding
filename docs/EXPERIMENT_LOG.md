@@ -1,10 +1,15 @@
 # Experiment Log
 
-## Seeded temporal control matrix
+## Superseded seeded temporal control matrix
 
 Date: 2026-08-10
 
 Git revision: `77f0ad042a031fb151e12cb1174c628f20e22a44`
+
+Retrospective validity: the runs are causal, but they are not clean mechanism
+controls and do not evaluate the active five-layer future target chain. All
+three used `target_flow_mode=quasi_steady` and optimized
+`mean(state_error ** 2)`.
 
 Shared configuration:
 
@@ -23,17 +28,19 @@ Results:
 | B | Reset each frame | Dynamic, `tau=0.5` | 1 | 0.129041 | 0.240693 | 0.750757 |
 | C | Inherit | Instantaneous | 10 | 0.111454 | 0.223388 | 0.751711 |
 
-Run A improves temporal MSE by 15.7% and MAE by 7.4% over reset-each-frame
-run B. It improves MSE by 2.4% and MAE by 0.3% over instantaneous-error run C.
-The seed-0 result therefore gives stronger preliminary evidence for cross-frame
-state inheritance than for dynamic-error integration. Temporal cosine remains
-nearly constant and is not a discriminative metric on these drives.
+With `alpha=Ts/tau=0.207`, the dynamic local loss has gradient
+`dL/de_t=2*alpha*epsilon_t`, whereas the instantaneous condition has
+`dL/de_t=2*e_t`. A versus C therefore changes memory, smoothing, gradient
+scale, and effective optimization dynamics together. Resetting B every frame
+also resets the error integrator, so A versus B changes its local-loss gradient
+trajectory as well as temporal state inheritance.
 
-Run B resets all recurrent memories before every real frame, including the
-dynamic-error integrator. A versus B therefore tests the complete inherited
-state mechanism, not an isolated temporal-context variable. These are
-mechanism results from one seed and two drives; multiple seeds are required
-before a stable claim, and more drives are required for generalization.
+The numerical differences are retained only as a record that the causal stream
+executed. They cannot support claims for dynamic-error memory or state
+inheritance. In addition, `quasi_steady` supplied the future target only at the
+top layer; lower targets came from current-frame higher-layer forward outputs.
+The corrected controls must use `recursive` target flow and an identical
+instantaneous local loss in every memory condition.
 
 Server artifacts, not tracked by Git:
 

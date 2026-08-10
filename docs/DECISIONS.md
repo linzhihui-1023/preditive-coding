@@ -61,9 +61,33 @@ checkpoint with the lowest mean validation temporal loss. Final-epoch student
 and teacher checkpoints remain available for diagnostics, but they are not
 substituted for the selected checkpoint in result tables.
 
-The core control matrix consists of inherited state with dynamic error,
-reset-each-frame with dynamic error, and inherited state with instantaneous
-error. Every condition processes each real frame exactly once and preserves
-drive order. A reset-each-frame condition clears every recurrent memory,
-including dynamic-error history, so it is interpreted as a control for the
-complete cross-frame state mechanism.
+The first seeded A/B/C matrix is superseded because its filtered-error loss
+changed current gradient scale and because reset-each-frame changed that loss
+state. Its results remain in the experiment log but are not treated as clean
+mechanism evidence.
+
+## 2026-08-10: Separate error memory from local optimization
+
+Status: accepted
+
+The cross-frame error state and the error used for local optimization are
+independent choices. Formal memory controls use the instantaneous error for all
+five local losses, so they have the same current-frame loss, gradient
+coefficient, learning rate, and target-flow architecture.
+
+Error-state conditions are `instant`, recursive EMA, and lag-1 mixing. Lag-1
+uses `alpha*e_t + (1-K*alpha)*e_(t-1)` and, for the formal `K=1` setting,
+provides a one-step memory baseline with the same coefficients and
+constant-signal scale as recursive EMA. Using the filtered state directly in
+local loss is retained only as an explicitly named legacy ablation.
+
+## 2026-08-10: Use a five-layer future target chain
+
+Status: accepted
+
+The active target-flow mode is `recursive`. The detached future-frame top
+feature defines `T5`, then feedback modules propagate targets through
+`T5 -> T4 -> T3 -> T2 -> T1`. The previous `quasi_steady` mode used current
+higher-layer forward outputs below the top layer and therefore must not be
+described as five-layer future Target Flow. It remains available only as an
+explicit ablation.

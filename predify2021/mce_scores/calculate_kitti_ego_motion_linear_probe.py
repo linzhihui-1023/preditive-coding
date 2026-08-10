@@ -94,10 +94,16 @@ def build_model():
         "pvgg_tf",
         pretrained=USE_PRETRAINED,
         pcoder_weights=PCODER_WEIGHTS if USE_PRETRAINED else None,
-        target_flow_mode="quasi_steady",
+        target_flow_mode=checkpoint_config.get("target_flow_mode", "recursive"),
         compute_local_param_grads=False,
         temporal_target_mode=temporal_target_mode,
         temporal_horizons=temporal_horizons,
+        dynamic_error=checkpoint_config.get("dynamic_error", True),
+        error_state_mode=checkpoint_config.get("error_state_mode"),
+        local_loss_error_source=checkpoint_config.get(
+            "local_loss_error_source",
+            "instant",
+        ),
     ).to(device)
 
     if checkpoint is not None:

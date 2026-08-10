@@ -21,6 +21,12 @@ cancelled and is not part of the active experiment design.
 
 - `predify2021/model_factory/pvgg16_targetflow.py`
   - Implements five target-flow stages.
+  - Defaults to recursive target flow: the detached future top feature is
+    propagated through `T5 -> T4 -> T3 -> T2 -> T1`.
+  - Separates the cross-frame error state (`instant`, `ema`, or `lag1`) from the
+    local-loss error source.
+  - Defaults local optimization to instantaneous error so memory controls have
+    identical current-frame local losses and gradient coefficients.
   - Keeps per-layer error and prediction memories across `step_frame` calls.
   - Clears memories at sequence boundaries through `reset`.
   - Builds the causal temporal prediction context from the current top feature,
@@ -54,11 +60,12 @@ cancelled and is not part of the active experiment design.
 These two drives are enough for controlled mechanism validation, but not for a
 final claim about broad KITTI generalization.
 
-## Latest seeded control result
+## Superseded seeded control result
 
-The corrected causal model and two controls were run for ten epochs at Git
-revision `77f0ad0`, with seed 0 and best-checkpoint selection by validation
-temporal loss.
+The causal model and two controls were run for ten epochs at Git revision
+`77f0ad0`, with seed 0 and best-checkpoint selection by validation temporal
+loss. These results are retained for traceability but are not valid clean
+mechanism comparisons.
 
 | Run | State policy | Error policy | Best epoch | Temporal MSE | Temporal MAE |
 | --- | --- | --- | ---: | ---: | ---: |
@@ -66,10 +73,13 @@ temporal loss.
 | B | Reset each frame | Dynamic, `tau=0.5` | 1 | 0.129041 | 0.240693 |
 | C | Inherit | Instantaneous | 10 | 0.111454 | 0.223388 |
 
-Run A improves MSE by 15.7% over B and 2.4% over C. This seed supports the
-value of inherited cross-frame state. The dynamic-error advantage over
-instantaneous error is small and needs repeated seeds. Cosine remains close to
-0.75 for every condition and is not a useful discriminator on this split.
+All three runs used `quasi_steady`, so only the top layer received a future
+target. They also used the filtered error directly in the local MSE. At
+`Ts=0.1035` and `tau=0.5`, the EMA current-error coefficient was 0.207, while
+the instantaneous control coefficient was 1. This changed the local gradient
+scale and optimization dynamics. Reset-each-frame also reset that filtered
+loss state. Consequently, neither the reported A/B nor A/C difference can be
+attributed cleanly to inherited memory.
 
 The earlier unseeded corrected run reached MSE 0.094732 at epoch 8, but its
 best weights were not saved. It remains exploratory evidence and is not used
@@ -100,11 +110,16 @@ must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Repeat the A/B/C control matrix with at least seeds 1 and 2.
-2. Report mean, standard deviation, and per-seed paired differences.
-3. If the mechanism advantage is stable, run a tau sweep and then add more
+1. Run a corrected seed-0 matrix with recursive future target flow and
+   instantaneous local loss in every condition: inherited EMA, reset EMA,
+   inherited instantaneous error, and inherited lag-1 error.
+2. Compare EMA with lag-1 to test recursive history against a one-step memory
+   baseline with the same coefficients and constant-signal scale.
+3. Repeat the corrected matrix with at least seeds 1 and 2, then report mean,
+   standard deviation, and per-seed paired differences.
+4. If the mechanism advantage is stable, run a tau sweep and then add more
    train and validation drives.
-4. Reserve a separate test-drive set before reporting final generalization.
+5. Reserve a separate test-drive set before reporting final generalization.
 
 ## Repository policy
 

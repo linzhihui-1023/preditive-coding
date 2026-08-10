@@ -93,6 +93,36 @@ class TargetFlowCausalityTest(unittest.TestCase):
         self.assertGreater(torch.count_nonzero(inherited_memory_context).item(), 0)
         self.assertEqual(torch.count_nonzero(reset_memory_context).item(), 0)
 
+    def test_ema_state_does_not_rescale_instant_local_loss_gradient(self):
+        self.model.reset()
+        future_top = self.model.extract_top_forward_feature(self.future_a)
+        self.model.step_frame(
+            self.current,
+            top_target=future_top,
+            temporal_target_override=self.ego_motion,
+        )
+
+        self.assertEqual(self.model.error_state_mode, "ema")
+        self.assertFalse(
+            torch.allclose(
+                self.model.layer_states[-1].error,
+                self.model.layer_states[-1].instant_error,
+            )
+        )
+
+        for state in self.model.layer_states:
+            expected_loss = torch.mean(state.instant_error.pow(2))
+            expected_gradient = 2.0 * state.instant_error / state.instant_error.numel()
+            actual_gradient = torch.autograd.grad(
+                state.local_loss,
+                state.forward_output,
+                retain_graph=True,
+            )[0]
+
+            self.assertIs(state.loss_error, state.instant_error)
+            self.assertTrue(torch.allclose(state.local_loss, expected_loss))
+            self.assertTrue(torch.allclose(actual_gradient, expected_gradient))
+
 
 if __name__ == "__main__":
     unittest.main()
