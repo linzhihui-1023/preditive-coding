@@ -23,8 +23,10 @@ cancelled and is not part of the active experiment design.
   - Implements five target-flow stages.
   - Keeps per-layer error and prediction memories across `step_frame` calls.
   - Clears memories at sequence boundaries through `reset`.
-  - Builds the temporal prediction context from the top feature, five errors,
-    and five previous predictions.
+  - Builds the causal temporal prediction context from the current top feature,
+    five previous-frame errors, and five previous-frame predictions.
+  - Forms the temporal prediction before resolving targets derived from future
+    frames.
 - `predify2021/model_factory/targetflow/core.py`
   - Defines target-flow state, dynamic-error integration, local losses, and
     gradient diagnostics.
@@ -47,7 +49,7 @@ cancelled and is not part of the active experiment design.
 These two drives are enough for controlled mechanism validation, but not for a
 final claim about broad KITTI generalization.
 
-## Latest stream result
+## Previous stream result and validity
 
 Configuration:
 
@@ -64,19 +66,22 @@ Key validation results:
 - Epoch-10 temporal cosine: 0.651919.
 - Epoch-10 weighted validation loss: 0.007630.
 
-The run proves that the continuous stateful path trains and validates end to
-end. It does not yet isolate the benefit of inherited state because the
-reset-each-frame and instant-error controls have not been run.
+This run is not valid evidence of temporal prediction quality. Its temporal
+context included errors formed with the future-frame teacher target, and the
+temporal prediction loss weight defaulted to zero. The run only proves that the
+continuous stateful execution path completed end to end. All prediction metrics
+must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Add and run a reset-each-frame control while keeping one execution per real
+1. Rerun the corrected causal model with temporal prediction weight 1.0.
+2. Add and run a reset-each-frame control while keeping one execution per real
    video frame.
-2. Run `PREDIFY_DYNAMIC_ERROR=0` with the same ordered stream.
-3. Select the best checkpoint by validation temporal cosine rather than the
+3. Run `PREDIFY_DYNAMIC_ERROR=0` with the same ordered stream.
+4. Select the best checkpoint by validation temporal cosine rather than the
    final epoch.
-4. Repeat the core comparisons with multiple seeds.
-5. If the mechanism advantage is stable, run a tau sweep and then add more
+5. Repeat the core comparisons with multiple seeds.
+6. If the mechanism advantage is stable, run a tau sweep and then add more
    train and validation drives.
 
 ## Repository policy

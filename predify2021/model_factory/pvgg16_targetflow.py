@@ -258,12 +258,6 @@ class PVGG16TargetFlow(nn.Module):
         future_x: torch.Tensor = None,
         temporal_target_override: torch.Tensor = None,
     ):
-        resolved_top_target = self._resolve_top_target(
-            top_target=top_target,
-            next_x=next_x,
-            temporal_top_targets=temporal_top_targets,
-            future_x=future_x,
-        )
         forward_inputs, forward_outputs = self._run_forward_stages(x)
 
         self.layer_states = []
@@ -278,6 +272,54 @@ class PVGG16TargetFlow(nn.Module):
                     forward_output=forward_output,
                 )
             )
+
+        for zero_based_idx, state in enumerate(self.layer_states):
+            state.previous_prediction = self._resolve_previous_prediction_state(
+                zero_based_idx,
+                state.forward_output,
+            )
+            state.previous_error = self._resolve_previous_error_state(
+                zero_based_idx,
+                state.forward_output,
+            )
+
+        # Predict before resolving any target derived from a future frame. At
+        # time t the causal context may use F_t and state carried from t-1, but
+        # it must not use the error that requires observing I_{t+1}.
+        pooled_top_forward = _pool_spatial(forward_outputs[-1])
+        pooled_previous_errors = [
+            _pool_spatial(
+                state.previous_error
+                if state.previous_error is not None
+                else torch.zeros_like(state.forward_output)
+            )
+            for state in self.layer_states
+        ]
+        pooled_previous_predictions = [
+            _pool_spatial(
+                state.previous_prediction
+                if state.previous_prediction is not None
+                else torch.zeros_like(state.forward_output)
+            )
+            for state in self.layer_states
+        ]
+        self.temporal_context = torch.cat(
+            [pooled_top_forward] + pooled_previous_errors + pooled_previous_predictions,
+            dim=1,
+        )
+        raw_temporal_prediction = self.temporal_predictor(self.temporal_context)
+        self.temporal_prediction = raw_temporal_prediction.view(
+            raw_temporal_prediction.shape[0],
+            self.num_temporal_horizons,
+            self.temporal_target_dim,
+        )
+
+        resolved_top_target = self._resolve_top_target(
+            top_target=top_target,
+            next_x=next_x,
+            temporal_top_targets=temporal_top_targets,
+            future_x=future_x,
+        )
         run_backward_target_flow(
             self.layer_states,
             self.feedback_modules,
@@ -285,18 +327,11 @@ class PVGG16TargetFlow(nn.Module):
             mode=self.target_flow_mode,
         )
         for zero_based_idx, (state, stage) in enumerate(zip(self.layer_states, self.forward_stages)):
-            previous_prediction = self._resolve_previous_prediction_state(
-                zero_based_idx,
-                state.target_output,
-            )
-            previous_error = self._resolve_previous_error_state(zero_based_idx, state.forward_output)
-            state.previous_prediction = previous_prediction
-            state.previous_error = previous_error
             state.instant_error = build_targetflow_instant_error(state.target_output, state.forward_output)
             state.error = build_targetflow_error(
                 state.target_output,
                 state.forward_output,
-                previous_error=previous_error,
+                previous_error=state.previous_error,
                 sample_time=self.dynamic_error_config.sample_time,
                 time_constant=float(self.error_time_constants[zero_based_idx].item()),
                 error_gain=float(self.error_gains[zero_based_idx].item()),
@@ -310,27 +345,6 @@ class PVGG16TargetFlow(nn.Module):
                 state.parameter_grad_stats = None
             self.error_state_memory[zero_based_idx] = state.error.detach()
             self.prediction_state_memory[zero_based_idx] = state.target_output.detach()
-
-        pooled_top_forward = _pool_spatial(forward_outputs[-1])
-        pooled_errors = [_pool_spatial(state.error) for state in self.layer_states]
-        pooled_previous_predictions = [
-            _pool_spatial(
-                state.previous_prediction
-                if state.previous_prediction is not None
-                else torch.zeros_like(state.target_output)
-            )
-            for state in self.layer_states
-        ]
-        self.temporal_context = torch.cat(
-            [pooled_top_forward] + pooled_errors + pooled_previous_predictions,
-            dim=1,
-        )
-        raw_temporal_prediction = self.temporal_predictor(self.temporal_context)
-        self.temporal_prediction = raw_temporal_prediction.view(
-            raw_temporal_prediction.shape[0],
-            self.num_temporal_horizons,
-            self.temporal_target_dim,
-        )
 
         if temporal_target_override is not None:
             resolved_temporal_targets = temporal_target_override

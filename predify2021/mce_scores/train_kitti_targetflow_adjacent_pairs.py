@@ -55,7 +55,7 @@ PCODER_WEIGHTS = os.environ.get("PREDIFY_PCODER_WEIGHTS", "/home/lin/predify/wei
 TOP_VARIANCE_WEIGHT = float(os.environ.get("PREDIFY_TOP_VARIANCE_WEIGHT", "0.0"))
 TOP_VARIANCE_TARGET = float(os.environ.get("PREDIFY_TOP_VARIANCE_TARGET", "0.01"))
 TOP_VARIANCE_EPS = float(os.environ.get("PREDIFY_TOP_VARIANCE_EPS", "1e-4"))
-TEMPORAL_PREDICTION_WEIGHT = float(os.environ.get("PREDIFY_TEMPORAL_PREDICTION_WEIGHT", "0.0"))
+TEMPORAL_PREDICTION_WEIGHT = float(os.environ.get("PREDIFY_TEMPORAL_PREDICTION_WEIGHT", "1.0"))
 LAYER_LOSS_WEIGHTS = tuple(
     float(value)
     for value in os.environ.get("PREDIFY_LAYER_LOSS_WEIGHTS", "0.1,0.1,0.2,0.2,1.0").split(",")
@@ -574,6 +574,13 @@ def main():
     if TASK_ALIGNED_TARGET == "ego_motion" and TEMPORAL_TARGET_MODE != "ego_motion":
         raise ValueError(
             "When PREDIFY_TASK_ALIGNED_TARGET=ego_motion, set PREDIFY_TEMPORAL_TARGET_MODE=ego_motion."
+        )
+    if TEMPORAL_PREDICTION_WEIGHT < 0:
+        raise ValueError("PREDIFY_TEMPORAL_PREDICTION_WEIGHT must be non-negative.")
+    if TEMPORAL_PREDICTION_WEIGHT == 0:
+        print(
+            "WARNING: temporal_prediction_weight=0 disables training of the temporal predictor.",
+            flush=True,
         )
 
     train_loader, val_loader, train_drives, val_drives = build_train_val_loaders()

@@ -49,11 +49,13 @@ Validation history:
 
 Conclusion:
 
-The continuous stateful implementation runs end to end and keeps validation
-temporal cosine positive. Temporal cosine peaks early while the local weighted
-loss continues to improve, so checkpoint selection or early stopping is
-required. This experiment alone cannot attribute improvement to state
-inheritance.
+Retrospective validity: invalid as temporal-prediction evidence. The temporal
+context consumed current errors that had already been formed from the
+future-frame teacher feature, which leaked `I_{t+1}` into the `t -> t+1`
+prediction. In addition, the temporal prediction loss weight used its old
+default value of zero, so the temporal predictor received no temporal-loss
+gradient. The run is retained only as an execution smoke record and its metrics
+must not be compared with corrected experiments.
 
 Server artifacts, not tracked by Git:
 
