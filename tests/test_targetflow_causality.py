@@ -65,6 +65,34 @@ class TargetFlowCausalityTest(unittest.TestCase):
         )
         self.assertGreater(gradient_sum, 0.0)
 
+    def test_reset_each_frame_removes_inherited_context(self):
+        self.model.reset()
+        with torch.no_grad():
+            future_a_top = self.model.extract_top_forward_feature(self.future_a)
+            self.model.step_frame(
+                self.current,
+                top_target=future_a_top,
+                temporal_target_override=self.ego_motion,
+            )
+            future_b_top = self.model.extract_top_forward_feature(self.future_b)
+            self.model.step_frame(
+                self.future_a,
+                top_target=future_b_top,
+                temporal_target_override=self.ego_motion,
+            )
+            inherited_memory_context = self.model.temporal_context[:, 512:].clone()
+
+            self.model.reset()
+            self.model.step_frame(
+                self.future_a,
+                top_target=future_b_top,
+                temporal_target_override=self.ego_motion,
+            )
+            reset_memory_context = self.model.temporal_context[:, 512:].clone()
+
+        self.assertGreater(torch.count_nonzero(inherited_memory_context).item(), 0)
+        self.assertEqual(torch.count_nonzero(reset_memory_context).item(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

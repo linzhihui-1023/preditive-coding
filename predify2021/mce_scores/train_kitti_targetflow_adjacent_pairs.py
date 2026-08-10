@@ -1,6 +1,7 @@
 import copy
 import os
 import pickle
+import random
 from datetime import datetime
 from pathlib import Path
 
@@ -64,12 +65,15 @@ LAYER_LOSS_WEIGHTS = tuple(
 OUTPUT_PATH = os.environ.get("PREDIFY_OUTPUT_PATH", "kitti_targetflow_adjacent_pairs_train.p")
 SAVE_STUDENT_PATH = os.environ.get("PREDIFY_SAVE_STUDENT_PATH", "")
 SAVE_TEACHER_PATH = os.environ.get("PREDIFY_SAVE_TEACHER_PATH", "")
+SAVE_BEST_STUDENT_PATH = os.environ.get("PREDIFY_SAVE_BEST_STUDENT_PATH", "")
 FIXED_TS_RAW = os.environ.get("PREDIFY_FIXED_TS_S", "0.1035").strip()
 FIXED_TS_TOL_S = float(os.environ.get("PREDIFY_FIXED_TS_TOL_S", "0.001"))
 SHUFFLE_TRAIN_PAIRS = os.environ.get("PREDIFY_SHUFFLE_TRAIN_PAIRS", "0") == "1"
 SHUFFLE_VAL_PAIRS = os.environ.get("PREDIFY_SHUFFLE_VAL_PAIRS", "0") == "1"
 SHUFFLE_SEED = int(os.environ.get("PREDIFY_SHUFFLE_SEED", "0"))
 STREAM_MODE = os.environ.get("PREDIFY_STREAM_MODE", "1") == "1"
+RESET_EACH_FRAME = os.environ.get("PREDIFY_RESET_EACH_FRAME", "0") == "1"
+RANDOM_SEED = int(os.environ.get("PREDIFY_SEED", "0"))
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -104,6 +108,31 @@ def parse_drive_list(raw_value, default_drive):
     return drives if drives else [default_drive]
 
 
+def seed_everything(seed):
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True, warn_only=True)
+
+
+def seed_data_worker(worker_id):
+    worker_seed = (RANDOM_SEED + worker_id) % (2**32)
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
+    torch.manual_seed(worker_seed)
+
+
+def _loader_generator():
+    generator = torch.Generator()
+    generator.manual_seed(RANDOM_SEED)
+    return generator
+
+
 def _single_stream_loader(dataset):
     return DataLoader(
         dataset,
@@ -111,6 +140,8 @@ def _single_stream_loader(dataset):
         shuffle=False,
         num_workers=NUM_WORKERS,
         pin_memory=device.type == "cuda",
+        worker_init_fn=seed_data_worker,
+        generator=_loader_generator(),
     )
 
 
@@ -156,6 +187,18 @@ def derive_checkpoint_path(output_path, suffix):
     path = Path(output_path)
     base_name = path.stem if path.suffix else path.name
     return str(path.with_name(f"{base_name}{suffix}"))
+
+
+def save_model_checkpoint(model, path, config, epoch_record, checkpoint_kind):
+    torch.save(
+        {
+            "state_dict": model.state_dict(),
+            "config": config,
+            "selected_epoch": epoch_record,
+            "checkpoint_kind": checkpoint_kind,
+        },
+        path,
+    )
 
 
 def freeze_teacher(model):
@@ -324,6 +367,8 @@ def build_train_val_loaders():
         shuffle=False,
         num_workers=NUM_WORKERS,
         pin_memory=device.type == "cuda",
+        worker_init_fn=seed_data_worker,
+        generator=_loader_generator(),
     )
 
     val_loader = None
@@ -334,6 +379,8 @@ def build_train_val_loaders():
             shuffle=False,
             num_workers=NUM_WORKERS,
             pin_memory=device.type == "cuda",
+            worker_init_fn=seed_data_worker,
+            generator=_loader_generator(),
         )
 
     return train_loader, val_loader, train_drives, val_drives
@@ -449,6 +496,11 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
                 teacher.reset()
 
         for batch in sequence["loader"]:
+            if STREAM_MODE and RESET_EACH_FRAME:
+                student.reset()
+                if teacher is not None:
+                    teacher.reset()
+
             if TASK_ALIGNED_TARGET == "ego_motion":
                 current_frames, future_frames, temporal_targets, current_names, future_names = batch
                 temporal_targets = temporal_targets.to(device, non_blocking=device.type == "cuda")
@@ -557,10 +609,13 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
         "num_batches": len(weighted_loss_history),
         "num_sequences": len(sequence_records),
         "stream_mode": STREAM_MODE,
+        "reset_each_frame": RESET_EACH_FRAME,
     }
 
 
 def main():
+    seed_everything(RANDOM_SEED)
+
     if len(LAYER_LOSS_WEIGHTS) != 5:
         raise ValueError(
             f"PREDIFY_LAYER_LOSS_WEIGHTS must contain 5 values for pvgg_tf, got {len(LAYER_LOSS_WEIGHTS)}."
@@ -582,6 +637,8 @@ def main():
             "WARNING: temporal_prediction_weight=0 disables training of the temporal predictor.",
             flush=True,
         )
+    if RESET_EACH_FRAME and not STREAM_MODE:
+        raise ValueError("PREDIFY_RESET_EACH_FRAME=1 requires PREDIFY_STREAM_MODE=1.")
 
     train_loader, val_loader, train_drives, val_drives = build_train_val_loaders()
     if STREAM_MODE:
@@ -601,7 +658,7 @@ def main():
         f"train_pairs={train_pairs}, val_pairs={val_pairs}, temporal_horizons={TEMPORAL_HORIZONS}, "
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
         f"fixed_ts_s={FIXED_TS_S}, fixed_ts_tol_s={FIXED_TS_TOL_S}, "
-        f"stream_mode={STREAM_MODE}, "
+        f"stream_mode={STREAM_MODE}, reset_each_frame={RESET_EACH_FRAME}, seed={RANDOM_SEED}, "
         f"shuffle_train_pairs={SHUFFLE_TRAIN_PAIRS}, shuffle_val_pairs={SHUFFLE_VAL_PAIRS}, "
         f"shuffle_seed={SHUFFLE_SEED}",
         flush=True,
@@ -639,6 +696,8 @@ def main():
             "fixed_ts_s": FIXED_TS_S,
             "fixed_ts_tol_s": FIXED_TS_TOL_S,
             "stream_mode": STREAM_MODE,
+            "reset_each_frame": RESET_EACH_FRAME,
+            "seed": RANDOM_SEED,
             "shuffle_train_pairs": SHUFFLE_TRAIN_PAIRS,
             "shuffle_val_pairs": SHUFFLE_VAL_PAIRS,
             "shuffle_seed": SHUFFLE_SEED,
@@ -667,7 +726,14 @@ def main():
             "temporal_prediction_weight": TEMPORAL_PREDICTION_WEIGHT,
         },
         "epochs": [],
+        "best_checkpoint": None,
     }
+
+    best_val_temporal_loss = float("inf")
+    best_student_checkpoint_path = SAVE_BEST_STUDENT_PATH or derive_checkpoint_path(
+        OUTPUT_PATH,
+        "_best_student.pt",
+    )
 
     start = datetime.now()
     print(f"STARTING AT : {start}", flush=True)
@@ -682,6 +748,30 @@ def main():
             "val": val_metrics,
         }
         history["epochs"].append(epoch_record)
+
+        if val_metrics is not None:
+            val_temporal_loss = val_metrics["mean_temporal_loss"]
+            if val_temporal_loss < best_val_temporal_loss:
+                best_val_temporal_loss = val_temporal_loss
+                history["best_checkpoint"] = {
+                    "metric": "val_mean_temporal_loss",
+                    "value": val_temporal_loss,
+                    "epoch": epoch,
+                    "path": best_student_checkpoint_path,
+                }
+                save_model_checkpoint(
+                    student,
+                    best_student_checkpoint_path,
+                    history["config"],
+                    epoch_record,
+                    checkpoint_kind="best_val_temporal_loss",
+                )
+                print(
+                    f"Saved best student checkpoint at epoch {epoch} "
+                    f"with val_temporal_loss={val_temporal_loss:.6f} "
+                    f"to {best_student_checkpoint_path}",
+                    flush=True,
+                )
 
         print(
             f"Epoch {epoch:03d} | "
@@ -719,25 +809,23 @@ def main():
     print(f"Saved training history to {OUTPUT_PATH}", flush=True)
 
     student_checkpoint_path = SAVE_STUDENT_PATH or derive_checkpoint_path(OUTPUT_PATH, "_student.pt")
-    torch.save(
-        {
-            "state_dict": student.state_dict(),
-            "config": history["config"],
-            "final_epoch": history["epochs"][-1] if history["epochs"] else None,
-        },
+    save_model_checkpoint(
+        student,
         student_checkpoint_path,
+        history["config"],
+        history["epochs"][-1] if history["epochs"] else None,
+        checkpoint_kind="final_student",
     )
     print(f"Saved student checkpoint to {student_checkpoint_path}", flush=True)
 
     if teacher is not None:
         teacher_checkpoint_path = SAVE_TEACHER_PATH or derive_checkpoint_path(OUTPUT_PATH, "_teacher.pt")
-        torch.save(
-            {
-                "state_dict": teacher.state_dict(),
-                "config": history["config"],
-                "final_epoch": history["epochs"][-1] if history["epochs"] else None,
-            },
+        save_model_checkpoint(
+            teacher,
             teacher_checkpoint_path,
+            history["config"],
+            history["epochs"][-1] if history["epochs"] else None,
+            checkpoint_kind="final_teacher",
         )
         print(f"Saved teacher checkpoint to {teacher_checkpoint_path}", flush=True)
 
