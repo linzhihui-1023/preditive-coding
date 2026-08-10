@@ -1,6 +1,82 @@
 # Experiment Log
 
-## Continuous stream, dynamic error, two-drive validation
+## Corrected causal stream, dynamic error, two-drive validation
+
+Date: 2026-08-10
+
+Git revision: `4793bf387ca70fa3ae941b4ee64c0e77c1bda60d`
+
+Data:
+
+- Train: `2011_09_26_drive_0005_sync`, 153 frame pairs.
+- Validation: `2011_09_26_drive_0011_sync`, 232 frame pairs.
+- Camera: `image_02`.
+- Fixed interval: 0.1035 seconds, tolerance 0.001 seconds.
+
+Configuration:
+
+```text
+PREDIFY_STREAM_MODE=1
+PREDIFY_BATCHSIZE=1
+PREDIFY_EPOCHS=10
+PREDIFY_PRETRAINED=1
+PREDIFY_LR=1e-4
+PREDIFY_WEIGHT_DECAY=0
+PREDIFY_EMA_DECAY=0.99
+PREDIFY_TOP_TARGET_SOURCE=ema_teacher
+PREDIFY_TEMPORAL_TARGET_MODE=ego_motion
+PREDIFY_TASK_ALIGNED_TARGET=ego_motion
+PREDIFY_TEMPORAL_PREDICTION_WEIGHT=1.0
+PREDIFY_DYNAMIC_ERROR=1
+PREDIFY_ERROR_TS=0.1035
+PREDIFY_ERROR_TAU=0.5,0.5,0.5,0.5,0.5
+PREDIFY_ERROR_GAIN=1.0,1.0,1.0,1.0,1.0
+```
+
+Validation history:
+
+| Epoch | Weighted loss | Temporal loss | Temporal MAE | Temporal cosine | Objective |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 0.053068 | 0.134883 | 0.249643 | 0.750227 | 0.187952 |
+| 2 | 0.030311 | 0.143171 | 0.254734 | 0.750417 | 0.173483 |
+| 3 | 0.020068 | 0.140171 | 0.254326 | 0.750190 | 0.160238 |
+| 4 | 0.016547 | 0.135199 | 0.247631 | 0.750714 | 0.151746 |
+| 5 | 0.020322 | 0.126555 | 0.241959 | 0.751024 | 0.146878 |
+| 6 | 0.011090 | 0.119205 | 0.234498 | 0.750196 | 0.130294 |
+| 7 | 0.011140 | 0.117941 | 0.232466 | **0.751353** | 0.129080 |
+| 8 | 0.024938 | **0.094732** | **0.212064** | 0.750689 | **0.119669** |
+| 9 | 0.027394 | 0.132564 | 0.251984 | 0.746482 | 0.159958 |
+| 10 | 0.008007 | 0.127408 | 0.248920 | 0.749358 | 0.135415 |
+
+Reference baselines on the same validation targets:
+
+| Predictor | Temporal MSE | Temporal MAE | Temporal cosine |
+| --- | ---: | ---: | ---: |
+| All zeros | 0.249872 | 0.246986 | 0.000000 |
+| Training-drive mean motion | 0.129003 | 0.235466 | 0.751176 |
+| Corrected stream, epoch 8 | **0.094732** | **0.212064** | 0.750689 |
+
+Conclusion:
+
+The corrected causal model beats the training-mean constant baseline by 26.6%
+in MSE and 9.9% in MAE at epoch 8. Cosine does not improve because the target
+vectors are dominated by a shared forward-motion direction; temporal MSE and
+MAE are more informative selection metrics. This is one unseeded run and does
+not yet isolate state inheritance or dynamic error.
+
+The script saved only epoch 10, so the best epoch-8 weights are not available.
+Best-checkpoint saving and deterministic seeding are required before the formal
+control matrix.
+
+Server artifacts, not tracked by Git:
+
+```text
+/home/lin/predify/kitti_targetflow_stream_causal_ego_motion_dynerr_tau0p5_tw1_e10.p
+/home/lin/predify/kitti_targetflow_stream_causal_ego_motion_dynerr_tau0p5_tw1_e10_student.pt
+/home/lin/predify/kitti_targetflow_stream_causal_ego_motion_dynerr_tau0p5_tw1_e10_teacher.pt
+```
+
+## Invalid predecessor stream experiment
 
 Date: 2026-08-10
 

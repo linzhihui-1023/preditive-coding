@@ -49,7 +49,31 @@ cancelled and is not part of the active experiment design.
 These two drives are enough for controlled mechanism validation, but not for a
 final claim about broad KITTI generalization.
 
-## Previous stream result and validity
+## Latest corrected stream result
+
+The corrected causal model was run for ten epochs at Git revision `4793bf3`
+with temporal prediction weight 1.0. The data and remaining configuration match
+the two-drive setup below.
+
+Key validation results:
+
+- Best temporal MSE: 0.094732 at epoch 8.
+- Best temporal MAE: 0.212064 at epoch 8.
+- Epoch-8 temporal cosine: 0.750689.
+- Final epoch temporal MSE: 0.127408.
+- Final epoch temporal MAE: 0.248920.
+
+A constant predictor using the training-drive mean ego motion obtains validation
+MSE 0.129003, MAE 0.235466, and cosine 0.751176. The epoch-8 model improves MSE
+by 26.6% and MAE by 9.9%, but does not improve cosine. This suggests useful
+magnitude prediction while showing that cosine is dominated by the common
+forward-motion direction.
+
+The training script saved only the final epoch checkpoint, not epoch 8. The
+next formal run must save the best validation-temporal-loss checkpoint and set
+an explicit random seed.
+
+## Invalid predecessor stream result
 
 Configuration:
 
@@ -74,14 +98,13 @@ must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Rerun the corrected causal model with temporal prediction weight 1.0.
+1. Add deterministic seeding and save the best validation temporal-loss
+   checkpoint.
 2. Add and run a reset-each-frame control while keeping one execution per real
    video frame.
 3. Run `PREDIFY_DYNAMIC_ERROR=0` with the same ordered stream.
-4. Select the best checkpoint by validation temporal cosine rather than the
-   final epoch.
-5. Repeat the core comparisons with multiple seeds.
-6. If the mechanism advantage is stable, run a tau sweep and then add more
+4. Repeat the core comparisons with multiple seeds.
+5. If the mechanism advantage is stable, run a tau sweep and then add more
    train and validation drives.
 
 ## Repository policy
