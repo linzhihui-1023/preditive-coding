@@ -103,11 +103,12 @@ def evaluate_pair_smoke(net, dataloader):
     temporal_loss_sum = 0.0
     temporal_mae_sum = 0.0
     temporal_cosine_sum = 0.0
+    segment_count = 0
+    previous_start_index = None
 
     if BATCH_SIZE != 1:
         raise ValueError("KITTI targetflow stream smoke requires PREDIFY_BATCHSIZE=1.")
 
-    net.reset()
     for batch in tqdm(
         dataloader,
         desc="kitti_stream_step_smoke",
@@ -118,6 +119,11 @@ def evaluate_pair_smoke(net, dataloader):
         else:
             current_frames, future_frames, current_names, future_names = batch
             temporal_targets = None
+        current_start_index = int(Path(current_names[0]).stem)
+        if previous_start_index is None or current_start_index != previous_start_index + 1:
+            net.reset()
+            segment_count += 1
+        previous_start_index = current_start_index
         batch_pairs = current_frames.size(0)
         current_frames = current_frames.to(device, non_blocking=device.type == "cuda")
         future_frames = future_frames.to(device, non_blocking=device.type == "cuda")
@@ -172,6 +178,7 @@ def evaluate_pair_smoke(net, dataloader):
 
     return {
         "pairs": sample_count,
+        "segments": segment_count,
         "mean_top_local_loss": (top_local_loss_sum / sample_count) if sample_count else 0.0,
         "mean_top_error_rms": (top_error_rms_sum / sample_count) if sample_count else 0.0,
         "mean_top_instant_error_rms": (top_instant_error_rms_sum / sample_count) if sample_count else 0.0,
@@ -267,6 +274,7 @@ def main():
     end = datetime.now()
 
     print(f"Pairs: {results['pairs']}", flush=True)
+    print(f"Contiguous fixed-dt segments: {results['segments']}", flush=True)
     print(f"Mean top local loss: {results['mean_top_local_loss']:.6f}", flush=True)
     print(f"Mean top error rms: {results['mean_top_error_rms']:.6f}", flush=True)
     print(f"Mean top instant error rms: {results['mean_top_instant_error_rms']:.6f}", flush=True)

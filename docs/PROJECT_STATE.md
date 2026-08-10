@@ -10,7 +10,8 @@ The active model operates on a real video-frame stream:
 2. Each later frame executes the model exactly once.
 3. Each frame inherits the previous five layer states, predictions, and dynamic
    errors.
-4. The current state predicts next-time features or an ego-motion target.
+4. The current state predicts next-time features or a standardized 2-DoF
+   longitudinal-yaw motion target.
 5. Training and validation preserve drive and frame order. Stream mode requires
    batch size 1 and rejects shuffled pair loaders.
 
@@ -39,10 +40,15 @@ cancelled and is not part of the active experiment design.
   - Defines target-flow state, dynamic-error integration, local losses, and
     gradient diagnostics.
 - `predify2021/mce_scores/kitti_pairs.py`
-  - Loads adjacent KITTI frames, timestamps, and ego-motion targets.
+  - Loads adjacent KITTI frames, timestamps, and 2-DoF longitudinal-yaw
+    targets `[forward displacement m, yaw change rad]`.
+  - Splits fixed-dt-valid sample indices into contiguous segments whenever a
+    raw timestamp transition is rejected.
 - `predify2021/mce_scores/train_kitti_targetflow_adjacent_pairs.py`
   - Defaults to stream mode.
   - Resets once per drive or sequence, then calls `step_frame` once per frame.
+  - Treats each contiguous fixed-dt segment as a separate sequence, resetting
+    student, teacher, and variance history before the next segment.
   - Requires `PREDIFY_BATCHSIZE=1` and disables shuffled pairs in stream mode.
   - Supports deterministic runs through `PREDIFY_SEED`.
   - Supports the `PREDIFY_RESET_EACH_FRAME=1` control without adding repeated
@@ -53,8 +59,12 @@ cancelled and is not part of the active experiment design.
     window of pooled top features instead of across the batch dimension.
   - Detaches stored history so only the current frame receives variance
     gradients; the default window is 16 frames.
+  - Estimates per-horizon motion mean and standard deviation from training
+    segments only, optimizes standardized MSE, and reports forward MAE in
+    metres and yaw MAE in radians separately.
 - `predify2021/mce_scores/calculate_kitti_targetflow_pair_smoke.py`
-  - Provides a sequential stream smoke check.
+  - Provides a sequential stream smoke check and resets when frame indices
+    cross a filtered fixed-dt discontinuity.
 
 ## Available data
 
@@ -66,6 +76,10 @@ cancelled and is not part of the active experiment design.
 These two drives are enough for controlled mechanism validation, but not for a
 final claim about broad KITTI generalization.
 
+Both downloaded drives currently form one uninterrupted fixed-dt segment, so
+the newly fixed segment-boundary bug did not change their old sample order. The
+fix is required before adding drives that contain rejected timestamp steps.
+
 ## Superseded seeded control result
 
 The causal model and two controls were run for ten epochs at Git revision
@@ -73,7 +87,7 @@ The causal model and two controls were run for ten epochs at Git revision
 loss. These results are retained for traceability but are not valid clean
 mechanism comparisons.
 
-| Run | State policy | Error policy | Best epoch | Temporal MSE | Temporal MAE |
+| Run | State policy | Error policy | Best epoch | Legacy mixed-unit MSE | Legacy mixed-unit MAE |
 | --- | --- | --- | ---: | ---: | ---: |
 | A | Inherit | Dynamic, `tau=0.5` | 6 | **0.108731** | **0.222764** |
 | B | Reset each frame | Dynamic, `tau=0.5` | 1 | 0.129041 | 0.240693 |
@@ -91,6 +105,11 @@ The feedback decoders were also absent from the optimizer despite retaining
 gradients. This has been corrected; all future recursive target-flow runs train
 the feedback decoders. The earlier variance regularizer was inactive at stream
 batch size 1 and is replaced by a temporal-window implementation.
+
+The historical target named `ego_motion` contained only forward displacement
+and yaw change, not lateral translation. Its direct MSE mixed metres and
+radians. Corrected runs call it `longitudinal_yaw_2dof`, standardize each
+component using training-only statistics, and report physical component MAEs.
 
 The earlier unseeded corrected run reached MSE 0.094732 at epoch 8, but its
 best weights were not saved. It remains exploratory evidence and is not used
@@ -121,20 +140,27 @@ must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Run a corrected seed-0 matrix with recursive future target flow and
+1. Calibrate one fixed positive temporal-variance weight on the corrected
+   seed-0 inherited-EMA condition, using standardized motion loss and physical
+   component metrics. Freeze the selected value before mechanism comparisons.
+2. Run a corrected seed-0 matrix with recursive future target flow and
    instantaneous local loss in every condition: inherited EMA, reset EMA,
    inherited instantaneous error, and inherited lag-1 error.
-2. Compare EMA with lag-1 to test recursive history against a one-step memory
+3. Compare EMA with lag-1 to test recursive history against a one-step memory
    baseline with the same coefficients and constant-signal scale.
-3. Repeat the corrected matrix with at least seeds 1 and 2, then report mean,
+4. Repeat the corrected matrix with at least seeds 1 and 2, then report mean,
    standard deviation, and per-seed paired differences.
-4. If the mechanism advantage is stable, run a tau sweep and then add more
+5. If the mechanism advantage is stable, run a tau sweep and then add more
    train and validation drives.
-5. Reserve a separate test-drive set before reporting final generalization.
+6. Reserve a separate test-drive set before reporting final generalization.
 
 Every new run must explicitly record the variance weight. A weight of zero
 means the mechanism is disabled. A positive weight uses the temporal window
 and must satisfy `target_std > sqrt(eps)`.
+
+For the current complete training drive, horizon-1 normalization is based on
+153 samples: forward mean/std `0.466140/0.107030 m`, yaw mean/std
+`-0.001483/0.016870 rad`. Validation data is not used for these statistics.
 
 ## Repository policy
 

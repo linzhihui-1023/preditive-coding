@@ -1,4 +1,5 @@
 import math
+from bisect import bisect_right
 from datetime import datetime
 from pathlib import Path
 
@@ -6,6 +7,16 @@ from PIL import Image
 import torch
 from torch.utils.data import ConcatDataset, DataLoader, Dataset, Subset
 from torchvision.transforms import transforms
+
+
+def split_contiguous_indices(indices):
+    segments = []
+    for index in indices:
+        if not segments or index != segments[-1][-1] + 1:
+            segments.append([index])
+        else:
+            segments[-1].append(index)
+    return tuple(tuple(segment) for segment in segments)
 
 
 class KITTINextFramePairDataset(Dataset):
@@ -44,6 +55,7 @@ class KITTINextFramePairDataset(Dataset):
         if self.dt_tolerance_s < 0:
             raise ValueError(f"dt_tolerance_s must be non-negative, but got {self.dt_tolerance_s}.")
         self.valid_start_indices = []
+        self.valid_sample_segments = ()
         self.time_filter_stats = {}
 
         self.transform = transforms.Compose(
@@ -105,6 +117,13 @@ class KITTINextFramePairDataset(Dataset):
             )
 
         self.valid_start_indices = valid_start_indices
+        raw_index_segments = split_contiguous_indices(valid_start_indices)
+        sample_segments = []
+        sample_offset = 0
+        for segment in raw_index_segments:
+            sample_segments.append(tuple(range(sample_offset, sample_offset + len(segment))))
+            sample_offset += len(segment)
+        self.valid_sample_segments = tuple(sample_segments)
         self.time_filter_stats = {
             "fixed_dt_s": self.fixed_dt_s,
             "dt_tolerance_s": self.dt_tolerance_s,
@@ -112,6 +131,10 @@ class KITTINextFramePairDataset(Dataset):
             "candidate_samples": candidate_count,
             "valid_samples": len(valid_start_indices),
             "dropped_samples": dropped_count,
+            "num_contiguous_segments": len(self.valid_sample_segments),
+            "contiguous_segment_lengths": tuple(
+                len(segment) for segment in self.valid_sample_segments
+            ),
         }
 
     def __getitem__(self, index):
@@ -174,7 +197,7 @@ def _wrap_angle(angle):
 
 class KITTIEgoMotionPairDataset(KITTINextFramePairDataset):
     """
-    Adjacent-frame dataset with pair-level ego-motion targets from OXTS.
+    Adjacent-frame dataset with a 2-DoF longitudinal-yaw target from OXTS.
 
     Targets:
         delta_forward_m : forward displacement between t and t+1
@@ -251,15 +274,18 @@ class KITTIEgoMotionPairDataset(KITTINextFramePairDataset):
         return torch.tensor([delta_forward_m, delta_yaw_rad], dtype=torch.float32)
 
     def __getitem__(self, index):
-        start_index = self.valid_start_indices[index]
         current_frame, next_frame, current_name, next_name = super().__getitem__(index)
-        target = self._build_pair_target(start_index)
+        target = self.get_motion_target(index)
         return current_frame, next_frame, target, current_name, next_name
+
+    def get_motion_target(self, index):
+        start_index = self.valid_start_indices[index]
+        return self._build_pair_target(start_index)
 
 
 class KITTIEgoMotionMultiHorizonDataset(KITTIEgoMotionPairDataset):
     """
-    Multi-horizon KITTI dataset with explicit ego-motion targets.
+    Multi-horizon KITTI dataset with 2-DoF longitudinal-yaw targets.
 
     Sample i is:
         (frame_i, [frame_{i+h}], [motion_{i->i+h}])
@@ -284,19 +310,24 @@ class KITTIEgoMotionMultiHorizonDataset(KITTIEgoMotionPairDataset):
 
         future_frames = []
         future_names = []
-        motion_targets = []
         for horizon in self.horizons:
             future_path = self.frame_paths[start_index + horizon]
             future_frames.append(self._load_frame(future_path))
             future_names.append(future_path.name)
-            motion_targets.append(self._build_horizon_target(start_index, horizon))
 
         return (
             current_frame,
             torch.stack(future_frames, dim=0),
-            torch.stack(motion_targets, dim=0),
+            self.get_motion_target(index),
             current_path.name,
             tuple(future_names),
+        )
+
+    def get_motion_target(self, index):
+        start_index = self.valid_start_indices[index]
+        return torch.stack(
+            [self._build_horizon_target(start_index, horizon) for horizon in self.horizons],
+            dim=0,
         )
 
 
@@ -501,9 +532,35 @@ def collect_time_filter_stats(dataset):
             "candidate_samples": sum(stats.get("candidate_samples", 0) for stats in child_stats),
             "valid_samples": sum(stats.get("valid_samples", 0) for stats in child_stats),
             "dropped_samples": sum(stats.get("dropped_samples", 0) for stats in child_stats),
+            "num_contiguous_segments": sum(
+                stats.get("num_contiguous_segments", 0) for stats in child_stats
+            ),
+            "contiguous_segment_lengths": tuple(
+                length
+                for stats in child_stats
+                for length in stats.get("contiguous_segment_lengths", ())
+            ),
         }
 
     return dict(getattr(dataset, "time_filter_stats", {}))
+
+
+def get_motion_target(dataset, index):
+    if isinstance(dataset, Subset):
+        return get_motion_target(dataset.dataset, dataset.indices[index])
+
+    if isinstance(dataset, ConcatDataset):
+        dataset_index = bisect_right(dataset.cumulative_sizes, index)
+        previous_size = dataset.cumulative_sizes[dataset_index - 1] if dataset_index > 0 else 0
+        return get_motion_target(dataset.datasets[dataset_index], index - previous_size)
+
+    if isinstance(dataset, ShuffledFuturePairDataset):
+        return get_motion_target(dataset.dataset, dataset.reference_indices[index])
+
+    target_getter = getattr(dataset, "get_motion_target", None)
+    if target_getter is None:
+        raise TypeError(f"Dataset does not expose motion targets without loading images: {type(dataset)}")
+    return target_getter(index)
 
 
 def build_derangement(length, seed=0):

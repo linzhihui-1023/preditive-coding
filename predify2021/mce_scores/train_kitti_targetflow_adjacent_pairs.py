@@ -21,6 +21,7 @@ from .kitti_pairs import (
     build_kitti_ego_motion_multi_horizon_dataset,
     build_kitti_multi_horizon_dataset,
     collect_time_filter_stats,
+    get_motion_target,
 )
 
 
@@ -65,6 +66,7 @@ TOP_VARIANCE_WEIGHT = float(os.environ.get("PREDIFY_TOP_VARIANCE_WEIGHT", "0.0")
 TOP_VARIANCE_TARGET = float(os.environ.get("PREDIFY_TOP_VARIANCE_TARGET", "0.01"))
 TOP_VARIANCE_EPS = float(os.environ.get("PREDIFY_TOP_VARIANCE_EPS", "1e-6"))
 TOP_VARIANCE_WINDOW = int(os.environ.get("PREDIFY_TOP_VARIANCE_WINDOW", "16"))
+MOTION_STD_EPS = float(os.environ.get("PREDIFY_MOTION_STD_EPS", "1e-6"))
 TEMPORAL_PREDICTION_WEIGHT = float(os.environ.get("PREDIFY_TEMPORAL_PREDICTION_WEIGHT", "1.0"))
 LAYER_LOSS_WEIGHTS = tuple(
     float(value)
@@ -163,7 +165,7 @@ def _make_sequence_record(name, dataset):
     }
 
 
-def _make_stream_dataset(drive, max_pairs):
+def _make_stream_dataset(drive):
     dataset_class = (
         KITTIEgoMotionMultiHorizonDataset if TASK_ALIGNED_TARGET == "ego_motion" else KITTIMultiHorizonFrameDataset
     )
@@ -175,9 +177,52 @@ def _make_stream_dataset(drive, max_pairs):
         fixed_dt_s=FIXED_TS_S,
         dt_tolerance_s=FIXED_TS_TOL_S,
     )
-    if max_pairs > 0 and max_pairs < len(dataset):
-        dataset = Subset(dataset, list(range(max_pairs)))
     return dataset
+
+
+def _make_stream_sequence_records(role, drive, max_pairs):
+    dataset = _make_stream_dataset(drive)
+    remaining = max_pairs if max_pairs > 0 else len(dataset)
+    records = []
+    for segment_index, sample_indices in enumerate(dataset.valid_sample_segments):
+        if remaining <= 0:
+            break
+        selected_indices = list(sample_indices[:remaining])
+        if not selected_indices:
+            continue
+        records.append(
+            _make_sequence_record(
+                f"{role}:{drive}:segment_{segment_index:04d}",
+                Subset(dataset, selected_indices),
+            )
+        )
+        remaining -= len(selected_indices)
+    return records
+
+
+def _partition_stream_sequence_records(records, train_count, drive):
+    train_records = []
+    val_records = []
+    remaining_train = train_count
+    for record_index, record in enumerate(records):
+        dataset = record["dataset"]
+        take_train = min(len(dataset), remaining_train)
+        if take_train > 0:
+            train_records.append(
+                _make_sequence_record(
+                    f"train:{drive}:segment_{record_index:04d}",
+                    Subset(dataset, list(range(take_train))),
+                )
+            )
+            remaining_train -= take_train
+        if take_train < len(dataset):
+            val_records.append(
+                _make_sequence_record(
+                    f"val:{drive}:segment_{record_index:04d}",
+                    Subset(dataset, list(range(take_train, len(dataset)))),
+                )
+            )
+    return train_records, val_records
 
 
 def _count_sequence_samples(sequences):
@@ -190,6 +235,66 @@ def _collect_sequence_time_filter_stats(sequences):
         for sequence in sequences
         if sequence["time_filter_stats"]
     }
+
+
+def compute_motion_target_stats(training_data):
+    datasets = (
+        [sequence["dataset"] for sequence in training_data]
+        if STREAM_MODE
+        else [training_data.dataset]
+    )
+    targets = [
+        get_motion_target(dataset, index).float()
+        for dataset in datasets
+        for index in range(len(dataset))
+    ]
+    if not targets:
+        raise ValueError("Cannot estimate motion normalization without training targets.")
+
+    stacked = torch.stack(targets, dim=0)
+    if stacked.dim() == 2:
+        stacked = stacked.unsqueeze(1)
+    if stacked.shape[-1] != 2:
+        raise ValueError(f"Expected longitudinal-yaw targets with 2 components, got {stacked.shape}.")
+
+    mean = stacked.mean(dim=0)
+    raw_std = stacked.std(dim=0, unbiased=False)
+    std = raw_std.clamp_min(MOTION_STD_EPS)
+    return {
+        "name": "longitudinal_yaw_2dof",
+        "components": ("forward_displacement_m", "yaw_change_rad"),
+        "count": int(stacked.shape[0]),
+        "mean": mean,
+        "std": std,
+        "raw_std": raw_std,
+        "std_eps": MOTION_STD_EPS,
+    }
+
+
+def serialize_motion_target_stats(stats):
+    if stats is None:
+        return None
+    return {
+        "name": stats["name"],
+        "components": stats["components"],
+        "count": stats["count"],
+        "mean": stats["mean"].tolist(),
+        "std": stats["std"].tolist(),
+        "raw_std": stats["raw_std"].tolist(),
+        "std_eps": stats["std_eps"],
+    }
+
+
+def normalize_motion_targets(targets, stats):
+    mean = stats["mean"].to(targets.device, targets.dtype)
+    std = stats["std"].to(targets.device, targets.dtype)
+    return (targets - mean) / std
+
+
+def denormalize_motion_targets(targets, stats):
+    mean = stats["mean"].to(targets.device, targets.dtype)
+    std = stats["std"].to(targets.device, targets.dtype)
+    return targets * std + mean
 
 
 def derive_checkpoint_path(output_path, suffix):
@@ -259,47 +364,33 @@ def build_train_val_loaders():
 
         if val_drives:
             train_sequences = [
-                _make_sequence_record(
-                    f"train:{drive}",
-                    _make_stream_dataset(drive, MAX_TRAIN_PAIRS),
-                )
+                sequence
                 for drive in train_drives
+                for sequence in _make_stream_sequence_records(
+                    "train",
+                    drive,
+                    MAX_TRAIN_PAIRS,
+                )
             ]
             val_sequences = [
-                _make_sequence_record(
-                    f"val:{drive}",
-                    _make_stream_dataset(drive, MAX_VAL_PAIRS),
-                )
+                sequence
                 for drive in val_drives
+                for sequence in _make_stream_sequence_records(
+                    "val",
+                    drive,
+                    MAX_VAL_PAIRS,
+                )
             ]
         else:
-            dataset = _make_stream_dataset(KITTI_DRIVE, MAX_PAIRS)
-            pair_count = len(dataset)
+            all_sequences = _make_stream_sequence_records("all", KITTI_DRIVE, MAX_PAIRS)
+            pair_count = _count_sequence_samples(all_sequences)
             train_count = max(1, int(pair_count * TRAIN_FRACTION))
             train_count = min(train_count, pair_count - 1) if pair_count > 1 else 1
-            val_count = pair_count - train_count
-
-            if isinstance(dataset, Subset):
-                indices = dataset.indices
-                base_dataset = dataset.dataset
-            else:
-                indices = list(range(pair_count))
-                base_dataset = dataset
-
-            train_sequences = [
-                _make_sequence_record(
-                    f"train:{KITTI_DRIVE}",
-                    Subset(base_dataset, indices[:train_count]),
-                )
-            ]
-            val_sequences = []
-            if val_count > 0:
-                val_sequences.append(
-                    _make_sequence_record(
-                        f"val:{KITTI_DRIVE}",
-                        Subset(base_dataset, indices[train_count:]),
-                    )
-                )
+            train_sequences, val_sequences = _partition_stream_sequence_records(
+                all_sequences,
+                train_count,
+                KITTI_DRIVE,
+            )
 
         return train_sequences, val_sequences, train_drives, val_drives
 
@@ -503,7 +594,7 @@ def resolve_temporal_targets(student, teacher, future_frames):
     raise ValueError(f"Unsupported PREDIFY_TOP_TARGET_SOURCE: {TOP_TARGET_SOURCE}")
 
 
-def run_epoch(student, teacher, dataloader, optimizer=None):
+def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=None):
     training = optimizer is not None
     if training:
         student.train()
@@ -523,6 +614,10 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
     temporal_loss_history = []
     temporal_mae_history = []
     temporal_cosine_history = []
+    forward_mae_history = []
+    yaw_mae_history = []
+    forward_mae_per_horizon_history = [[] for _ in TEMPORAL_HORIZONS]
+    yaw_mae_per_horizon_history = [[] for _ in TEMPORAL_HORIZONS]
     per_layer_history = [[] for _ in range(student.number_of_layers)]
 
     if STREAM_MODE:
@@ -548,11 +643,21 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
                     teacher.reset()
 
             if TASK_ALIGNED_TARGET == "ego_motion":
-                current_frames, future_frames, temporal_targets, current_names, future_names = batch
-                temporal_targets = temporal_targets.to(device, non_blocking=device.type == "cuda")
+                if motion_target_stats is None:
+                    raise ValueError("2-DoF longitudinal-yaw training requires training-set normalization stats.")
+                current_frames, future_frames, raw_temporal_targets, current_names, future_names = batch
+                raw_temporal_targets = raw_temporal_targets.to(
+                    device,
+                    non_blocking=device.type == "cuda",
+                )
+                temporal_targets = normalize_motion_targets(
+                    raw_temporal_targets,
+                    motion_target_stats,
+                )
             else:
                 current_frames, future_frames, current_names, future_names = batch
                 temporal_targets = None
+                raw_temporal_targets = None
             current_frames = current_frames.to(device, non_blocking=device.type == "cuda")
             future_frames = future_frames.to(device, non_blocking=device.type == "cuda")
 
@@ -620,14 +725,53 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
             temporal_target = student.temporal_target
             if temporal_prediction is not None and temporal_target is not None:
                 temporal_mae = torch.mean(torch.abs(temporal_prediction - temporal_target.detach()))
-                temporal_cosine = F.cosine_similarity(
-                    temporal_prediction.detach().float(),
-                    temporal_target.detach().float(),
-                    dim=-1,
-                ).mean()
+                if TASK_ALIGNED_TARGET == "ego_motion":
+                    physical_prediction = denormalize_motion_targets(
+                        temporal_prediction,
+                        motion_target_stats,
+                    )
+                    physical_absolute_error = torch.abs(
+                        physical_prediction - raw_temporal_targets.detach()
+                    )
+                    forward_mae = physical_absolute_error[..., 0].mean()
+                    yaw_mae = physical_absolute_error[..., 1].mean()
+                    temporal_cosine = F.cosine_similarity(
+                        physical_prediction.detach().float(),
+                        raw_temporal_targets.detach().float(),
+                        dim=-1,
+                    ).mean()
+                    for horizon_index in range(len(TEMPORAL_HORIZONS)):
+                        forward_mae_per_horizon_history[horizon_index].append(
+                            float(
+                                physical_absolute_error[:, horizon_index, 0]
+                                .mean()
+                                .detach()
+                                .cpu()
+                                .item()
+                            )
+                        )
+                        yaw_mae_per_horizon_history[horizon_index].append(
+                            float(
+                                physical_absolute_error[:, horizon_index, 1]
+                                .mean()
+                                .detach()
+                                .cpu()
+                                .item()
+                            )
+                        )
+                else:
+                    forward_mae = weighted_loss.new_zeros(())
+                    yaw_mae = weighted_loss.new_zeros(())
+                    temporal_cosine = F.cosine_similarity(
+                        temporal_prediction.detach().float(),
+                        temporal_target.detach().float(),
+                        dim=-1,
+                    ).mean()
             else:
                 temporal_mae = weighted_loss.new_zeros(())
                 temporal_cosine = weighted_loss.new_zeros(())
+                forward_mae = weighted_loss.new_zeros(())
+                yaw_mae = weighted_loss.new_zeros(())
 
             weighted_loss_history.append(float(weighted_loss.detach().cpu().item()))
             optimized_loss_history.append(float(optimized_loss.detach().cpu().item()))
@@ -640,6 +784,9 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
             temporal_loss_history.append(float(temporal_loss.detach().cpu().item()))
             temporal_mae_history.append(float(temporal_mae.detach().cpu().item()))
             temporal_cosine_history.append(float(temporal_cosine.detach().cpu().item()))
+            if TASK_ALIGNED_TARGET == "ego_motion":
+                forward_mae_history.append(float(forward_mae.detach().cpu().item()))
+                yaw_mae_history.append(float(yaw_mae.detach().cpu().item()))
 
             for layer_idx, loss in enumerate(per_layer_losses):
                 per_layer_history[layer_idx].append(float(loss.detach().cpu().item()))
@@ -660,6 +807,20 @@ def run_epoch(student, teacher, dataloader, optimizer=None):
         "mean_temporal_loss": _mean(temporal_loss_history),
         "mean_temporal_mae": _mean(temporal_mae_history),
         "mean_temporal_cosine": _mean(temporal_cosine_history),
+        "mean_standardized_motion_mse": (
+            _mean(temporal_loss_history) if TASK_ALIGNED_TARGET == "ego_motion" else None
+        ),
+        "mean_standardized_motion_mae": (
+            _mean(temporal_mae_history) if TASK_ALIGNED_TARGET == "ego_motion" else None
+        ),
+        "mean_forward_displacement_mae_m": _mean(forward_mae_history),
+        "mean_yaw_change_mae_rad": _mean(yaw_mae_history),
+        "mean_forward_displacement_mae_m_per_horizon": tuple(
+            _mean(values) for values in forward_mae_per_horizon_history
+        ),
+        "mean_yaw_change_mae_rad_per_horizon": tuple(
+            _mean(values) for values in yaw_mae_per_horizon_history
+        ),
         "mean_per_layer_local_loss": tuple(_mean(layer_values) for layer_values in per_layer_history),
         "num_batches": len(weighted_loss_history),
         "num_sequences": len(sequence_records),
@@ -708,6 +869,8 @@ def main():
         raise ValueError("PREDIFY_TOP_VARIANCE_TARGET must be positive.")
     if TOP_VARIANCE_EPS <= 0:
         raise ValueError("PREDIFY_TOP_VARIANCE_EPS must be positive.")
+    if MOTION_STD_EPS <= 0:
+        raise ValueError("PREDIFY_MOTION_STD_EPS must be positive.")
     if TOP_VARIANCE_WEIGHT > 0 and TOP_VARIANCE_TARGET <= math.sqrt(TOP_VARIANCE_EPS):
         raise ValueError(
             "PREDIFY_TOP_VARIANCE_TARGET must be greater than sqrt(PREDIFY_TOP_VARIANCE_EPS) "
@@ -715,6 +878,12 @@ def main():
         )
 
     train_loader, val_loader, train_drives, val_drives = build_train_val_loaders()
+    motion_target_stats = (
+        compute_motion_target_stats(train_loader)
+        if TASK_ALIGNED_TARGET == "ego_motion"
+        else None
+    )
+    serialized_motion_target_stats = serialize_motion_target_stats(motion_target_stats)
     if STREAM_MODE:
         train_pairs = _count_sequence_samples(train_loader)
         val_pairs = _count_sequence_samples(val_loader) if val_loader is not None else 0
@@ -741,6 +910,12 @@ def main():
         print(f"Train time filter stats: {train_time_filter_stats}", flush=True)
     if val_time_filter_stats:
         print(f"Val time filter stats: {val_time_filter_stats}", flush=True)
+    if serialized_motion_target_stats is not None:
+        print(
+            f"Training-only 2-DoF longitudinal-yaw normalization: "
+            f"{serialized_motion_target_stats}",
+            flush=True,
+        )
     print(
         f"Starting target-flow training with pretrained={USE_PRETRAINED}, "
         f"target_flow_mode={TARGET_FLOW_MODE}, epochs={EPOCHS}, batchsize={BATCH_SIZE}, "
@@ -793,6 +968,10 @@ def main():
             "temporal_target_mode": TEMPORAL_TARGET_MODE,
             "temporal_horizons": TEMPORAL_HORIZONS,
             "task_aligned_target": TASK_ALIGNED_TARGET or "none",
+            "motion_target_name": (
+                "longitudinal_yaw_2dof" if TASK_ALIGNED_TARGET == "ego_motion" else "none"
+            ),
+            "motion_target_stats": serialized_motion_target_stats,
             "dynamic_error": ERROR_STATE_MODE != "instant",
             "error_state_mode": ERROR_STATE_MODE,
             "local_loss_error_source": LOCAL_LOSS_ERROR_SOURCE,
@@ -819,10 +998,36 @@ def main():
 
     start = datetime.now()
     print(f"STARTING AT : {start}", flush=True)
+    temporal_loss_label = (
+        "standardized_motion_mse"
+        if TASK_ALIGNED_TARGET == "ego_motion"
+        else "temporal_loss"
+    )
+    temporal_cosine_label = (
+        "raw_motion_cosine"
+        if TASK_ALIGNED_TARGET == "ego_motion"
+        else "temporal_cosine"
+    )
 
     for epoch in range(1, EPOCHS + 1):
-        train_metrics = run_epoch(student, teacher, train_loader, optimizer=optimizer)
-        val_metrics = run_epoch(student, teacher, val_loader, optimizer=None) if val_loader else None
+        train_metrics = run_epoch(
+            student,
+            teacher,
+            train_loader,
+            optimizer=optimizer,
+            motion_target_stats=motion_target_stats,
+        )
+        val_metrics = (
+            run_epoch(
+                student,
+                teacher,
+                val_loader,
+                optimizer=None,
+                motion_target_stats=motion_target_stats,
+            )
+            if val_loader
+            else None
+        )
 
         epoch_record = {
             "epoch": epoch,
@@ -836,7 +1041,11 @@ def main():
             if val_temporal_loss < best_val_temporal_loss:
                 best_val_temporal_loss = val_temporal_loss
                 history["best_checkpoint"] = {
-                    "metric": "val_mean_temporal_loss",
+                    "metric": (
+                        "val_standardized_longitudinal_yaw_mse"
+                        if TASK_ALIGNED_TARGET == "ego_motion"
+                        else "val_mean_temporal_loss"
+                    ),
                     "value": val_temporal_loss,
                     "epoch": epoch,
                     "path": best_student_checkpoint_path,
@@ -864,9 +1073,11 @@ def main():
             f"train_top_poolstd={train_metrics['mean_top_pooled_std']:.6f} | "
             f"train_varloss={train_metrics['mean_top_variance_loss']:.6f} | "
             f"train_varframes={train_metrics['max_top_variance_sample_count']} | "
-            f"train_temploss={train_metrics['mean_temporal_loss']:.6f} | "
-            f"train_tempmae={train_metrics['mean_temporal_mae']:.6f} | "
-            f"train_tempcos={train_metrics['mean_temporal_cosine']:.6f}",
+            f"train_{temporal_loss_label}={train_metrics['mean_temporal_loss']:.6f} | "
+            f"train_normmae={train_metrics['mean_temporal_mae']:.6f} | "
+            f"train_forward_mae_m={train_metrics['mean_forward_displacement_mae_m']:.6f} | "
+            f"train_yaw_mae_rad={train_metrics['mean_yaw_change_mae_rad']:.6f} | "
+            f"train_{temporal_cosine_label}={train_metrics['mean_temporal_cosine']:.6f}",
             flush=True,
         )
         if val_metrics is not None:
@@ -879,9 +1090,11 @@ def main():
                 f"val_top_poolstd={val_metrics['mean_top_pooled_std']:.6f} | "
                 f"val_varloss={val_metrics['mean_top_variance_loss']:.6f} | "
                 f"val_varframes={val_metrics['max_top_variance_sample_count']} | "
-                f"val_temploss={val_metrics['mean_temporal_loss']:.6f} | "
-                f"val_tempmae={val_metrics['mean_temporal_mae']:.6f} | "
-                f"val_tempcos={val_metrics['mean_temporal_cosine']:.6f}",
+                f"val_{temporal_loss_label}={val_metrics['mean_temporal_loss']:.6f} | "
+                f"val_normmae={val_metrics['mean_temporal_mae']:.6f} | "
+                f"val_forward_mae_m={val_metrics['mean_forward_displacement_mae_m']:.6f} | "
+                f"val_yaw_mae_rad={val_metrics['mean_yaw_change_mae_rad']:.6f} | "
+                f"val_{temporal_cosine_label}={val_metrics['mean_temporal_cosine']:.6f}",
                 flush=True,
             )
 

@@ -24,7 +24,7 @@ Shared configuration:
 
 Results:
 
-| Run | State policy | Error policy | Best epoch | Temporal MSE | Temporal MAE | Temporal cosine |
+| Run | State policy | Error policy | Best epoch | Legacy mixed-unit MSE | Legacy mixed-unit MAE | Raw cosine |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | A | Inherit | Dynamic, `tau=0.5` | 6 | **0.108731** | **0.222764** | **0.752622** |
 | B | Reset each frame | Dynamic, `tau=0.5` | 1 | 0.129041 | 0.240693 | 0.750757 |
@@ -49,6 +49,11 @@ The old runs set the variance weight to zero, so the inactive variance term did
 not alter their reported objectives. However, the old batch-based implementation
 would also have been identically zero in stream mode, and its default
 `target=0.01, eps=1e-4` made the hinge zero for any batch size.
+
+The target called `ego_motion` was only `[forward displacement in metres,
+yaw change in radians]`. Its unstandardized MSE mixed incompatible units and
+was dominated by forward displacement. These historical MSE/MAE/cosine values
+must not be compared with corrected standardized 2-DoF longitudinal-yaw runs.
 
 Server artifacts, not tracked by Git:
 
@@ -111,7 +116,7 @@ Validation history:
 
 Reference baselines on the same validation targets:
 
-| Predictor | Temporal MSE | Temporal MAE | Temporal cosine |
+| Predictor | Legacy mixed-unit MSE | Legacy mixed-unit MAE | Raw-vector cosine |
 | --- | ---: | ---: | ---: |
 | All zeros | 0.249872 | 0.246986 | 0.000000 |
 | Training-drive mean motion | 0.129003 | 0.235466 | 0.751176 |
@@ -119,11 +124,10 @@ Reference baselines on the same validation targets:
 
 Conclusion:
 
-The corrected causal model beats the training-mean constant baseline by 26.6%
-in MSE and 9.9% in MAE at epoch 8. Cosine does not improve because the target
-vectors are dominated by a shared forward-motion direction; temporal MSE and
-MAE are more informative selection metrics. This is one unseeded run and does
-not yet isolate state inheritance or dynamic error.
+This historical run improved the mixed-unit metrics, but those values are not
+physically balanced: forward displacement dominated yaw. It is retained only
+for traceability and cannot be compared with standardized longitudinal-yaw
+training. Raw-vector cosine was likewise dominated by forward motion.
 
 The script saved only epoch 10, so the best epoch-8 weights are not available.
 Best-checkpoint saving and deterministic seeding are required before the formal

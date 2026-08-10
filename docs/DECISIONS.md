@@ -116,3 +116,29 @@ The numerical guard requires `target_std > sqrt(eps)` whenever the variance
 weight is positive. The defaults are `target_std=0.01` and `eps=1e-6`; the old
 `eps=1e-4` made the hinge identically zero. A variance weight of zero is
 recorded explicitly as disabled rather than described as collapse prevention.
+
+## 2026-08-10: Reset at every fixed-dt discontinuity
+
+Status: accepted
+
+Filtering invalid timestamp transitions creates separate contiguous segments,
+not one sparse sequence. Stream loaders construct one sequence record per
+segment. Student state, EMA-teacher state, and the temporal variance window
+reset before the first frame of every segment, so a state computed at one side
+of a rejected time step is never applied at the other side.
+
+## 2026-08-10: Standardize the 2-DoF motion target
+
+Status: accepted
+
+The task target is `[forward displacement m, yaw change rad]`; it is not full
+ego-motion because lateral translation is absent. New reports call it the
+2-DoF longitudinal-yaw motion target. The internal `ego_motion` identifier is
+retained only for configuration compatibility.
+
+Mean and population standard deviation are estimated independently for each
+component and prediction horizon using training segments only. Training and
+best-checkpoint selection use standardized MSE. Predictions are transformed
+back to physical units for separate forward-displacement MAE in metres and yaw
+MAE in radians. Mixed-unit aggregate MSE and raw-vector cosine are not primary
+physical performance claims.
