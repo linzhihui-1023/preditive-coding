@@ -51,3 +51,19 @@ prediction has been formed.
 The temporal prediction loss has a positive default weight of 1.0. Setting it
 to zero is an explicit ablation and emits a warning because the temporal head
 then receives no training signal.
+
+## 2026-08-10: Make temporal controls reproducible
+
+Status: accepted
+
+Formal temporal comparisons use an explicit random seed and select the student
+checkpoint with the lowest mean validation temporal loss. Final-epoch student
+and teacher checkpoints remain available for diagnostics, but they are not
+substituted for the selected checkpoint in result tables.
+
+The core control matrix consists of inherited state with dynamic error,
+reset-each-frame with dynamic error, and inherited state with instantaneous
+error. Every condition processes each real frame exactly once and preserves
+drive order. A reset-each-frame condition clears every recurrent memory,
+including dynamic-error history, so it is interpreted as a control for the
+complete cross-frame state mechanism.

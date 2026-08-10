@@ -1,5 +1,51 @@
 # Experiment Log
 
+## Seeded temporal control matrix
+
+Date: 2026-08-10
+
+Git revision: `77f0ad042a031fb151e12cb1174c628f20e22a44`
+
+Shared configuration:
+
+- Train: `2011_09_26_drive_0005_sync`, 153 frame pairs.
+- Validation: `2011_09_26_drive_0011_sync`, 232 frame pairs.
+- Camera: `image_02`; fixed interval 0.1035 seconds.
+- Seed 0, ten epochs, batch size 1, ordered stream, no shuffle.
+- Ego-motion target, temporal prediction weight 1.0, EMA decay 0.99.
+- Best student checkpoint selected by lowest validation temporal loss.
+
+Results:
+
+| Run | State policy | Error policy | Best epoch | Temporal MSE | Temporal MAE | Temporal cosine |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| A | Inherit | Dynamic, `tau=0.5` | 6 | **0.108731** | **0.222764** | **0.752622** |
+| B | Reset each frame | Dynamic, `tau=0.5` | 1 | 0.129041 | 0.240693 | 0.750757 |
+| C | Inherit | Instantaneous | 10 | 0.111454 | 0.223388 | 0.751711 |
+
+Run A improves temporal MSE by 15.7% and MAE by 7.4% over reset-each-frame
+run B. It improves MSE by 2.4% and MAE by 0.3% over instantaneous-error run C.
+The seed-0 result therefore gives stronger preliminary evidence for cross-frame
+state inheritance than for dynamic-error integration. Temporal cosine remains
+nearly constant and is not a discriminative metric on these drives.
+
+Run B resets all recurrent memories before every real frame, including the
+dynamic-error integrator. A versus B therefore tests the complete inherited
+state mechanism, not an isolated temporal-context variable. These are
+mechanism results from one seed and two drives; multiple seeds are required
+before a stable claim, and more drives are required for generalization.
+
+Server artifacts, not tracked by Git:
+
+```text
+/home/lin/predify/kitti_targetflow_seed0_A_inherit_dynerr_tau0p5_tw1_e10.p
+/home/lin/predify/kitti_targetflow_seed0_A_inherit_dynerr_tau0p5_tw1_e10_best_student.pt
+/home/lin/predify/kitti_targetflow_seed0_B_resetframe_dynerr_tau0p5_tw1_e10.p
+/home/lin/predify/kitti_targetflow_seed0_B_resetframe_dynerr_tau0p5_tw1_e10_best_student.pt
+/home/lin/predify/kitti_targetflow_seed0_C_inherit_instanterr_tw1_e10.p
+/home/lin/predify/kitti_targetflow_seed0_C_inherit_instanterr_tw1_e10_best_student.pt
+```
+
 ## Corrected causal stream, dynamic error, two-drive validation
 
 Date: 2026-08-10

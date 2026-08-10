@@ -36,6 +36,11 @@ cancelled and is not part of the active experiment design.
   - Defaults to stream mode.
   - Resets once per drive or sequence, then calls `step_frame` once per frame.
   - Requires `PREDIFY_BATCHSIZE=1` and disables shuffled pairs in stream mode.
+  - Supports deterministic runs through `PREDIFY_SEED`.
+  - Supports the `PREDIFY_RESET_EACH_FRAME=1` control without adding repeated
+    model executions.
+  - Saves the best student checkpoint by validation temporal loss as well as
+    the final student and teacher checkpoints.
 - `predify2021/mce_scores/calculate_kitti_targetflow_pair_smoke.py`
   - Provides a sequential stream smoke check.
 
@@ -49,29 +54,26 @@ cancelled and is not part of the active experiment design.
 These two drives are enough for controlled mechanism validation, but not for a
 final claim about broad KITTI generalization.
 
-## Latest corrected stream result
+## Latest seeded control result
 
-The corrected causal model was run for ten epochs at Git revision `4793bf3`
-with temporal prediction weight 1.0. The data and remaining configuration match
-the two-drive setup below.
+The corrected causal model and two controls were run for ten epochs at Git
+revision `77f0ad0`, with seed 0 and best-checkpoint selection by validation
+temporal loss.
 
-Key validation results:
+| Run | State policy | Error policy | Best epoch | Temporal MSE | Temporal MAE |
+| --- | --- | --- | ---: | ---: | ---: |
+| A | Inherit | Dynamic, `tau=0.5` | 6 | **0.108731** | **0.222764** |
+| B | Reset each frame | Dynamic, `tau=0.5` | 1 | 0.129041 | 0.240693 |
+| C | Inherit | Instantaneous | 10 | 0.111454 | 0.223388 |
 
-- Best temporal MSE: 0.094732 at epoch 8.
-- Best temporal MAE: 0.212064 at epoch 8.
-- Epoch-8 temporal cosine: 0.750689.
-- Final epoch temporal MSE: 0.127408.
-- Final epoch temporal MAE: 0.248920.
+Run A improves MSE by 15.7% over B and 2.4% over C. This seed supports the
+value of inherited cross-frame state. The dynamic-error advantage over
+instantaneous error is small and needs repeated seeds. Cosine remains close to
+0.75 for every condition and is not a useful discriminator on this split.
 
-A constant predictor using the training-drive mean ego motion obtains validation
-MSE 0.129003, MAE 0.235466, and cosine 0.751176. The epoch-8 model improves MSE
-by 26.6% and MAE by 9.9%, but does not improve cosine. This suggests useful
-magnitude prediction while showing that cosine is dominated by the common
-forward-motion direction.
-
-The training script saved only the final epoch checkpoint, not epoch 8. The
-next formal run must save the best validation-temporal-loss checkpoint and set
-an explicit random seed.
+The earlier unseeded corrected run reached MSE 0.094732 at epoch 8, but its
+best weights were not saved. It remains exploratory evidence and is not used
+in the seeded control comparison.
 
 ## Invalid predecessor stream result
 
@@ -98,14 +100,11 @@ must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Add deterministic seeding and save the best validation temporal-loss
-   checkpoint.
-2. Add and run a reset-each-frame control while keeping one execution per real
-   video frame.
-3. Run `PREDIFY_DYNAMIC_ERROR=0` with the same ordered stream.
-4. Repeat the core comparisons with multiple seeds.
-5. If the mechanism advantage is stable, run a tau sweep and then add more
+1. Repeat the A/B/C control matrix with at least seeds 1 and 2.
+2. Report mean, standard deviation, and per-seed paired differences.
+3. If the mechanism advantage is stable, run a tau sweep and then add more
    train and validation drives.
+4. Reserve a separate test-drive set before reporting final generalization.
 
 ## Repository policy
 
