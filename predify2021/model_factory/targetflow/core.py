@@ -106,6 +106,7 @@ def build_dynamic_targetflow_error(
     time_constant,
     error_gain,
 ):
+    """Update epsilon_t = alpha*e_t + (1-K*alpha)*epsilon_(t-1)."""
     if instant_error is None:
         return None
 
@@ -116,13 +117,21 @@ def build_dynamic_targetflow_error(
     time_constant_tensor = instant_error.new_tensor(float(time_constant))
     error_gain_tensor = instant_error.new_tensor(float(error_gain))
 
-    if sample_time_tensor <= 0:
+    if not torch.isfinite(sample_time_tensor) or sample_time_tensor <= 0:
         raise ValueError(f"sample_time must be positive, but got {float(sample_time_tensor.item())}.")
-    if time_constant_tensor <= 0:
+    if not torch.isfinite(time_constant_tensor) or time_constant_tensor <= 0:
         raise ValueError(f"time_constant must be positive, but got {float(time_constant_tensor.item())}.")
+    if not torch.isfinite(error_gain_tensor):
+        raise ValueError(f"error_gain must be finite, but got {float(error_gain_tensor.item())}.")
 
     integration_factor = sample_time_tensor / time_constant_tensor
     memory_factor = 1.0 - error_gain_tensor * integration_factor
+    if torch.abs(memory_factor) >= 1.0:
+        raise ValueError(
+            "Unstable target-flow error dynamics: require "
+            "abs(1 - error_gain * sample_time / time_constant) < 1, but got "
+            f"memory_factor={float(memory_factor.item())}."
+        )
     return integration_factor * instant_error + memory_factor * previous_error
 
 

@@ -55,6 +55,13 @@ yaw change in radians]`. Its unstandardized MSE mixed incompatible units and
 was dominated by forward displacement. These historical MSE/MAE/cosine values
 must not be compared with corrected standardized 2-DoF longitudinal-yaw runs.
 
+The inherited condition also received the previous top target, which at time
+`t` contains `F_teacher(I_t)`, while reset-each-frame did not. Its A/B
+difference therefore mixed temporal history with an extra current-frame EMA
+teacher representation. The old 15.7% difference is not evidence for long-term
+memory. A corrected matrix requires a reset/no-history control that injects
+only `F_teacher(I_t)` into the top context slot.
+
 Server artifacts, not tracked by Git:
 
 ```text

@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -6,6 +7,7 @@ import torch.nn as nn
 from predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs import (
     TemporalFeatureVarianceWindow,
     build_optimizer,
+    configure_student_trainability,
 )
 
 
@@ -39,6 +41,34 @@ class FeedbackOptimizerTest(unittest.TestCase):
 
         optimizer.zero_grad(set_to_none=True)
         self.assertIsNone(feedback_parameter.grad)
+
+    def test_backbone_is_frozen_by_default_and_opted_in_explicitly(self):
+        student = _SmallTargetFlowStudent()
+        configure_student_trainability(student)
+        optimizer = build_optimizer(student)
+        optimizer_parameter_ids = {
+            id(parameter)
+            for group in optimizer.param_groups
+            for parameter in group["params"]
+        }
+        forward_parameter = next(student.forward_stages.parameters())
+
+        self.assertFalse(forward_parameter.requires_grad)
+        self.assertNotIn(id(forward_parameter), optimizer_parameter_ids)
+
+        with patch(
+            "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.TRAIN_BACKBONE",
+            True,
+        ):
+            configure_student_trainability(student)
+            optimizer = build_optimizer(student)
+        optimizer_parameter_ids = {
+            id(parameter)
+            for group in optimizer.param_groups
+            for parameter in group["params"]
+        }
+        self.assertTrue(forward_parameter.requires_grad)
+        self.assertIn(id(forward_parameter), optimizer_parameter_ids)
 
 
 class TemporalVarianceWindowTest(unittest.TestCase):

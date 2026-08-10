@@ -42,6 +42,20 @@ class TargetFlowErrorStateTest(unittest.TestCase):
         self.assertTrue(torch.allclose(ema, torch.tensor([7.6])))
         self.assertTrue(torch.allclose(lag1, torch.tensor([5.2])))
 
+    def test_unstable_error_dynamics_are_rejected(self):
+        common = {
+            "target_output": torch.tensor([0.0]),
+            "forward_output": torch.tensor([1.0]),
+            "previous_error": torch.tensor([0.0]),
+            "sample_time": 0.1,
+            "time_constant": 0.5,
+            "mode": "ema",
+        }
+        with self.assertRaisesRegex(ValueError, "Unstable"):
+            build_targetflow_error(error_gain=-1.0, **common)
+        with self.assertRaisesRegex(ValueError, "Unstable"):
+            build_targetflow_error(error_gain=10.0, **common)
+
 
 class RecursiveTargetFlowTest(unittest.TestCase):
     @staticmethod

@@ -28,9 +28,11 @@ cancelled and is not part of the active experiment design.
     local-loss error source.
   - Defaults local optimization to instantaneous error so memory controls have
     identical current-frame local losses and gradient coefficients.
-  - Trains the four feedback decoder modules jointly with the forward stages
-    and temporal predictor.
+  - Trains the four feedback decoder modules and temporal predictor. The VGG
+    forward stages are frozen in the primary mechanism experiments.
   - Keeps per-layer error and prediction memories across `step_frame` calls.
+  - Detaches every stored error and prediction state. Execution is stateful
+    forward recurrence with one-step gradients, not BPTT.
   - Clears memories at sequence boundaries through `reset`.
   - Builds the causal temporal prediction context from the current top feature,
     five previous-frame errors, and five previous-frame predictions.
@@ -53,6 +55,11 @@ cancelled and is not part of the active experiment design.
   - Supports deterministic runs through `PREDIFY_SEED`.
   - Supports the `PREDIFY_RESET_EACH_FRAME=1` control without adding repeated
     model executions.
+  - Supports a reset/no-history current-teacher control that adds only
+    `F_teacher(I_t)` to the top prediction-context slot.
+  - Freezes pretrained VGG forward stages by default. Feedback decoders and the
+    temporal predictor train; `PREDIFY_TRAIN_BACKBONE=1` is an explicit
+    adaptation ablation.
   - Saves the best student checkpoint by validation temporal loss as well as
     the final student and teacher checkpoints.
   - Computes optional collapse prevention across a sequence-local temporal
@@ -111,6 +118,11 @@ and yaw change, not lateral translation. Its direct MSE mixed metres and
 radians. Corrected runs call it `longitudinal_yaw_2dof`, standardize each
 component using training-only statistics, and report physical component MAEs.
 
+The old inherited condition also contained `F_teacher(I_t)` through its saved
+previous top target, whereas reset-each-frame did not. The reported 15.7% A/B
+difference therefore cannot isolate long-term history. The corrected matrix
+adds a reset/current-teacher/no-history control.
+
 The earlier unseeded corrected run reached MSE 0.094732 at epoch 8, but its
 best weights were not saved. It remains exploratory evidence and is not used
 in the seeded control comparison.
@@ -143,9 +155,10 @@ must be rerun after the causal-context and positive-loss-weight correction.
 1. Calibrate one fixed positive temporal-variance weight on the corrected
    seed-0 inherited-EMA condition, using standardized motion loss and physical
    component metrics. Freeze the selected value before mechanism comparisons.
-2. Run a corrected seed-0 matrix with recursive future target flow and
-   instantaneous local loss in every condition: inherited EMA, reset EMA,
-   inherited instantaneous error, and inherited lag-1 error.
+2. Run a corrected seed-0 matrix with recursive future target flow, frozen VGG,
+   and instantaneous local loss in every condition: inherited EMA, reset EMA,
+   reset EMA plus current-teacher context, inherited instantaneous error, and
+   inherited lag-1 error.
 3. Compare EMA with lag-1 to test recursive history against a one-step memory
    baseline with the same coefficients and constant-signal scale.
 4. Repeat the corrected matrix with at least seeds 1 and 2, then report mean,
@@ -161,6 +174,11 @@ and must satisfy `target_std > sqrt(eps)`.
 For the current complete training drive, horizon-1 normalization is based on
 153 samples: forward mean/std `0.466140/0.107030 m`, yaw mean/std
 `-0.001483/0.016870 rad`. Validation data is not used for these statistics.
+
+Dynamic error uses `e_t=F_t-T_t` and
+`epsilon_t=(Ts/tau)e_t+(1-K*Ts/tau)epsilon_(t-1)`. There is no independent
+`d_t` term. Configurations must satisfy
+`abs(1-K*Ts/tau)<1`; the current `Ts=0.1035, tau=0.5, K=1` gives 0.793.
 
 ## Repository policy
 

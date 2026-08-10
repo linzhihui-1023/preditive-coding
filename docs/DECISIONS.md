@@ -97,9 +97,10 @@ explicit ablation.
 Status: accepted
 
 The feedback modules are learned components of recursive Target Flow and are
-included in the same Adam optimizer as the forward stages and temporal
-predictor. They must not retain gradients while being omitted from optimizer
-parameter groups. The EMA teacher continues to track their learned parameters.
+included in the same Adam optimizer as the temporal predictor. Forward stages
+join that optimizer only in the explicit backbone-adaptation ablation. Feedback
+modules must not retain gradients while being omitted from optimizer parameter
+groups. The EMA teacher continues to track their learned parameters.
 
 ## 2026-08-10: Use temporal variance in stream mode
 
@@ -142,3 +143,46 @@ best-checkpoint selection use standardized MSE. Predictions are transformed
 back to physical units for separate forward-displacement MAE in metres and yaw
 MAE in radians. Mixed-unit aggregate MSE and raw-vector cosine are not primary
 physical performance claims.
+
+## 2026-08-10: Separate teacher-current information from temporal history
+
+Status: accepted
+
+An inherited previous top target contains the EMA teacher representation of
+the current image. Therefore, the earlier inherited-versus-reset comparison
+does not isolate temporal memory. The corrected matrix includes a reset-each-
+frame control that supplies only the EMA teacher's current top feature to the
+temporal predictor. Dynamic-error and prediction-state history remain zero in
+this control. The old 15.7% difference is treated as confounded evidence and
+is not attributed to long-term temporal memory.
+
+## 2026-08-10: Use one-step online temporal credit assignment
+
+Status: accepted
+
+Cross-frame error and prediction memories are detached before reuse. The
+method is stateful forward recurrence with one-step gradients, not BPTT. This
+keeps the online predictive-coding interpretation and bounds graph memory.
+Reports must not claim that gradients are propagated through a sequence or
+that long-range dependencies are learned by cross-frame backpropagation.
+
+## 2026-08-10: Freeze the pretrained VGG backbone by default
+
+Status: accepted
+
+The primary mechanism experiments freeze all VGG forward stages and train the
+feedback decoders plus temporal predictor. This gives a clear frozen-backbone
+predictive-coding method. Backbone fine-tuning is retained only as an explicit
+adaptation ablation through `PREDIFY_TRAIN_BACKBONE=1`; it must be labelled as
+a different training regime.
+
+## 2026-08-10: Enforce stable dynamic-error parameters
+
+Status: accepted
+
+The implemented quantities are the instantaneous target error
+`e_t = F_t - T_t` and the dynamic state
+`epsilon_t = (Ts/tau)e_t + (1 - K Ts/tau)epsilon_(t-1)`. There is no separate
+`d_t` term. Every layer must satisfy `abs(1 - K Ts/tau) < 1`; invalid or
+non-finite parameters fail during model construction rather than allowing an
+unstable recurrence to run.

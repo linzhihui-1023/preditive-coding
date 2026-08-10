@@ -281,6 +281,7 @@ class PVGG16TargetFlow(nn.Module):
         temporal_top_targets: torch.Tensor = None,
         future_x: torch.Tensor = None,
         temporal_target_override: torch.Tensor = None,
+        current_teacher_top_context: torch.Tensor = None,
     ):
         forward_inputs, forward_outputs = self._run_forward_stages(x)
 
@@ -331,6 +332,15 @@ class PVGG16TargetFlow(nn.Module):
             )
             for state in self.layer_states
         ]
+        if current_teacher_top_context is not None:
+            pooled_teacher_top = _pool_spatial(current_teacher_top_context).detach()
+            if pooled_teacher_top.shape != pooled_previous_predictions[-1].shape:
+                raise ValueError(
+                    "current_teacher_top_context must match the pooled top-stage shape: "
+                    f"expected {pooled_previous_predictions[-1].shape}, "
+                    f"got {pooled_teacher_top.shape}."
+                )
+            pooled_previous_predictions[-1] = pooled_teacher_top
         self.temporal_context = torch.cat(
             [pooled_top_forward] + pooled_previous_errors + pooled_previous_predictions,
             dim=1,
@@ -448,6 +458,7 @@ class PVGG16TargetFlow(nn.Module):
         temporal_top_targets: torch.Tensor = None,
         future_x: torch.Tensor = None,
         temporal_target_override: torch.Tensor = None,
+        current_teacher_top_context: torch.Tensor = None,
     ):
         self.reset()
         return self._forward_impl(
@@ -457,6 +468,7 @@ class PVGG16TargetFlow(nn.Module):
             temporal_top_targets=temporal_top_targets,
             future_x=future_x,
             temporal_target_override=temporal_target_override,
+            current_teacher_top_context=current_teacher_top_context,
         )
 
     def forward_with_next_target(self, x: torch.Tensor, next_x: torch.Tensor):
@@ -471,6 +483,7 @@ class PVGG16TargetFlow(nn.Module):
         temporal_top_targets: torch.Tensor = None,
         future_x: torch.Tensor = None,
         temporal_target_override: torch.Tensor = None,
+        current_teacher_top_context: torch.Tensor = None,
     ):
         return self._forward_impl(
             x,
@@ -479,6 +492,7 @@ class PVGG16TargetFlow(nn.Module):
             temporal_top_targets=temporal_top_targets,
             future_x=future_x,
             temporal_target_override=temporal_target_override,
+            current_teacher_top_context=current_teacher_top_context,
         )
 
     def step_pair(self, x: torch.Tensor, next_x: torch.Tensor):

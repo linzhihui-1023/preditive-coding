@@ -84,6 +84,54 @@ class TargetFlowCausalityTest(unittest.TestCase):
         )
         self.assertGreater(gradient_sum, 0.0)
 
+    def test_current_teacher_control_adds_only_current_top_representation(self):
+        self.model.reset()
+        with torch.no_grad():
+            current_teacher_top = self.model.extract_top_forward_feature(self.current)
+            future_top = self.model.extract_top_forward_feature(self.future_a)
+            self.model.step_frame(
+                self.current,
+                top_target=future_top,
+                temporal_target_override=self.ego_motion,
+                current_teacher_top_context=current_teacher_top,
+            )
+
+        error_start = self.model.stage_channels[-1]
+        prediction_start = error_start + sum(self.model.stage_channels)
+        teacher_top_start = prediction_start + sum(self.model.stage_channels[:-1])
+        self.assertEqual(
+            torch.count_nonzero(self.model.temporal_context[:, error_start:prediction_start]).item(),
+            0,
+        )
+        self.assertEqual(
+            torch.count_nonzero(self.model.temporal_context[:, prediction_start:teacher_top_start]).item(),
+            0,
+        )
+        self.assertTrue(
+            torch.equal(
+                self.model.temporal_context[:, teacher_top_start:],
+                current_teacher_top.mean(dim=(-1, -2)),
+            )
+        )
+
+    def test_recurrent_memories_are_detached_between_frames(self):
+        self.model.reset()
+        future_top = self.model.extract_top_forward_feature(self.future_a)
+        self.model.step_frame(
+            self.current,
+            top_target=future_top,
+            temporal_target_override=self.ego_motion,
+        )
+
+        memories = (
+            self.model.error_state_memory
+            + self.model.instant_error_state_memory
+            + self.model.prediction_state_memory
+        )
+        self.assertTrue(all(memory is not None for memory in memories))
+        self.assertTrue(all(not memory.requires_grad for memory in memories))
+        self.assertTrue(all(memory.grad_fn is None for memory in memories))
+
     def test_reset_each_frame_removes_inherited_context(self):
         self.model.reset()
         with torch.no_grad():

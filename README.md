@@ -35,6 +35,11 @@ For Adversarial Attacks:
 The active research branch extends PVGG16 with five-layer target-flow state and
 processes KITTI as an ordered video stream. Each frame executes the model once;
 state is initialized on the first frame and inherited until the drive boundary.
+Stored cross-frame state is detached, so training uses stateful recurrence with
+one-step gradients rather than BPTT. Primary mechanism experiments freeze the
+pretrained VGG backbone and train the feedback decoders plus temporal head.
+`PREDIFY_CURRENT_TEACHER_CONTEXT=1` provides the dedicated reset/no-history
+teacher-current control and requires `PREDIFY_RESET_EACH_FRAME=1`.
 
 Current status and reproducibility records are maintained in:
 

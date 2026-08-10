@@ -61,6 +61,8 @@ TEMPORAL_HORIZONS = tuple(
     if value.strip()
 )
 USE_PRETRAINED = os.environ.get("PREDIFY_PRETRAINED", "1") == "1"
+TRAIN_BACKBONE = os.environ.get("PREDIFY_TRAIN_BACKBONE", "0") == "1"
+CURRENT_TEACHER_CONTEXT = os.environ.get("PREDIFY_CURRENT_TEACHER_CONTEXT", "0") == "1"
 PCODER_WEIGHTS = os.environ.get("PREDIFY_PCODER_WEIGHTS", "/home/lin/predify/weights_pvgg16_imagenet")
 TOP_VARIANCE_WEIGHT = float(os.environ.get("PREDIFY_TOP_VARIANCE_WEIGHT", "0.0"))
 TOP_VARIANCE_TARGET = float(os.environ.get("PREDIFY_TOP_VARIANCE_TARGET", "0.01"))
@@ -322,7 +324,7 @@ def freeze_teacher(model):
 
 
 def build_student_model():
-    return get_model(
+    student = get_model(
         "pvgg_tf",
         pretrained=USE_PRETRAINED,
         pcoder_weights=PCODER_WEIGHTS if USE_PRETRAINED else None,
@@ -336,7 +338,20 @@ def build_student_model():
         error_sample_time=ERROR_SAMPLE_TIME,
         error_time_constant=ERROR_TIME_CONSTANT,
         error_gain=ERROR_GAIN,
-    ).to(device)
+    )
+    configure_student_trainability(student)
+    return student.to(device)
+
+
+def configure_student_trainability(student):
+    for parameter in student.parameters():
+        parameter.requires_grad_(False)
+    for parameter in student.forward_stages.parameters():
+        parameter.requires_grad_(TRAIN_BACKBONE)
+    for parameter in student.feedback_modules.parameters():
+        parameter.requires_grad_(True)
+    for parameter in student.temporal_predictor.parameters():
+        parameter.requires_grad_(True)
 
 
 def build_teacher_model(student):
@@ -490,7 +505,8 @@ def build_train_val_loaders():
 
 def build_optimizer(student):
     trainable_parameters = []
-    trainable_parameters.extend(student.forward_stages.parameters())
+    if TRAIN_BACKBONE:
+        trainable_parameters.extend(student.forward_stages.parameters())
     trainable_parameters.extend(student.feedback_modules.parameters())
     trainable_parameters.extend(student.temporal_predictor.parameters())
     return torch.optim.Adam(
@@ -662,6 +678,11 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
             future_frames = future_frames.to(device, non_blocking=device.type == "cuda")
 
             next_frames = future_frames[:, 0]
+            current_teacher_top_context = (
+                teacher.extract_top_forward_feature(current_frames, detach=True)
+                if CURRENT_TEACHER_CONTEXT
+                else None
+            )
             top_target = resolve_top_target(student, teacher, next_frames)
             temporal_top_targets = None
             temporal_target_override = temporal_targets
@@ -676,6 +697,7 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
                     top_target=top_target,
                     temporal_top_targets=temporal_top_targets,
                     temporal_target_override=temporal_target_override,
+                    current_teacher_top_context=current_teacher_top_context,
                 )
                 per_layer_losses, total_local_loss = student.collect_learn_flow_losses()
                 _, weighted_loss = combine_local_losses(per_layer_losses, LAYER_LOSS_WEIGHTS)
@@ -703,6 +725,7 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
                         top_target=top_target,
                         temporal_top_targets=temporal_top_targets,
                         temporal_target_override=temporal_target_override,
+                        current_teacher_top_context=current_teacher_top_context,
                     )
                     per_layer_losses, total_local_loss = student.collect_learn_flow_losses()
                     _, weighted_loss = combine_local_losses(per_layer_losses, LAYER_LOSS_WEIGHTS)
@@ -855,6 +878,15 @@ def main():
         )
     if RESET_EACH_FRAME and not STREAM_MODE:
         raise ValueError("PREDIFY_RESET_EACH_FRAME=1 requires PREDIFY_STREAM_MODE=1.")
+    if CURRENT_TEACHER_CONTEXT and not RESET_EACH_FRAME:
+        raise ValueError(
+            "PREDIFY_CURRENT_TEACHER_CONTEXT=1 is a no-history control and requires "
+            "PREDIFY_RESET_EACH_FRAME=1."
+        )
+    if CURRENT_TEACHER_CONTEXT and TOP_TARGET_SOURCE != "ema_teacher":
+        raise ValueError(
+            "PREDIFY_CURRENT_TEACHER_CONTEXT=1 requires PREDIFY_TOP_TARGET_SOURCE=ema_teacher."
+        )
     if TARGET_FLOW_MODE not in {"recursive", "quasi_steady"}:
         raise ValueError("PREDIFY_TARGET_FLOW_MODE must be recursive or quasi_steady.")
     if ERROR_STATE_MODE not in {"instant", "ema", "lag1"}:
@@ -902,6 +934,7 @@ def main():
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
         f"fixed_ts_s={FIXED_TS_S}, fixed_ts_tol_s={FIXED_TS_TOL_S}, "
         f"stream_mode={STREAM_MODE}, reset_each_frame={RESET_EACH_FRAME}, seed={RANDOM_SEED}, "
+        f"current_teacher_context={CURRENT_TEACHER_CONTEXT}, "
         f"shuffle_train_pairs={SHUFFLE_TRAIN_PAIRS}, shuffle_val_pairs={SHUFFLE_VAL_PAIRS}, "
         f"shuffle_seed={SHUFFLE_SEED}",
         flush=True,
@@ -920,7 +953,7 @@ def main():
         f"Starting target-flow training with pretrained={USE_PRETRAINED}, "
         f"target_flow_mode={TARGET_FLOW_MODE}, epochs={EPOCHS}, batchsize={BATCH_SIZE}, "
         f"lr={LEARNING_RATE}, ema_decay={EMA_DECAY}, top_target_source={TOP_TARGET_SOURCE}, device={device}, "
-        f"feedback_decoder_trainable=True, "
+        f"train_backbone={TRAIN_BACKBONE}, feedback_decoder_trainable=True, "
         f"layer_loss_weights={LAYER_LOSS_WEIGHTS}, top_variance_weight={TOP_VARIANCE_WEIGHT}, "
         f"top_variance_target={TOP_VARIANCE_TARGET}, top_variance_eps={TOP_VARIANCE_EPS}, "
         f"top_variance_window={TOP_VARIANCE_WINDOW}, "
@@ -928,6 +961,7 @@ def main():
         f"temporal_target_mode={TEMPORAL_TARGET_MODE}, temporal_horizons={TEMPORAL_HORIZONS}, "
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
         f"error_state_mode={ERROR_STATE_MODE}, local_loss_error_source={LOCAL_LOSS_ERROR_SOURCE}, "
+        f"temporal_credit_assignment=stateful_forward_one_step_gradient, "
         f"error_sample_time={ERROR_SAMPLE_TIME}, "
         f"error_time_constant={ERROR_TIME_CONSTANT}, error_gain={ERROR_GAIN}",
         flush=True,
@@ -950,6 +984,9 @@ def main():
             "fixed_ts_tol_s": FIXED_TS_TOL_S,
             "stream_mode": STREAM_MODE,
             "reset_each_frame": RESET_EACH_FRAME,
+            "current_teacher_context": CURRENT_TEACHER_CONTEXT,
+            "temporal_credit_assignment": "stateful_forward_one_step_gradient",
+            "state_memory_detached": True,
             "seed": RANDOM_SEED,
             "shuffle_train_pairs": SHUFFLE_TRAIN_PAIRS,
             "shuffle_val_pairs": SHUFFLE_VAL_PAIRS,
@@ -978,7 +1015,12 @@ def main():
             "error_sample_time": ERROR_SAMPLE_TIME,
             "error_time_constant": ERROR_TIME_CONSTANT,
             "error_gain": ERROR_GAIN,
+            "dynamic_error_definition": (
+                "e_t=F_t-T_t; epsilon_t=(Ts/tau)*e_t+"
+                "(1-K*Ts/tau)*epsilon_(t-1); no independent d_t"
+            ),
             "pretrained": USE_PRETRAINED,
+            "train_backbone": TRAIN_BACKBONE,
             "layer_loss_weights": LAYER_LOSS_WEIGHTS,
             "top_variance_weight": TOP_VARIANCE_WEIGHT,
             "top_variance_target": TOP_VARIANCE_TARGET,
