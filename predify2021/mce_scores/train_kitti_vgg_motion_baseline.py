@@ -1,8 +1,11 @@
 import os
 import pickle
+import random
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -13,7 +16,9 @@ from .kitti_pairs import (
     ShuffledFuturePairDataset,
     build_kitti_ego_motion_pair_dataset,
     collect_time_filter_stats,
+    get_motion_target,
 )
+from .motion_metrics import compute_motion_diagnostics
 
 
 KITTI_ROOT = os.environ.get("PREDIFY_KITTI_ROOT", "/home/lin/predify/kitti_raw")
@@ -28,6 +33,7 @@ VAL_DRIVES = tuple(
     if value.strip()
 )
 KITTI_CAMERA = os.environ.get("PREDIFY_KITTI_CAMERA", "image_02")
+FORMAL_SPLIT = os.environ.get("PREDIFY_FORMAL_SPLIT", "0") == "1"
 MAX_TRAIN_PAIRS = int(os.environ.get("PREDIFY_MAX_TRAIN_PAIRS", "0"))
 MAX_VAL_PAIRS = int(os.environ.get("PREDIFY_MAX_VAL_PAIRS", "0"))
 BATCH_SIZE = int(os.environ.get("PREDIFY_BATCHSIZE", "16"))
@@ -39,11 +45,13 @@ USE_PRETRAINED = os.environ.get("PREDIFY_PRETRAINED", "1") == "1"
 FREEZE_BACKBONE = os.environ.get("PREDIFY_FREEZE_BACKBONE", "1") == "1"
 OUTPUT_PATH = os.environ.get("PREDIFY_OUTPUT_PATH", "kitti_vgg_motion_baseline_train.p")
 SAVE_MODEL_PATH = os.environ.get("PREDIFY_SAVE_MODEL_PATH", "")
+SAVE_BEST_MODEL_PATH = os.environ.get("PREDIFY_SAVE_BEST_MODEL_PATH", "")
 FIXED_TS_RAW = os.environ.get("PREDIFY_FIXED_TS_S", "0.1035").strip()
 FIXED_TS_TOL_S = float(os.environ.get("PREDIFY_FIXED_TS_TOL_S", "0.001"))
 SHUFFLE_TRAIN_PAIRS = os.environ.get("PREDIFY_SHUFFLE_TRAIN_PAIRS", "0") == "1"
 SHUFFLE_VAL_PAIRS = os.environ.get("PREDIFY_SHUFFLE_VAL_PAIRS", "0") == "1"
 SHUFFLE_SEED = int(os.environ.get("PREDIFY_SHUFFLE_SEED", "0"))
+RANDOM_SEED = int(os.environ.get("PREDIFY_SEED", "0"))
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -65,6 +73,53 @@ def resolve_save_model_path(output_path):
     return str(path.with_name(f"{base_name}_model.pt"))
 
 
+def resolve_best_model_path(output_path):
+    if SAVE_BEST_MODEL_PATH:
+        return SAVE_BEST_MODEL_PATH
+    path = Path(output_path)
+    base_name = path.stem if path.suffix else path.name
+    return str(path.with_name(f"{base_name}_best_model.pt"))
+
+
+def resolve_git_revision():
+    configured_revision = os.environ.get("PREDIFY_GIT_REVISION", "").strip()
+    if configured_revision:
+        return configured_revision
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parents[2],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    return result.stdout.strip() or "unknown"
+
+
+def seed_everything(seed):
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True, warn_only=True)
+
+
+def validate_formal_split():
+    if not FORMAL_SPLIT:
+        return
+    if not TRAIN_DRIVES or not VAL_DRIVES:
+        raise ValueError("PREDIFY_FORMAL_SPLIT=1 requires explicit train and validation drives.")
+    overlap = sorted(set(TRAIN_DRIVES) & set(VAL_DRIVES))
+    if overlap:
+        raise ValueError(f"Formal train and validation drives overlap: {overlap}.")
+
+
 class VGGMotionBaseline(nn.Module):
     def __init__(self, pretrained=True, freeze_backbone=True):
         super().__init__()
@@ -80,7 +135,8 @@ class VGGMotionBaseline(nn.Module):
             except TypeError:
                 vgg = models.vgg16(pretrained=False)
 
-        self.backbone = vgg.features
+        # Match target-flow stage 5 exactly: VGG features before the final max-pool.
+        self.backbone = nn.Sequential(*list(vgg.features.children())[:30])
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
         self.regressor = nn.Sequential(
             nn.Linear(512, 256),
@@ -126,10 +182,10 @@ def build_dataloader(drives, max_pairs, shuffle):
 
 
 def collect_target_stats(dataset):
-    targets = []
-    for sample in dataset:
-        targets.append(sample[2].float())
-    targets = torch.stack(targets, dim=0)
+    targets = torch.stack(
+        [get_motion_target(dataset, index).float() for index in range(len(dataset))],
+        dim=0,
+    )
     mean = targets.mean(dim=0)
     std = targets.std(dim=0, unbiased=False)
     std = torch.where(std < 1e-8, torch.ones_like(std), std)
@@ -145,18 +201,6 @@ def compute_feature_stats(feature_batches):
     }
 
 
-def compute_metrics(predictions, targets):
-    errors = predictions - targets
-    mae = torch.mean(torch.abs(errors), dim=0)
-    rmse = torch.sqrt(torch.mean(errors.pow(2), dim=0))
-    return {
-        "mae_delta_forward_m": float(mae[0].item()),
-        "mae_delta_yaw_rad": float(mae[1].item()),
-        "rmse_delta_forward_m": float(rmse[0].item()),
-        "rmse_delta_yaw_rad": float(rmse[1].item()),
-    }
-
-
 def run_epoch(model, dataloader, target_mean, target_std, optimizer=None):
     is_train = optimizer is not None
     model.train(is_train)
@@ -164,7 +208,6 @@ def run_epoch(model, dataloader, target_mean, target_std, optimizer=None):
         model.backbone.eval()
 
     loss_fn = nn.MSELoss()
-    loss_history = []
     prediction_batches = []
     target_batches = []
     feature_batches = []
@@ -186,7 +229,6 @@ def run_epoch(model, dataloader, target_mean, target_std, optimizer=None):
                 optimizer.step()
 
         predictions = predictions_std.detach() * target_std + target_mean
-        loss_history.append(float(loss.detach().cpu().item()))
         prediction_batches.append(predictions.detach().cpu())
         target_batches.append(targets.detach().cpu())
         feature_batches.append(features.detach().cpu())
@@ -194,10 +236,15 @@ def run_epoch(model, dataloader, target_mean, target_std, optimizer=None):
     predictions = torch.cat(prediction_batches, dim=0)
     targets = torch.cat(target_batches, dim=0)
     feature_stats = compute_feature_stats(feature_batches)
-    metrics = compute_metrics(predictions, targets)
+    metrics = compute_motion_diagnostics(
+        predictions,
+        targets,
+        target_mean=target_mean.detach().cpu(),
+        target_std=target_std.detach().cpu(),
+    )
     metrics.update(
         {
-            "loss": float(sum(loss_history) / len(loss_history)) if loss_history else 0.0,
+            "loss": metrics["standardized_joint_mse"],
             "feature_std_global": feature_stats["std_global"],
             "feature_stats": feature_stats,
         }
@@ -206,7 +253,14 @@ def run_epoch(model, dataloader, target_mean, target_std, optimizer=None):
 
 
 def main():
-    train_loader = build_dataloader(TRAIN_DRIVES, MAX_TRAIN_PAIRS, shuffle=True)
+    validate_formal_split()
+    seed_everything(RANDOM_SEED)
+    git_revision = resolve_git_revision()
+    train_loader = build_dataloader(
+        TRAIN_DRIVES,
+        MAX_TRAIN_PAIRS,
+        shuffle=SHUFFLE_TRAIN_PAIRS,
+    )
     val_loader = build_dataloader(VAL_DRIVES, MAX_VAL_PAIRS, shuffle=False)
     train_time_filter_stats = collect_time_filter_stats(train_loader.dataset)
     val_time_filter_stats = collect_time_filter_stats(val_loader.dataset)
@@ -221,7 +275,8 @@ def main():
         f"lr={LEARNING_RATE}, weight_decay={WEIGHT_DECAY}, device={device}, "
         f"fixed_ts_s={FIXED_TS_S}, fixed_ts_tol_s={FIXED_TS_TOL_S}, "
         f"shuffle_train_pairs={SHUFFLE_TRAIN_PAIRS}, shuffle_val_pairs={SHUFFLE_VAL_PAIRS}, "
-        f"shuffle_seed={SHUFFLE_SEED}",
+        f"shuffle_seed={SHUFFLE_SEED}, seed={RANDOM_SEED}, "
+        f"formal_split={FORMAL_SPLIT}, git_revision={git_revision}",
         flush=True,
     )
     print(f"Train drives={TRAIN_DRIVES}, Val drives={VAL_DRIVES}", flush=True)
@@ -239,10 +294,12 @@ def main():
 
     history = {
         "config": {
+            "git_revision": git_revision,
             "kitti_root": KITTI_ROOT,
             "train_drives": TRAIN_DRIVES,
             "val_drives": VAL_DRIVES,
             "kitti_camera": KITTI_CAMERA,
+            "formal_split": FORMAL_SPLIT,
             "max_train_pairs": MAX_TRAIN_PAIRS,
             "max_val_pairs": MAX_VAL_PAIRS,
             "batch_size": BATCH_SIZE,
@@ -257,13 +314,21 @@ def main():
             "shuffle_train_pairs": SHUFFLE_TRAIN_PAIRS,
             "shuffle_val_pairs": SHUFFLE_VAL_PAIRS,
             "shuffle_seed": SHUFFLE_SEED,
+            "seed": RANDOM_SEED,
             "train_time_filter_stats": train_time_filter_stats,
             "val_time_filter_stats": val_time_filter_stats,
             "target_mean": target_mean.detach().cpu().tolist(),
             "target_std": target_std.detach().cpu().tolist(),
+            "feature_definition": "global_average_pool(vgg16_features_before_final_maxpool)",
+            "predictor_definition": "mlp_512_256_relu_2",
+            "temporal_context": False,
         },
         "epochs": [],
+        "best_checkpoint": None,
     }
+
+    best_val_loss = float("inf")
+    best_model_path = resolve_best_model_path(OUTPUT_PATH)
 
     start = datetime.now()
     print(f"STARTING AT : {start}", flush=True)
@@ -280,19 +345,42 @@ def main():
             }
         )
 
+        if val_metrics["standardized_joint_mse"] < best_val_loss:
+            best_val_loss = val_metrics["standardized_joint_mse"]
+            history["best_checkpoint"] = {
+                "metric": "val_standardized_longitudinal_yaw_mse",
+                "value": best_val_loss,
+                "epoch": epoch,
+                "path": best_model_path,
+            }
+            torch.save(
+                {
+                    "state_dict": model.state_dict(),
+                    "config": history["config"],
+                    "selected_epoch": history["epochs"][-1],
+                    "checkpoint_kind": "best_val_standardized_motion_mse",
+                },
+                best_model_path,
+            )
+            print(
+                f"Saved best static baseline at epoch {epoch} with "
+                f"val_standardized_mse={best_val_loss:.6f} to {best_model_path}",
+                flush=True,
+            )
+
         print(
             f"Epoch {epoch:03d} | train_loss={train_metrics['loss']:.6f} | "
-            f"train_mae_fwd={train_metrics['mae_delta_forward_m']:.6f} | "
-            f"train_mae_yaw={train_metrics['mae_delta_yaw_rad']:.6f} | "
+            f"train_mae_fwd={train_metrics['forward_mae_m']:.6f} | "
+            f"train_mae_yaw={train_metrics['yaw_mae_rad']:.6f} | "
             f"train_feat_std={train_metrics['feature_std_global']:.6f}",
             flush=True,
         )
         print(
             f"Epoch {epoch:03d} | val_loss={val_metrics['loss']:.6f} | "
-            f"val_mae_fwd={val_metrics['mae_delta_forward_m']:.6f} | "
-            f"val_mae_yaw={val_metrics['mae_delta_yaw_rad']:.6f} | "
-            f"val_rmse_fwd={val_metrics['rmse_delta_forward_m']:.6f} | "
-            f"val_rmse_yaw={val_metrics['rmse_delta_yaw_rad']:.6f} | "
+            f"val_mae_fwd={val_metrics['forward_mae_m']:.6f} | "
+            f"val_mae_yaw={val_metrics['yaw_mae_rad']:.6f} | "
+            f"val_rmse_fwd={val_metrics['forward_rmse_m']:.6f} | "
+            f"val_rmse_yaw={val_metrics['yaw_rmse_rad']:.6f} | "
             f"val_feat_std={val_metrics['feature_std_global']:.6f}",
             flush=True,
         )
