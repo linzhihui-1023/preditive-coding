@@ -1,5 +1,82 @@
 # Experiment Log
 
+## Seed-0 cheap diagnostics before additional seeds
+
+Date: 2026-08-11
+
+Diagnostic code revision: `5b64cad42ba53ffd4dc256949f53e7c5f2b91401`
+
+Matrix checkpoint revision: `6c446d901a581323208a335489a7c065f1946adc`
+
+The diagnostic used the same 153 ordered training pairs from drive 0005, 232
+ordered validation pairs from drive 0011, fixed 0.1035-second interval, and
+training-only longitudinal-yaw normalization as the formal seed-0 matrix. All
+A-E values below were recomputed frame by frame from each best checkpoint.
+Recomputed joint MSE values match the saved histories to floating-point
+precision.
+
+The static baseline takes only the current frame, extracts the frozen ImageNet
+VGG16 feature immediately before the final max-pool, applies global average
+pooling, and predicts the standardized target through a `512 -> 256 -> 2` MLP.
+It has no future-frame input, recurrent state, feedback decoder, or temporal
+context. It used seed 0, batch size 1, ordered samples, ten epochs, Adam at
+`1e-4`, and the same training-only target statistics. Its best checkpoint was
+selected by validation standardized joint MSE.
+
+| Model | Best epoch | Std. joint MSE | Fwd MSE (m2) | Fwd median AE (m) | Fwd P95 AE (m) | Yaw MSE (rad2) | Yaw median AE (rad) | Yaw P95 AE (rad) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Train-mean constant | n/a | 11.266117 | 0.258004 | 0.466013 | 0.764155 | **2.7766e-6** | **0.001415** | **0.003343** |
+| A: inherit, EMA | 6 | 11.045345 | **0.249697** | 0.537760 | 0.641254 | 8.3509e-5 | 0.008745 | 0.013345 |
+| B: reset | 5 | 11.443966 | 0.260506 | **0.414215** | 0.779019 | 4.1857e-5 | 0.004754 | 0.012248 |
+| C: reset, top duplicate | 6 | **11.018217** | 0.250251 | 0.418766 | 0.758862 | 5.4291e-5 | 0.005448 | 0.013330 |
+| D: inherit, instant | 5 | 11.146297 | 0.254559 | 0.549633 | 0.648188 | 2.0179e-5 | 0.003322 | 0.007552 |
+| E: inherit, lag-1 | 5 | 11.128227 | 0.253999 | 0.559413 | **0.625530** | 2.3806e-5 | 0.003529 | 0.008240 |
+| Frozen VGG + static MLP | 1 | 11.376018 | 0.260237 | 0.497094 | 0.739814 | 9.8636e-6 | 0.003209 | 0.004537 |
+
+Key comparisons:
+
+- C lowers joint MSE by only 2.20% relative to the train-mean constant; A
+  lowers it by 1.96%. B and the static MLP are worse than the constant by
+  1.58% and 0.98%, respectively.
+- A and C lower forward MSE by 3.22% and 3.00% relative to the constant. A's
+  forward median absolute error is nevertheless worse, while its P95 is 16.1%
+  better. Its MSE improvement is therefore not a uniform per-frame gain.
+- Every learned model is worse than the constant on yaw MSE. A and C have
+  30.1x and 19.6x the constant yaw MSE; even the static MLP has 3.55x.
+- The static MLP's best checkpoint occurs at epoch 1. Its training MSE falls
+  from 0.864610 at epoch 1 to 0.027601 at epoch 10 while validation MSE rises
+  from 11.376018 to 11.526384, showing severe overfitting.
+
+Target-distribution diagnosis:
+
+| Drive | Fwd mean/std (m) | Fwd min/max (m) | Yaw mean/std (rad) | Yaw min/max (rad) |
+| --- | --- | --- | --- | --- |
+| Train 0005 | 0.466140 / 0.107030 | 0.317148 / 0.667017 | -0.001483 / 0.016870 | -0.027689 / 0.020870 |
+| Val 0011 | 0.492365 / 0.507264 | -0.003405 / 1.235956 | -0.001305 / 0.001657 | -0.006213 / 0.000399 |
+
+The drives have sharply different motion regimes: validation forward standard
+deviation is 4.74x the training value, while validation yaw standard deviation
+is only 0.098x the training value. Consequently, the validation
+joint standardized MSE is almost entirely determined by forward displacement:
+the constant baseline has forward/yaw standardized MSE 22.522478/0.009756.
+The current two-drive split therefore provides weak evidence about temporal
+memory and poor evidence about yaw prediction.
+
+Decision:
+
+Do not run seeds 1 and 2 yet. Repeating seeds would quantify initialization
+noise around a split where the strongest learned condition improves on a
+constant by only 2.20%, the static baseline does not beat the constant, and
+all learned conditions degrade yaw. Add more training drives and construct a
+motion-regime-aware train/validation split first; then rerun constant, static,
+A, and C before spending on the full five-condition multi-seed matrix.
+
+Server artifacts, not tracked by Git:
+
+```text
+/home/lin/predify/experiments/seed0_cheap_diagnostics_5b64cad/
+```
+
 ## Formal frozen-backbone five-group matrix, seed 0
 
 Date: 2026-08-11

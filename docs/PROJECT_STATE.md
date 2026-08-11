@@ -125,6 +125,30 @@ physical component MAEs.
 The full result, comparison definitions, CI identifiers, and server artifact
 path are recorded in `docs/EXPERIMENT_LOG.md`.
 
+## Cheap-diagnostic decision
+
+The required constant, static, and best-checkpoint diagnostics completed at
+revision `5b64cad`. The clean no-history C condition reaches standardized
+joint MSE 11.018217 versus 11.266117 for the train-mean constant, only a 2.20%
+reduction. A reaches 11.045345, a 1.96% reduction. The Frozen VGG plus current-
+frame-only MLP reaches 11.376018 at epoch 1 and is 0.98% worse than the
+constant; later epochs overfit strongly.
+
+All learned conditions degrade yaw MSE relative to the constant. The constant
+yaw MSE is `2.7766e-6 rad2`, compared with `8.3509e-5` for A and `5.4291e-5`
+for C. Their small joint-MSE gains come from forward displacement and are not
+consistent across mean, median, and P95 absolute error.
+
+The two drives have mismatched motion regimes. Train drive 0005 has
+forward/yaw standard deviations `0.107030 m / 0.016870 rad`; validation drive
+0011 has `0.507264 m / 0.001657 rad`. Thus validation standardized MSE is
+almost entirely controlled by forward displacement and cannot currently test
+the yaw mechanism well.
+
+Seeds 1 and 2 are paused. More training drives and a motion-regime-aware split
+are required before repeating the matrix. Full component and quantile results
+are in `docs/EXPERIMENT_LOG.md`.
+
 ## Superseded seeded control result
 
 The causal model and two controls were run for ten epochs at Git revision
@@ -191,16 +215,18 @@ must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Repeat the corrected five-condition matrix with seeds 1 and 2, keeping the
-   top variance weight fixed at zero in every frozen-backbone condition.
-2. Treat A versus C as the primary state-memory comparison, B versus C as the
+1. Add multiple training drives and reserve disjoint validation/test drives;
+   inspect per-drive forward and yaw target distributions before fixing the
+   split.
+2. On the improved split, rerun the train-mean constant, Frozen VGG plus static
+   MLP, A, and C. Require a meaningful gain over the constant in both physical
+   components before expanding the matrix.
+3. Treat A versus C as the primary state-memory comparison, B versus C as the
    current-top duplication check, A versus D as the dynamic-error comparison,
    and A versus E as recursive memory versus a lag-1 FIR baseline.
-3. After seeds 1 and 2, report mean, standard deviation, and per-seed paired
-   differences. Do not select a mechanism from seed 0 alone.
-4. Only if a mechanism advantage is stable, run a tau sweep and then add more
-   train and validation drives.
-5. Reserve a separate test-drive set before reporting final generalization.
+4. Only after the improved split passes the baseline gate, run seeds 0, 1, and
+   2 and report mean, standard deviation, and per-seed paired differences.
+5. Only if the mechanism advantage is stable, run a tau sweep.
 
 | Group | Cross-frame state | Error state | Extra current-top context | Purpose |
 | --- | --- | --- | --- | --- |
