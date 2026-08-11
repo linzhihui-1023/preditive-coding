@@ -1,5 +1,58 @@
 # Experiment Log
 
+## Causal future-feature matrix, seed 0
+
+Date: 2026-08-11
+
+Git revision: `94059bed62f4d6ea5aa29d01af58319d37498da4`
+
+The first primary-task matrix used 153 ordered training pairs from drive 0005
+and 232 ordered validation pairs from drive 0011. All groups used the same
+frozen ImageNet VGG16 backbone, recursive Target Flow, trainable feedback
+decoders, full stage-5 residual predictor, instantaneous local loss, zero
+variance weight, seed 0, and best-checkpoint selection by validation feature
+MSE. Future labels were detached student-self top features. No EMA teacher was
+constructed.
+
+| Condition | History input at `t -> t+1` | Best epoch | Feature MSE | Feature cosine | Normalized feature error |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Copy-current | Predictor bypassed | 1 | **0.060080099** | **0.919904691** | **0.375766109** |
+| Current-only | Zeros | 2 | 0.061797074 | 0.915814666 | 0.384975467 |
+| Latest | `e_(t-1)` | 2 | 0.061849746 | 0.916069347 | 0.384410881 |
+| Two-tap | `0.207e_(t-1)+0.793e_(t-2)` | 2 | 0.061899316 | 0.915900138 | 0.384815322 |
+| Recursive | `0.207e_(t-1)+0.793epsilon_(t-2)` | 2 | 0.061796151 | 0.915806531 | 0.384969822 |
+
+Key comparisons:
+
+- Current-only is 2.858% worse than copy-current, so the predictor did not pass
+  the minimum requirement of learning a useful future change on validation.
+- Recursive is only 0.00149% better than current-only. This numerical tie is
+  not evidence that inherited history adds information beyond `F_t`.
+- Latest and two-tap are 0.085% and 0.165% worse than current-only. Recursive
+  is 0.087% better than latest and 0.167% better than two-tap, but those tiny
+  differences are secondary because the learned predictor does not beat the
+  non-learned copy baseline.
+- Learned training feature MSE continues to fall while validation MSE reaches
+  its minimum at epoch 2 and then rises. The matrix therefore shows rapid
+  cross-drive overfitting.
+- Future-feature MSE and residual-delta MSE agree within `2.235e-8` in every
+  group, validating the residual-loss implementation.
+
+Decision:
+
+Do not run seeds 1 and 2 yet. The first feature-task gate failed, and recursive
+history is indistinguishable from current-only at seed 0. Follow the planned
+order: diagnose feature-delta scale and predictor behavior, then revise the
+residual/history formulation before spending on robustness or additional
+seeds. The two-drive split remains useful for this mechanism rejection but is
+not sufficient for a broad generalization claim.
+
+Server artifacts, not tracked by Git:
+
+```text
+/tmp/predify-storage/experiments/seed0_future_feature_matrix_94059be/
+```
+
 ## Seed-0 cheap diagnostics before additional seeds
 
 Date: 2026-08-11

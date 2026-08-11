@@ -328,3 +328,18 @@ The frozen-backbone feature matrix uses `TOP_TARGET_SOURCE=student_self` and
 `TEMPORAL_TARGET_MODE=next_top`. A frozen EMA teacher would produce the same
 top target and add no independent mechanism, so it is omitted from this
 matrix.
+
+## 2026-08-11: Pause feature seeds after the first matrix
+
+Status: accepted
+
+At revision `94059be`, copy-current validation feature MSE was `0.060080099`,
+while current-only was 2.858% worse at `0.061797074`. Recursive history reached
+`0.061796151`, only 0.00149% below current-only. Latest and two-tap were also
+worse than copy-current. Thus the predictor failed the first gate and inherited
+history provided no meaningful improvement once `F_t` was known.
+
+Seeds 1 and 2, corruption robustness, and online-adaptation experiments remain
+paused. The next work returns to mechanism diagnosis: inspect next-feature
+delta scale and predictor behavior, then revise the residual/history design as
+planned. Additional seeds are not used to rescue a failed primary comparison.

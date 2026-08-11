@@ -128,10 +128,17 @@ feature MSE and residual-delta MSE; its numerical accuracy is not an experiment
 result. The formal frozen-backbone matrix uses a detached student-self target,
 because an EMA teacher produces the same top feature in this regime.
 
-The seed-0 five-condition feature matrix has not yet been run. Its primary
-thresholds are current-only below copy-current, followed by recursive history
-below current-only. Recursive, latest, and two-tap comparisons are interpreted
-only after those two thresholds are checked.
+The seed-0 five-condition feature matrix completed at revision `94059be`.
+Copy-current achieved validation feature MSE `0.060080099`. Current-only was
+2.858% worse at `0.061797074`, so the predictor did not learn a useful future
+change on validation. Recursive reached `0.061796151`, only 0.00149% better
+than current-only and therefore a numerical tie, not evidence for useful
+history. Latest and two-tap reached `0.061849746` and `0.061899316`.
+
+All learned conditions selected epoch 2 and then overfit while training MSE
+continued to improve. Seeds 1 and 2 are paused. The next step is to diagnose
+feature-delta scale and revise the residual/history formulation before noise,
+blur, online adaptation, or additional seeds.
 
 ## Available data
 
