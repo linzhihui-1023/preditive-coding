@@ -23,6 +23,27 @@ class TargetFlowCausalityTest(unittest.TestCase):
         cls.future_b = torch.randn(1, 3, 32, 32)
         cls.ego_motion = torch.tensor([[[0.25, -0.05]]])
 
+    def setUp(self):
+        self.model.task = "motion"
+        self.model.future_feature_history_mode = "none"
+        self.model.reset()
+
+    def _future_feature_step(self, current, future, history_mode="none"):
+        self.model.task = "future_feature"
+        self.model.future_feature_history_mode = history_mode
+        with torch.no_grad():
+            self.model.step_frame(
+                current,
+                top_target_provider=lambda: self.model.extract_top_forward_feature(
+                    future,
+                    detach=True,
+                ),
+            )
+        return {
+            key: value.clone() if torch.is_tensor(value) else value
+            for key, value in self.model.future_prediction_outputs.items()
+        }
+
     def _predict_with_future(self, future):
         self.model.reset()
         with torch.no_grad():
@@ -189,6 +210,152 @@ class TargetFlowCausalityTest(unittest.TestCase):
             self.assertIs(state.loss_error, state.instant_error)
             self.assertTrue(torch.allclose(state.local_loss, expected_loss))
             self.assertTrue(torch.allclose(actual_gradient, expected_gradient))
+
+    def test_future_predictor_is_independent_of_two_dof_motion_head(self):
+        self.assertEqual(self.model.temporal_predictor[-1].out_features, 2)
+        self.assertEqual(self.model.future_feature_predictor[-1].out_channels, 512)
+        self.assertIsNot(self.model.temporal_predictor, self.model.future_feature_predictor)
+
+        predictor_id = id(self.model.future_feature_predictor)
+        parameter_count = sum(
+            parameter.numel()
+            for parameter in self.model.future_feature_predictor.parameters()
+        )
+        for mode in ("none", "instant", "lag1", "recursive"):
+            self.model.future_feature_history_mode = mode
+            self.assertEqual(id(self.model.future_feature_predictor), predictor_id)
+            self.assertEqual(
+                sum(
+                    parameter.numel()
+                    for parameter in self.model.future_feature_predictor.parameters()
+                ),
+                parameter_count,
+            )
+
+    def test_future_target_provider_runs_after_predictor(self):
+        events = []
+        hook = self.model.future_feature_predictor.register_forward_hook(
+            lambda *_: events.append("predict")
+        )
+        self.model.task = "future_feature"
+        try:
+            with torch.no_grad():
+                self.model.step_frame(
+                    self.current,
+                    top_target_provider=lambda: (
+                        events.append("target")
+                        or self.model.extract_top_forward_feature(self.future_a)
+                    ),
+                )
+        finally:
+            hook.remove()
+
+        self.assertEqual(events[:2], ["predict", "target"])
+
+    def test_future_prediction_does_not_depend_on_current_target(self):
+        self.model.reset()
+        prediction_a = self._future_feature_step(
+            self.current,
+            self.future_a,
+        )["predicted_future_top"]
+        error_a = self.model.layer_states[-1].instant_error.clone()
+
+        self.model.reset()
+        prediction_b = self._future_feature_step(
+            self.current,
+            self.future_b,
+        )["predicted_future_top"]
+        error_b = self.model.layer_states[-1].instant_error.clone()
+
+        self.assertTrue(torch.equal(prediction_a, prediction_b))
+        self.assertFalse(torch.equal(error_a, error_b))
+
+    def test_instant_history_cannot_see_current_pair_target(self):
+        def predict_second(current_pair_target):
+            self.model.reset()
+            self._future_feature_step(
+                self.current,
+                self.future_a,
+                history_mode="instant",
+            )
+            return self._future_feature_step(
+                self.future_a,
+                current_pair_target,
+                history_mode="instant",
+            )["predicted_future_top"]
+
+        prediction_a = predict_second(self.future_a)
+        prediction_b = predict_second(self.future_b)
+        self.assertTrue(torch.equal(prediction_a, prediction_b))
+
+    def test_future_feature_history_uses_previous_completed_pair(self):
+        self.model.reset()
+        self._future_feature_step(self.current, self.future_a, history_mode="recursive")
+        previous_recursive = self.model.recursive_error_state_memory[-1].clone()
+        second = self._future_feature_step(
+            self.future_a,
+            self.future_b,
+            history_mode="recursive",
+        )
+
+        self.assertTrue(torch.equal(second["history_top"], previous_recursive))
+
+        self.model.reset()
+        self._future_feature_step(self.current, self.future_a, history_mode="instant")
+        previous_instant = self.model.instant_error_state_memory[-1].clone()
+        second = self._future_feature_step(
+            self.future_a,
+            self.future_b,
+            history_mode="instant",
+        )
+        self.assertTrue(torch.equal(second["history_top"], previous_instant))
+
+    def test_future_and_delta_mse_are_equivalent(self):
+        self.model.reset()
+        self._future_feature_step(self.current, self.future_a)
+        losses = self.model.collect_future_feature_prediction_losses()
+        self.assertTrue(torch.allclose(losses["future_mse"], losses["delta_mse"]))
+
+    def test_copy_current_bypasses_predictor(self):
+        predictor_calls = []
+        hook = self.model.future_feature_predictor.register_forward_hook(
+            lambda *_: predictor_calls.append(True)
+        )
+        try:
+            outputs = self._future_feature_step(
+                self.current,
+                self.future_a,
+                history_mode="copy_current",
+            )
+        finally:
+            hook.remove()
+
+        self.assertEqual(predictor_calls, [])
+        self.assertTrue(
+            torch.equal(outputs["predicted_future_top"], outputs["current_top"])
+        )
+        self.assertEqual(torch.count_nonzero(outputs["predicted_delta_top"]).item(), 0)
+
+    def test_feature_loss_produces_only_future_predictor_gradients(self):
+        self.model.task = "future_feature"
+        self.model.future_feature_history_mode = "none"
+        self.model.zero_grad(set_to_none=True)
+        future_top = self.model.extract_top_forward_feature(self.future_a)
+        self.model.step_frame(self.current, top_target=future_top)
+        losses = self.model.collect_future_feature_prediction_losses()
+        losses["future_mse"].backward()
+
+        future_gradient_sum = sum(
+            parameter.grad.detach().abs().sum().item()
+            for parameter in self.model.future_feature_predictor.parameters()
+            if parameter.grad is not None
+        )
+        motion_gradient_count = sum(
+            parameter.grad is not None
+            for parameter in self.model.temporal_predictor.parameters()
+        )
+        self.assertGreater(future_gradient_sum, 0.0)
+        self.assertEqual(motion_gradient_count, 0)
 
 
 if __name__ == "__main__":

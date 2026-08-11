@@ -5,7 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PREDIFY_PYTHON_BIN:-/home/lin/anaconda3/envs/predifyproject/bin/python}"
 GIT_REVISION="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 SHORT_REVISION="${GIT_REVISION:0:7}"
-OUTPUT_ROOT="${PREDIFY_MATRIX_OUTPUT_ROOT:-/home/lin/predify/experiments/seed0_frozen_matrix_${SHORT_REVISION}}"
+OUTPUT_ROOT="${PREDIFY_MATRIX_OUTPUT_ROOT:-/tmp/predify-storage/experiments/seed0_future_feature_matrix_${SHORT_REVISION}}"
 
 mkdir -p "$OUTPUT_ROOT"
 
@@ -22,8 +22,7 @@ COMMON_ENV=(
     "OMP_NUM_THREADS=24"
     "MKL_NUM_THREADS=24"
     "PREDIFY_GIT_REVISION=$GIT_REVISION"
-    "PREDIFY_TASK=motion"
-    "PREDIFY_FEATURE_HISTORY_MODE=none"
+    "PREDIFY_TASK=future_feature"
     "PREDIFY_KITTI_ROOT=/home/lin/predify/kitti_raw"
     "PREDIFY_TRAIN_DRIVES=2011_09_26/2011_09_26_drive_0005_sync"
     "PREDIFY_VAL_DRIVES=2011_09_26/2011_09_26_drive_0011_sync"
@@ -42,7 +41,7 @@ COMMON_ENV=(
     "PREDIFY_TARGET_FLOW_MODE=recursive"
     "PREDIFY_TOP_TARGET_SOURCE=ema_teacher"
     "PREDIFY_TEMPORAL_TARGET_MODE=ego_motion"
-    "PREDIFY_TASK_ALIGNED_TARGET=ego_motion"
+    "PREDIFY_TASK_ALIGNED_TARGET="
     "PREDIFY_TEMPORAL_HORIZONS=1"
     "PREDIFY_PRETRAINED=1"
     "PREDIFY_TRAIN_BACKBONE=0"
@@ -51,77 +50,57 @@ COMMON_ENV=(
     "PREDIFY_TOP_VARIANCE_TARGET=0.01"
     "PREDIFY_TOP_VARIANCE_EPS=1e-6"
     "PREDIFY_TOP_VARIANCE_WINDOW=16"
-    "PREDIFY_MOTION_STD_EPS=1e-6"
     "PREDIFY_TEMPORAL_PREDICTION_WEIGHT=1.0"
+    "PREDIFY_FEATURE_PREDICTION_WEIGHT=1.0"
+    "PREDIFY_LOCAL_RECONSTRUCTION_WEIGHT=1.0"
+    "PREDIFY_FEATURE_METRIC_EPS=1e-8"
     "PREDIFY_LAYER_LOSS_WEIGHTS=0.1,0.1,0.2,0.2,1.0"
     "PREDIFY_FIXED_TS_S=0.1035"
     "PREDIFY_FIXED_TS_TOL_S=0.001"
     "PREDIFY_DYNAMIC_ERROR=1"
+    "PREDIFY_ERROR_STATE_MODE=ema"
     "PREDIFY_LOCAL_LOSS_ERROR_SOURCE=instant"
     "PREDIFY_ERROR_TS=0.1035"
     "PREDIFY_ERROR_TAU=0.5"
     "PREDIFY_ERROR_GAIN=1.0"
     "PREDIFY_STREAM_MODE=1"
+    "PREDIFY_RESET_EACH_FRAME=0"
     "PREDIFY_SHUFFLE_TRAIN_PAIRS=0"
     "PREDIFY_SHUFFLE_VAL_PAIRS=0"
     "PREDIFY_SHUFFLE_SEED=0"
     "PREDIFY_SEED=0"
+    "PREDIFY_CURRENT_TOP_DUPLICATE=0"
     "PREDIFY_CURRENT_TEACHER_CONTEXT=0"
+    "PREDIFY_SAVE_FINAL_CHECKPOINTS=0"
 )
 
 run_group() {
     local group="$1"
-    local reset_each_frame
-    local current_top_duplicate
-    local error_state_mode
+    local history_mode
 
     case "$group" in
-        A)
-            reset_each_frame=0
-            current_top_duplicate=0
-            error_state_mode=ema
-            ;;
-        B)
-            reset_each_frame=1
-            current_top_duplicate=0
-            error_state_mode=ema
-            ;;
-        C)
-            reset_each_frame=1
-            current_top_duplicate=1
-            error_state_mode=ema
-            ;;
-        D)
-            reset_each_frame=0
-            current_top_duplicate=0
-            error_state_mode=instant
-            ;;
-        E)
-            reset_each_frame=0
-            current_top_duplicate=0
-            error_state_mode=lag1
-            ;;
+        copy_current) history_mode=copy_current ;;
+        current_only) history_mode=none ;;
+        instant) history_mode=instant ;;
+        lag1) history_mode=lag1 ;;
+        recursive) history_mode=recursive ;;
         *)
-            echo "Unknown group '$group'; expected A, B, C, D, or E." >&2
+            echo "Unknown group '$group'." >&2
             return 2
             ;;
     esac
 
     local prefix="$OUTPUT_ROOT/${group}_seed0"
     if [[ -e "${prefix}.p" || -e "${prefix}.log" ]]; then
-        echo "Refusing to overwrite existing artifacts for group $group at $prefix." >&2
+        echo "Refusing to overwrite artifacts at $prefix." >&2
         return 3
     fi
 
     printf 'Starting group %s at %s\n' "$group" "$(date --iso-8601=seconds)"
     env -i \
         "${COMMON_ENV[@]}" \
-        "PREDIFY_RESET_EACH_FRAME=$reset_each_frame" \
-        "PREDIFY_CURRENT_TOP_DUPLICATE=$current_top_duplicate" \
-        "PREDIFY_ERROR_STATE_MODE=$error_state_mode" \
+        "PREDIFY_FEATURE_HISTORY_MODE=$history_mode" \
         "PREDIFY_OUTPUT_PATH=${prefix}.p" \
-        "PREDIFY_SAVE_STUDENT_PATH=${prefix}_student.pt" \
-        "PREDIFY_SAVE_TEACHER_PATH=${prefix}_teacher.pt" \
         "PREDIFY_SAVE_BEST_STUDENT_PATH=${prefix}_best_student.pt" \
         "$PYTHON_BIN" -u -m predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs \
         2>&1 | tee "${prefix}.log"
@@ -129,7 +108,7 @@ run_group() {
 
 groups=("$@")
 if [[ ${#groups[@]} -eq 0 ]]; then
-    groups=(A B C D E)
+    groups=(copy_current current_only instant lag1 recursive)
 fi
 
 printf 'git_revision=%s\noutput_root=%s\ngroups=%s\n' \

@@ -96,6 +96,8 @@ class PVGG16TargetFlow(nn.Module):
         error_sample_time: float = 1.0,
         error_time_constant=1.0,
         error_gain=1.0,
+        task: str = "motion",
+        future_feature_history_mode: str = "none",
     ):
         super().__init__()
         self.backbone = copy.deepcopy(backbone)
@@ -168,6 +170,21 @@ class PVGG16TargetFlow(nn.Module):
         self.temporal_horizons = temporal_horizons
         self.num_temporal_horizons = len(self.temporal_horizons)
         self.stage_channels = (64, 128, 256, 512, 512)
+        if task not in {"motion", "future_feature"}:
+            raise ValueError(f"Unsupported task: {task}")
+        if future_feature_history_mode not in {
+            "none",
+            "instant",
+            "lag1",
+            "recursive",
+            "copy_current",
+        }:
+            raise ValueError(
+                "Unsupported future_feature_history_mode: "
+                f"{future_feature_history_mode}"
+            )
+        self.task = task
+        self.future_feature_history_mode = future_feature_history_mode
         self.temporal_target_dim = 2 if self.temporal_target_mode == "ego_motion" else self.stage_channels[-1]
         temporal_context_dim = self.stage_channels[-1] + 2 * sum(self.stage_channels)
         self.temporal_predictor = nn.Sequential(
@@ -175,50 +192,88 @@ class PVGG16TargetFlow(nn.Module):
             nn.ReLU(inplace=False),
             nn.Linear(1024, self.temporal_target_dim * self.num_temporal_horizons),
         )
+        self.future_feature_predictor = nn.Sequential(
+            nn.Conv2d(2 * self.stage_channels[-1], 1024, kernel_size=1),
+            nn.ReLU(inplace=False),
+            nn.Conv2d(1024, self.stage_channels[-1], kernel_size=1),
+        )
         self.layer_states = []
         self.error_state_memory = [None for _ in range(self.number_of_layers)]
         self.instant_error_state_memory = [None for _ in range(self.number_of_layers)]
+        self.recursive_error_state_memory = [None for _ in range(self.number_of_layers)]
+        self.lag1_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
         self.temporal_target = None
+        self.future_prediction_outputs = None
 
     def reset(self):
         self.layer_states = []
         self.error_state_memory = [None for _ in range(self.number_of_layers)]
         self.instant_error_state_memory = [None for _ in range(self.number_of_layers)]
+        self.recursive_error_state_memory = [None for _ in range(self.number_of_layers)]
+        self.lag1_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
         self.temporal_target = None
+        self.future_prediction_outputs = None
+
+    @staticmethod
+    def _resolve_memory(memory, reference_tensor: torch.Tensor):
+        if memory is None or memory.shape != reference_tensor.shape:
+            return None
+        return memory.to(reference_tensor.device, reference_tensor.dtype)
 
     def _resolve_previous_error_state(self, layer_index: int, reference_tensor: torch.Tensor):
-        previous_error = self.error_state_memory[layer_index]
-        if previous_error is None:
-            return None
-        if previous_error.shape != reference_tensor.shape:
-            return None
-        return previous_error.to(reference_tensor.device, reference_tensor.dtype)
+        return self._resolve_memory(self.error_state_memory[layer_index], reference_tensor)
 
     def _resolve_previous_instant_error_state(
         self,
         layer_index: int,
         reference_tensor: torch.Tensor,
     ):
-        previous_error = self.instant_error_state_memory[layer_index]
-        if previous_error is None:
-            return None
-        if previous_error.shape != reference_tensor.shape:
-            return None
-        return previous_error.to(reference_tensor.device, reference_tensor.dtype)
+        return self._resolve_memory(
+            self.instant_error_state_memory[layer_index],
+            reference_tensor,
+        )
 
     def _resolve_previous_prediction_state(self, layer_index: int, reference_tensor: torch.Tensor):
-        previous_prediction = self.prediction_state_memory[layer_index]
-        if previous_prediction is None:
-            return None
-        if previous_prediction.shape != reference_tensor.shape:
-            return None
-        return previous_prediction.to(reference_tensor.device, reference_tensor.dtype)
+        return self._resolve_memory(
+            self.prediction_state_memory[layer_index],
+            reference_tensor,
+        )
+
+    def _resolve_future_feature_history(self, current_top: torch.Tensor):
+        mode = self.future_feature_history_mode
+        if mode in {"none", "copy_current"}:
+            return torch.zeros_like(current_top)
+        memory_by_mode = {
+            "instant": self.instant_error_state_memory,
+            "lag1": self.lag1_error_state_memory,
+            "recursive": self.recursive_error_state_memory,
+        }
+        history = self._resolve_memory(memory_by_mode[mode][-1], current_top)
+        return torch.zeros_like(current_top) if history is None else history.detach()
+
+    def _predict_future_top_feature(self, current_top: torch.Tensor):
+        history_top = self._resolve_future_feature_history(current_top)
+        if self.future_feature_history_mode == "copy_current":
+            predicted_delta = torch.zeros_like(current_top)
+        else:
+            predictor_input = torch.cat([current_top, history_top], dim=1)
+            predicted_delta = self.future_feature_predictor(predictor_input)
+        predicted_future = current_top + predicted_delta
+        self.future_prediction_outputs = {
+            "current_top": current_top,
+            "history_top": history_top,
+            "predicted_delta_top": predicted_delta,
+            "predicted_future_top": predicted_future,
+            "future_top_target": None,
+            "target_delta_top": None,
+            "prediction_error_top": None,
+        }
 
     def _run_forward_stages(self, x: torch.Tensor):
         forward_inputs = []
@@ -282,7 +337,15 @@ class PVGG16TargetFlow(nn.Module):
         future_x: torch.Tensor = None,
         temporal_target_override: torch.Tensor = None,
         duplicate_current_top_context: bool = False,
+        top_target_provider=None,
     ):
+        if top_target_provider is not None and any(
+            value is not None
+            for value in (top_target, next_x, temporal_top_targets, future_x)
+        ):
+            raise ValueError(
+                "top_target_provider cannot be combined with an eagerly resolved target source."
+            )
         forward_inputs, forward_outputs = self._run_forward_stages(x)
 
         self.layer_states = []
@@ -316,34 +379,44 @@ class PVGG16TargetFlow(nn.Module):
         # time t the causal context may use F_t and state carried from t-1, but
         # it must not use the error that requires observing I_{t+1}.
         pooled_top_forward = _pool_spatial(forward_outputs[-1])
-        pooled_previous_errors = [
-            _pool_spatial(
-                state.previous_error
-                if state.previous_error is not None
-                else torch.zeros_like(state.forward_output)
+        if self.task == "future_feature":
+            self.temporal_context = None
+            self.temporal_prediction = None
+            self.temporal_target = None
+            self._predict_future_top_feature(forward_outputs[-1])
+        else:
+            self.future_prediction_outputs = None
+            pooled_previous_errors = [
+                _pool_spatial(
+                    state.previous_error
+                    if state.previous_error is not None
+                    else torch.zeros_like(state.forward_output)
+                )
+                for state in self.layer_states
+            ]
+            pooled_previous_predictions = [
+                _pool_spatial(
+                    state.previous_prediction
+                    if state.previous_prediction is not None
+                    else torch.zeros_like(state.forward_output)
+                )
+                for state in self.layer_states
+            ]
+            if duplicate_current_top_context:
+                pooled_previous_predictions[-1] = pooled_top_forward.detach()
+            self.temporal_context = torch.cat(
+                [pooled_top_forward] + pooled_previous_errors + pooled_previous_predictions,
+                dim=1,
             )
-            for state in self.layer_states
-        ]
-        pooled_previous_predictions = [
-            _pool_spatial(
-                state.previous_prediction
-                if state.previous_prediction is not None
-                else torch.zeros_like(state.forward_output)
+            raw_temporal_prediction = self.temporal_predictor(self.temporal_context)
+            self.temporal_prediction = raw_temporal_prediction.view(
+                raw_temporal_prediction.shape[0],
+                self.num_temporal_horizons,
+                self.temporal_target_dim,
             )
-            for state in self.layer_states
-        ]
-        if duplicate_current_top_context:
-            pooled_previous_predictions[-1] = pooled_top_forward.detach()
-        self.temporal_context = torch.cat(
-            [pooled_top_forward] + pooled_previous_errors + pooled_previous_predictions,
-            dim=1,
-        )
-        raw_temporal_prediction = self.temporal_predictor(self.temporal_context)
-        self.temporal_prediction = raw_temporal_prediction.view(
-            raw_temporal_prediction.shape[0],
-            self.num_temporal_horizons,
-            self.temporal_target_dim,
-        )
+
+        if top_target_provider is not None:
+            top_target = top_target_provider()
 
         resolved_top_target = self._resolve_top_target(
             top_target=top_target,
@@ -351,6 +424,19 @@ class PVGG16TargetFlow(nn.Module):
             temporal_top_targets=temporal_top_targets,
             future_x=future_x,
         )
+        if resolved_top_target is None:
+            raise ValueError("A top target is required to complete Target Flow state update.")
+        if self.task == "future_feature":
+            future_top_target = resolved_top_target.detach()
+            current_top = self.future_prediction_outputs["current_top"]
+            predicted_future = self.future_prediction_outputs["predicted_future_top"]
+            self.future_prediction_outputs.update(
+                {
+                    "future_top_target": future_top_target,
+                    "target_delta_top": future_top_target - current_top.detach(),
+                    "prediction_error_top": predicted_future - future_top_target,
+                }
+            )
         run_backward_target_flow(
             self.layer_states,
             self.feedback_modules,
@@ -358,6 +444,10 @@ class PVGG16TargetFlow(nn.Module):
             mode=self.target_flow_mode,
         )
         for zero_based_idx, (state, stage) in enumerate(zip(self.layer_states, self.forward_stages)):
+            previous_recursive_error = self._resolve_memory(
+                self.recursive_error_state_memory[zero_based_idx],
+                state.forward_output,
+            )
             state.instant_error = build_targetflow_instant_error(state.target_output, state.forward_output)
             state.error = build_targetflow_error(
                 state.target_output,
@@ -380,11 +470,35 @@ class PVGG16TargetFlow(nn.Module):
                 state.parameter_grad_stats = compute_module_grad_stats(stage, state.local_loss)
             else:
                 state.parameter_grad_stats = None
+            recursive_error = build_targetflow_error(
+                state.target_output,
+                state.forward_output,
+                previous_error=previous_recursive_error,
+                sample_time=self.dynamic_error_config.sample_time,
+                time_constant=float(self.error_time_constants[zero_based_idx].item()),
+                error_gain=float(self.error_gains[zero_based_idx].item()),
+                mode="ema",
+                previous_instant_error=state.previous_instant_error,
+            )
+            lag1_error = build_targetflow_error(
+                state.target_output,
+                state.forward_output,
+                previous_error=None,
+                sample_time=self.dynamic_error_config.sample_time,
+                time_constant=float(self.error_time_constants[zero_based_idx].item()),
+                error_gain=float(self.error_gains[zero_based_idx].item()),
+                mode="lag1",
+                previous_instant_error=state.previous_instant_error,
+            )
             self.error_state_memory[zero_based_idx] = state.error.detach()
             self.instant_error_state_memory[zero_based_idx] = state.instant_error.detach()
+            self.recursive_error_state_memory[zero_based_idx] = recursive_error.detach()
+            self.lag1_error_state_memory[zero_based_idx] = lag1_error.detach()
             self.prediction_state_memory[zero_based_idx] = state.target_output.detach()
 
-        if temporal_target_override is not None:
+        if self.task == "future_feature":
+            self.temporal_target = None
+        elif temporal_target_override is not None:
             resolved_temporal_targets = temporal_target_override
             if resolved_temporal_targets.dim() == 2:
                 resolved_temporal_targets = resolved_temporal_targets.unsqueeze(1)
@@ -443,6 +557,21 @@ class PVGG16TargetFlow(nn.Module):
             return None
         return torch.mean((self.temporal_prediction - self.temporal_target.detach()) ** 2)
 
+    def collect_future_feature_prediction_losses(self):
+        outputs = self.future_prediction_outputs
+        if outputs is None or outputs["future_top_target"] is None:
+            return None
+        future_target = outputs["future_top_target"].detach()
+        target_delta = outputs["target_delta_top"].detach()
+        return {
+            "future_mse": torch.mean(
+                (outputs["predicted_future_top"] - future_target) ** 2
+            ),
+            "delta_mse": torch.mean(
+                (outputs["predicted_delta_top"] - target_delta) ** 2
+            ),
+        }
+
     def forward(
         self,
         x: torch.Tensor,
@@ -452,6 +581,7 @@ class PVGG16TargetFlow(nn.Module):
         future_x: torch.Tensor = None,
         temporal_target_override: torch.Tensor = None,
         duplicate_current_top_context: bool = False,
+        top_target_provider=None,
     ):
         self.reset()
         return self._forward_impl(
@@ -462,6 +592,7 @@ class PVGG16TargetFlow(nn.Module):
             future_x=future_x,
             temporal_target_override=temporal_target_override,
             duplicate_current_top_context=duplicate_current_top_context,
+            top_target_provider=top_target_provider,
         )
 
     def forward_with_next_target(self, x: torch.Tensor, next_x: torch.Tensor):
@@ -477,6 +608,7 @@ class PVGG16TargetFlow(nn.Module):
         future_x: torch.Tensor = None,
         temporal_target_override: torch.Tensor = None,
         duplicate_current_top_context: bool = False,
+        top_target_provider=None,
     ):
         return self._forward_impl(
             x,
@@ -486,6 +618,7 @@ class PVGG16TargetFlow(nn.Module):
             future_x=future_x,
             temporal_target_override=temporal_target_override,
             duplicate_current_top_context=duplicate_current_top_context,
+            top_target_provider=top_target_provider,
         )
 
     def step_pair(self, x: torch.Tensor, next_x: torch.Tensor):

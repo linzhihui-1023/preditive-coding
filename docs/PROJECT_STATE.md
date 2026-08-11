@@ -48,18 +48,23 @@ next transition.
     local-loss error source.
   - Defaults local optimization to instantaneous error so memory controls have
     identical current-frame local losses and gradient coefficients.
-  - Trains the four feedback decoder modules and temporal predictor. The VGG
-    forward stages are frozen in the primary mechanism experiments.
+  - Keeps the original 2-output motion `temporal_predictor` and adds an
+    independent full-stage-5 `future_feature_predictor` selected through
+    `PREDIFY_TASK`.
+  - Predicts a residual feature map with
+    `Fhat_(t+1|t) = F_t + P(F_t, H_t)`.
+  - Uses the same future predictor for `none`, `instant`, `lag1`, and
+    `recursive` history conditions; only `H_t` changes. `copy_current` bypasses
+    the predictor as a non-learned baseline.
   - Keeps per-layer error and prediction memories across `step_frame` calls.
   - Detaches every stored error and prediction state. Execution is stateful
     forward recurrence with one-step gradients, not BPTT.
   - Clears memories at sequence boundaries through `reset`.
-  - Builds the causal temporal prediction context from the current top feature,
-    five previous-frame errors, and five previous-frame predictions.
-  - Forms the temporal prediction before resolving targets derived from future
-    frames.
-  - Already supports `temporal_target_mode=next_top`, which is the starting
-    point for the new primary next-frame feature experiment.
+  - Resolves the next-frame target through a deferred provider only after the
+    future prediction is complete, then updates Target Flow residuals and
+    history for the following transition.
+  - Maintains causal top-layer instant, lag-1, and recursive history snapshots
+    independently of the configured local-loss error state.
 - `predify2021/model_factory/targetflow/core.py`
   - Defines target-flow state, dynamic-error integration, local losses, and
     gradient diagnostics.
@@ -81,10 +86,12 @@ next transition.
     detached `F_student(I_t)` into the top prediction-context slot. Under the
     frozen backbone this equals `F_teacher(I_t)`.
   - Freezes pretrained VGG forward stages by default. Feedback decoders and the
-    temporal predictor train; `PREDIFY_TRAIN_BACKBONE=1` is an explicit
+    task-selected predictor train; `PREDIFY_TRAIN_BACKBONE=1` is an explicit
     adaptation ablation.
-  - Saves the best student checkpoint by validation temporal loss as well as
-    the final student and teacher checkpoints.
+  - Selects motion checkpoints by validation temporal loss and future-feature
+    checkpoints by validation feature MSE.
+  - Reports feature MSE, cosine, normalized feature error, the equivalent delta
+    MSE, and matched copy-current metrics.
   - Computes optional collapse prevention across a sequence-local temporal
     window of pooled top features instead of across the batch dimension.
   - Disables that window completely when its weight is zero and clears it on
@@ -102,9 +109,28 @@ next transition.
   - Starts from `env -i`, explicitly sets every mechanism and optimization
     variable, forces the legacy current-teacher variable to zero, and records
     the exact Git revision in each result.
+- `scripts/run_kitti_seed0_future_feature_matrix.sh`
+  - Runs copy-current, current-only, instant-history, lag-1-history, and
+    recursive-history conditions in isolated environments.
+  - Stores outputs under `/tmp/predify-storage` by default and retains only the
+    best validation checkpoint per group.
 - `.github/workflows/tests.yml`
-  - Runs the 21 unit tests on pushes to `targetflow-arch` and pull requests.
+  - Runs the unit tests on pushes to `targetflow-arch` and pull requests.
   - Pins the public base `predify` dependency by commit and uses CPU PyTorch.
+
+## Future-feature implementation status
+
+The causal future-feature path is implemented and unit tested. A two-pair
+train/two-pair validation GPU smoke run completed on `cuda:0` with EMA-teacher
+targets, pretrained feedback weights, backward optimization, feature metrics,
+and best-checkpoint selection. The smoke run verified exact equality of future
+feature MSE and residual-delta MSE; its numerical accuracy is not an experiment
+result.
+
+The seed-0 five-condition feature matrix has not yet been run. Its primary
+thresholds are current-only below copy-current, followed by recursive history
+below current-only. Recursive, instant, and lag-1 comparisons are interpreted
+only after those two thresholds are checked.
 
 ## Available data
 

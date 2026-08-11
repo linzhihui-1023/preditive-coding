@@ -286,3 +286,30 @@ and compatibility variables. In particular, it sets the legacy
 current-top duplicate switch per group. Every result stores the full Git
 revision. A GitHub Actions workflow supplies an independent unit-test status
 for the exact revision used by the matrix.
+
+## 2026-08-11: Add a separate causal future-feature head
+
+Status: accepted
+
+The 2-DoF motion head remains intact for reproducibility. The primary task is
+selected with `PREDIFY_TASK=future_feature` and uses a separate stage-5
+residual predictor:
+
+`Fhat_(t+1|t) = F_t + P_theta(F_t, H_t)`.
+
+The learned current-only, instant, lag-1, and recursive conditions share the
+same predictor architecture and parameter count. Only `H_t` changes. A
+copy-current condition bypasses the predictor and reports `Fhat_(t+1|t)=F_t`.
+The old current-top-duplicate control belongs only to the motion experiment and
+is invalid in the future-feature matrix.
+
+Future-frame features are resolved only after prediction. Instant, lag-1, and
+recursive history inputs are snapshots produced by the previous completed
+transition; the residual formed after observing the current pair target is
+stored only for the next prediction. This is causal stateful recurrence with
+one-step gradients, not BPTT.
+
+Future-feature checkpoint selection uses validation feature MSE. Reports also
+include feature cosine, normalized feature error, and copy-current metrics.
+Future-feature MSE and residual-delta MSE are computed together and must remain
+numerically equal.

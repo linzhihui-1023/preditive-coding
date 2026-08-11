@@ -46,6 +46,11 @@ TARGET_FLOW_MODE = os.environ.get("PREDIFY_TARGET_FLOW_MODE", "recursive")
 TOP_TARGET_SOURCE = os.environ.get("PREDIFY_TOP_TARGET_SOURCE", "ema_teacher")
 TEMPORAL_TARGET_MODE = os.environ.get("PREDIFY_TEMPORAL_TARGET_MODE", "next_top")
 TASK_ALIGNED_TARGET = os.environ.get("PREDIFY_TASK_ALIGNED_TARGET", "").strip()
+PREDICTION_TASK = os.environ.get("PREDIFY_TASK", "motion").strip().lower()
+FEATURE_HISTORY_MODE = os.environ.get(
+    "PREDIFY_FEATURE_HISTORY_MODE",
+    "none",
+).strip().lower()
 USE_DYNAMIC_ERROR = os.environ.get("PREDIFY_DYNAMIC_ERROR", "1") == "1"
 ERROR_STATE_MODE = os.environ.get("PREDIFY_ERROR_STATE_MODE", "").strip().lower()
 if not ERROR_STATE_MODE:
@@ -81,6 +86,11 @@ TOP_VARIANCE_EPS = float(os.environ.get("PREDIFY_TOP_VARIANCE_EPS", "1e-6"))
 TOP_VARIANCE_WINDOW = int(os.environ.get("PREDIFY_TOP_VARIANCE_WINDOW", "16"))
 MOTION_STD_EPS = float(os.environ.get("PREDIFY_MOTION_STD_EPS", "1e-6"))
 TEMPORAL_PREDICTION_WEIGHT = float(os.environ.get("PREDIFY_TEMPORAL_PREDICTION_WEIGHT", "1.0"))
+FEATURE_PREDICTION_WEIGHT = float(os.environ.get("PREDIFY_FEATURE_PREDICTION_WEIGHT", "1.0"))
+LOCAL_RECONSTRUCTION_WEIGHT = float(
+    os.environ.get("PREDIFY_LOCAL_RECONSTRUCTION_WEIGHT", "1.0")
+)
+FEATURE_METRIC_EPS = float(os.environ.get("PREDIFY_FEATURE_METRIC_EPS", "1e-8"))
 LAYER_LOSS_WEIGHTS = tuple(
     float(value)
     for value in os.environ.get("PREDIFY_LAYER_LOSS_WEIGHTS", "0.1,0.1,0.2,0.2,1.0").split(",")
@@ -90,6 +100,7 @@ OUTPUT_PATH = os.environ.get("PREDIFY_OUTPUT_PATH", "kitti_targetflow_adjacent_p
 SAVE_STUDENT_PATH = os.environ.get("PREDIFY_SAVE_STUDENT_PATH", "")
 SAVE_TEACHER_PATH = os.environ.get("PREDIFY_SAVE_TEACHER_PATH", "")
 SAVE_BEST_STUDENT_PATH = os.environ.get("PREDIFY_SAVE_BEST_STUDENT_PATH", "")
+SAVE_FINAL_CHECKPOINTS = os.environ.get("PREDIFY_SAVE_FINAL_CHECKPOINTS", "1") == "1"
 FIXED_TS_RAW = os.environ.get("PREDIFY_FIXED_TS_S", "0.1035").strip()
 FIXED_TS_TOL_S = float(os.environ.get("PREDIFY_FIXED_TS_TOL_S", "0.001"))
 SHUFFLE_TRAIN_PAIRS = os.environ.get("PREDIFY_SHUFFLE_TRAIN_PAIRS", "0") == "1"
@@ -396,6 +407,8 @@ def build_student_model():
         error_sample_time=ERROR_SAMPLE_TIME,
         error_time_constant=ERROR_TIME_CONSTANT,
         error_gain=ERROR_GAIN,
+        task=PREDICTION_TASK,
+        future_feature_history_mode=FEATURE_HISTORY_MODE,
     )
     configure_student_trainability(student)
     return student.to(device)
@@ -408,7 +421,12 @@ def configure_student_trainability(student):
         parameter.requires_grad_(TRAIN_BACKBONE)
     for parameter in student.feedback_modules.parameters():
         parameter.requires_grad_(True)
-    for parameter in student.temporal_predictor.parameters():
+    prediction_module = (
+        student.temporal_predictor
+        if PREDICTION_TASK == "motion"
+        else student.future_feature_predictor
+    )
+    for parameter in prediction_module.parameters():
         parameter.requires_grad_(True)
 
 
@@ -562,11 +580,9 @@ def build_train_val_loaders():
 
 
 def build_optimizer(student):
-    trainable_parameters = []
-    if TRAIN_BACKBONE:
-        trainable_parameters.extend(student.forward_stages.parameters())
-    trainable_parameters.extend(student.feedback_modules.parameters())
-    trainable_parameters.extend(student.temporal_predictor.parameters())
+    trainable_parameters = [
+        parameter for parameter in student.parameters() if parameter.requires_grad
+    ]
     return torch.optim.Adam(
         trainable_parameters,
         lr=LEARNING_RATE,
@@ -696,6 +712,14 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
     temporal_loss_history = []
     temporal_mae_history = []
     temporal_cosine_history = []
+    feature_mse_history = []
+    feature_delta_mse_history = []
+    feature_cosine_history = []
+    normalized_feature_error_history = []
+    copy_current_feature_mse_history = []
+    copy_current_feature_cosine_history = []
+    copy_current_normalized_feature_error_history = []
+    feature_loss_equivalence_error_history = []
     forward_mae_history = []
     yaw_mae_history = []
     forward_mae_per_horizon_history = [[] for _ in TEMPORAL_HORIZONS]
@@ -742,21 +766,32 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
             future_frames = future_frames.to(device, non_blocking=device.type == "cuda")
 
             next_frames = future_frames[:, 0]
-            top_target = resolve_top_target(student, teacher, next_frames)
+            top_target = None
+            top_target_provider = None
             temporal_top_targets = None
             temporal_target_override = temporal_targets
-            if TASK_ALIGNED_TARGET != "ego_motion":
+            if PREDICTION_TASK == "future_feature":
+                top_target_provider = lambda: resolve_top_target(
+                    student,
+                    teacher,
+                    next_frames,
+                )
+            else:
+                top_target = resolve_top_target(student, teacher, next_frames)
+            if PREDICTION_TASK == "motion" and TASK_ALIGNED_TARGET != "ego_motion":
                 temporal_top_targets = resolve_temporal_targets(student, teacher, future_frames)
 
             model_step = student.step_frame if STREAM_MODE else student.forward
             if training:
                 optimizer.zero_grad(set_to_none=True)
+            with torch.set_grad_enabled(training):
                 model_step(
                     current_frames,
                     top_target=top_target,
                     temporal_top_targets=temporal_top_targets,
                     temporal_target_override=temporal_target_override,
                     duplicate_current_top_context=CURRENT_TOP_DUPLICATE,
+                    top_target_provider=top_target_provider,
                 )
                 per_layer_losses, total_local_loss = student.collect_learn_flow_losses()
                 _, weighted_loss = combine_local_losses(per_layer_losses, LAYER_LOSS_WEIGHTS)
@@ -766,46 +801,75 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
                         temporal_window=temporal_variance_window,
                     )
                 )
-                temporal_loss = student.collect_temporal_prediction_loss()
-                if temporal_loss is None:
+                feature_losses = None
+                if PREDICTION_TASK == "future_feature":
+                    feature_losses = student.collect_future_feature_prediction_losses()
+                    if feature_losses is None:
+                        raise RuntimeError("Future-feature outputs were not completed.")
                     temporal_loss = weighted_loss.new_zeros(())
-                optimized_loss = (
-                    weighted_loss
-                    + TOP_VARIANCE_WEIGHT * top_variance_loss
-                    + TEMPORAL_PREDICTION_WEIGHT * temporal_loss
-                )
-                optimized_loss.backward()
-                optimizer.step()
-                update_ema(student, teacher, EMA_DECAY)
-            else:
-                with torch.no_grad():
-                    model_step(
-                        current_frames,
-                        top_target=top_target,
-                        temporal_top_targets=temporal_top_targets,
-                        temporal_target_override=temporal_target_override,
-                        duplicate_current_top_context=CURRENT_TOP_DUPLICATE,
-                    )
-                    per_layer_losses, total_local_loss = student.collect_learn_flow_losses()
-                    _, weighted_loss = combine_local_losses(per_layer_losses, LAYER_LOSS_WEIGHTS)
-                    top_variance_loss, top_pooled_std, top_variance_sample_count = (
-                        compute_top_variance_regularizer(
-                            student.layer_states[-1].forward_output,
-                            temporal_window=temporal_variance_window,
-                        )
-                    )
+                    prediction_loss = feature_losses["future_mse"]
+                    prediction_weight = FEATURE_PREDICTION_WEIGHT
+                else:
                     temporal_loss = student.collect_temporal_prediction_loss()
                     if temporal_loss is None:
                         temporal_loss = weighted_loss.new_zeros(())
-                    optimized_loss = (
-                        weighted_loss
-                        + TOP_VARIANCE_WEIGHT * top_variance_loss
-                        + TEMPORAL_PREDICTION_WEIGHT * temporal_loss
-                    )
+                    prediction_loss = temporal_loss
+                    prediction_weight = TEMPORAL_PREDICTION_WEIGHT
+                optimized_loss = (
+                    LOCAL_RECONSTRUCTION_WEIGHT * weighted_loss
+                    + TOP_VARIANCE_WEIGHT * top_variance_loss
+                    + prediction_weight * prediction_loss
+                )
+            if training:
+                optimized_loss.backward()
+                optimizer.step()
+                update_ema(student, teacher, EMA_DECAY)
 
-            temporal_prediction = student.temporal_prediction
-            temporal_target = student.temporal_target
-            if temporal_prediction is not None and temporal_target is not None:
+            if PREDICTION_TASK == "future_feature":
+                outputs = student.future_prediction_outputs
+                predicted_future = outputs["predicted_future_top"].detach().float()
+                future_target = outputs["future_top_target"].detach().float()
+                current_top = outputs["current_top"].detach().float()
+                predicted_flat = predicted_future.flatten(1)
+                target_flat = future_target.flatten(1)
+                current_flat = current_top.flatten(1)
+                feature_cosine = F.cosine_similarity(
+                    predicted_flat,
+                    target_flat,
+                    dim=1,
+                ).mean()
+                normalized_feature_error = (
+                    torch.linalg.vector_norm(predicted_flat - target_flat, dim=1)
+                    / (
+                        torch.linalg.vector_norm(target_flat, dim=1)
+                        + FEATURE_METRIC_EPS
+                    )
+                ).mean()
+                copy_current_feature_mse = torch.mean((current_top - future_target) ** 2)
+                copy_current_feature_cosine = F.cosine_similarity(
+                    current_flat,
+                    target_flat,
+                    dim=1,
+                ).mean()
+                copy_current_normalized_feature_error = (
+                    torch.linalg.vector_norm(current_flat - target_flat, dim=1)
+                    / (
+                        torch.linalg.vector_norm(target_flat, dim=1)
+                        + FEATURE_METRIC_EPS
+                    )
+                ).mean()
+                equivalence_error = torch.abs(
+                    feature_losses["future_mse"] - feature_losses["delta_mse"]
+                )
+                temporal_mae = weighted_loss.new_zeros(())
+                temporal_cosine = weighted_loss.new_zeros(())
+                forward_mae = weighted_loss.new_zeros(())
+                yaw_mae = weighted_loss.new_zeros(())
+            else:
+                temporal_prediction = student.temporal_prediction
+                temporal_target = student.temporal_target
+                if temporal_prediction is None or temporal_target is None:
+                    raise RuntimeError("Motion prediction outputs were not completed.")
                 temporal_mae = torch.mean(torch.abs(temporal_prediction - temporal_target.detach()))
                 if TASK_ALIGNED_TARGET == "ego_motion":
                     physical_prediction = denormalize_motion_targets(
@@ -849,11 +913,6 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
                         temporal_target.detach().float(),
                         dim=-1,
                     ).mean()
-            else:
-                temporal_mae = weighted_loss.new_zeros(())
-                temporal_cosine = weighted_loss.new_zeros(())
-                forward_mae = weighted_loss.new_zeros(())
-                yaw_mae = weighted_loss.new_zeros(())
 
             weighted_loss_history.append(float(weighted_loss.detach().cpu().item()))
             optimized_loss_history.append(float(optimized_loss.detach().cpu().item()))
@@ -866,6 +925,29 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
             temporal_loss_history.append(float(temporal_loss.detach().cpu().item()))
             temporal_mae_history.append(float(temporal_mae.detach().cpu().item()))
             temporal_cosine_history.append(float(temporal_cosine.detach().cpu().item()))
+            if PREDICTION_TASK == "future_feature":
+                feature_mse_history.append(
+                    float(feature_losses["future_mse"].detach().cpu().item())
+                )
+                feature_delta_mse_history.append(
+                    float(feature_losses["delta_mse"].detach().cpu().item())
+                )
+                feature_cosine_history.append(float(feature_cosine.cpu().item()))
+                normalized_feature_error_history.append(
+                    float(normalized_feature_error.cpu().item())
+                )
+                copy_current_feature_mse_history.append(
+                    float(copy_current_feature_mse.cpu().item())
+                )
+                copy_current_feature_cosine_history.append(
+                    float(copy_current_feature_cosine.cpu().item())
+                )
+                copy_current_normalized_feature_error_history.append(
+                    float(copy_current_normalized_feature_error.cpu().item())
+                )
+                feature_loss_equivalence_error_history.append(
+                    float(equivalence_error.detach().cpu().item())
+                )
             if TASK_ALIGNED_TARGET == "ego_motion":
                 forward_mae_history.append(float(forward_mae.detach().cpu().item()))
                 yaw_mae_history.append(float(yaw_mae.detach().cpu().item()))
@@ -889,6 +971,21 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
         "mean_temporal_loss": _mean(temporal_loss_history),
         "mean_temporal_mae": _mean(temporal_mae_history),
         "mean_temporal_cosine": _mean(temporal_cosine_history),
+        "mean_feature_mse": _mean(feature_mse_history),
+        "mean_feature_delta_mse": _mean(feature_delta_mse_history),
+        "mean_feature_cosine": _mean(feature_cosine_history),
+        "mean_normalized_feature_error": _mean(normalized_feature_error_history),
+        "mean_copy_current_feature_mse": _mean(copy_current_feature_mse_history),
+        "mean_copy_current_feature_cosine": _mean(
+            copy_current_feature_cosine_history
+        ),
+        "mean_copy_current_normalized_feature_error": _mean(
+            copy_current_normalized_feature_error_history
+        ),
+        "max_feature_loss_equivalence_error": max(
+            feature_loss_equivalence_error_history,
+            default=0.0,
+        ),
         "mean_standardized_motion_mse": (
             _mean(temporal_loss_history) if TASK_ALIGNED_TARGET == "ego_motion" else None
         ),
@@ -911,6 +1008,22 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
     }
 
 
+def print_feature_metrics(epoch, split, metrics):
+    print(
+        f"Epoch {epoch:03d} | "
+        f"{split}_weighted={metrics['mean_weighted_loss']:.6f} | "
+        f"{split}_objective={metrics['mean_optimized_loss']:.6f} | "
+        f"{split}_feature_mse={metrics['mean_feature_mse']:.6f} | "
+        f"{split}_feature_cosine={metrics['mean_feature_cosine']:.6f} | "
+        f"{split}_feature_nfe={metrics['mean_normalized_feature_error']:.6f} | "
+        f"{split}_copy_mse={metrics['mean_copy_current_feature_mse']:.6f} | "
+        f"{split}_copy_cosine={metrics['mean_copy_current_feature_cosine']:.6f} | "
+        f"{split}_copy_nfe={metrics['mean_copy_current_normalized_feature_error']:.6f} | "
+        f"{split}_delta_equiv_max={metrics['max_feature_loss_equivalence_error']:.3e}",
+        flush=True,
+    )
+
+
 def main():
     seed_everything(RANDOM_SEED)
     git_revision = resolve_git_revision()
@@ -927,17 +1040,48 @@ def main():
         )
     if TASK_ALIGNED_TARGET not in {"", "ego_motion"}:
         raise ValueError("PREDIFY_TASK_ALIGNED_TARGET must be empty or 'ego_motion'.")
+    if PREDICTION_TASK not in {"motion", "future_feature"}:
+        raise ValueError("PREDIFY_TASK must be motion or future_feature.")
+    if FEATURE_HISTORY_MODE not in {
+        "none",
+        "instant",
+        "lag1",
+        "recursive",
+        "copy_current",
+    }:
+        raise ValueError(
+            "PREDIFY_FEATURE_HISTORY_MODE must be none, instant, lag1, "
+            "recursive, or copy_current."
+        )
+    if PREDICTION_TASK == "future_feature" and TASK_ALIGNED_TARGET:
+        raise ValueError(
+            "PREDIFY_TASK=future_feature requires an empty PREDIFY_TASK_ALIGNED_TARGET."
+        )
+    if PREDICTION_TASK == "future_feature" and CURRENT_TOP_DUPLICATE:
+        raise ValueError(
+            "PREDIFY_CURRENT_TOP_DUPLICATE is a motion control and must be 0 for future_feature."
+        )
     if TASK_ALIGNED_TARGET == "ego_motion" and TEMPORAL_TARGET_MODE != "ego_motion":
         raise ValueError(
             "When PREDIFY_TASK_ALIGNED_TARGET=ego_motion, set PREDIFY_TEMPORAL_TARGET_MODE=ego_motion."
         )
     if TEMPORAL_PREDICTION_WEIGHT < 0:
         raise ValueError("PREDIFY_TEMPORAL_PREDICTION_WEIGHT must be non-negative.")
-    if TEMPORAL_PREDICTION_WEIGHT == 0:
+    if PREDICTION_TASK == "motion" and TEMPORAL_PREDICTION_WEIGHT == 0:
         print(
             "WARNING: temporal_prediction_weight=0 disables training of the temporal predictor.",
             flush=True,
         )
+    if FEATURE_PREDICTION_WEIGHT < 0:
+        raise ValueError("PREDIFY_FEATURE_PREDICTION_WEIGHT must be non-negative.")
+    if PREDICTION_TASK == "future_feature" and FEATURE_PREDICTION_WEIGHT == 0:
+        raise ValueError(
+            "PREDIFY_FEATURE_PREDICTION_WEIGHT must be positive for future_feature."
+        )
+    if LOCAL_RECONSTRUCTION_WEIGHT < 0:
+        raise ValueError("PREDIFY_LOCAL_RECONSTRUCTION_WEIGHT must be non-negative.")
+    if FEATURE_METRIC_EPS <= 0:
+        raise ValueError("PREDIFY_FEATURE_METRIC_EPS must be positive.")
     if RESET_EACH_FRAME and not STREAM_MODE:
         raise ValueError("PREDIFY_RESET_EACH_FRAME=1 requires PREDIFY_STREAM_MODE=1.")
     if CURRENT_TOP_DUPLICATE and not RESET_EACH_FRAME:
@@ -990,6 +1134,7 @@ def main():
         f"val_drives={tuple(val_drives) if val_drives else ('split-from-train',)}, "
         f"train_pairs={train_pairs}, val_pairs={val_pairs}, temporal_horizons={TEMPORAL_HORIZONS}, "
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
+        f"prediction_task={PREDICTION_TASK}, feature_history_mode={FEATURE_HISTORY_MODE}, "
         f"fixed_ts_s={FIXED_TS_S}, fixed_ts_tol_s={FIXED_TS_TOL_S}, "
         f"stream_mode={STREAM_MODE}, reset_each_frame={RESET_EACH_FRAME}, "
         f"formal_split={FORMAL_SPLIT}, seed={RANDOM_SEED}, git_revision={git_revision}, "
@@ -1018,6 +1163,8 @@ def main():
         f"top_variance_window={TOP_VARIANCE_WINDOW}, "
         f"top_variance_window_active={TOP_VARIANCE_WEIGHT > 0}, "
         f"temporal_prediction_weight={TEMPORAL_PREDICTION_WEIGHT}, "
+        f"feature_prediction_weight={FEATURE_PREDICTION_WEIGHT}, "
+        f"local_reconstruction_weight={LOCAL_RECONSTRUCTION_WEIGHT}, "
         f"temporal_target_mode={TEMPORAL_TARGET_MODE}, temporal_horizons={TEMPORAL_HORIZONS}, "
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
         f"error_state_mode={ERROR_STATE_MODE}, local_loss_error_source={LOCAL_LOSS_ERROR_SOURCE}, "
@@ -1050,6 +1197,13 @@ def main():
             "current_top_duplicate_source": "student_top_detached",
             "temporal_credit_assignment": "stateful_forward_one_step_gradient",
             "state_memory_detached": True,
+            "prediction_task": PREDICTION_TASK,
+            "future_feature_history_mode": FEATURE_HISTORY_MODE,
+            "future_feature_prediction_space": "full_stage5_feature_map",
+            "future_feature_prediction_form": "residual_Fhat_next=F_current+delta_hat",
+            "future_feature_causal_order": (
+                "snapshot_history,predict,observe_future_target,update_error_state"
+            ),
             "seed": RANDOM_SEED,
             "shuffle_train_pairs": SHUFFLE_TRAIN_PAIRS,
             "shuffle_val_pairs": SHUFFLE_VAL_PAIRS,
@@ -1091,12 +1245,16 @@ def main():
             "top_variance_window": TOP_VARIANCE_WINDOW,
             "top_variance_window_active": TOP_VARIANCE_WEIGHT > 0,
             "temporal_prediction_weight": TEMPORAL_PREDICTION_WEIGHT,
+            "feature_prediction_weight": FEATURE_PREDICTION_WEIGHT,
+            "local_reconstruction_weight": LOCAL_RECONSTRUCTION_WEIGHT,
+            "feature_metric_eps": FEATURE_METRIC_EPS,
+            "save_final_checkpoints": SAVE_FINAL_CHECKPOINTS,
         },
         "epochs": [],
         "best_checkpoint": None,
     }
 
-    best_val_temporal_loss = float("inf")
+    best_val_prediction_loss = float("inf")
     best_student_checkpoint_path = SAVE_BEST_STUDENT_PATH or derive_checkpoint_path(
         OUTPUT_PATH,
         "_best_student.pt",
@@ -1143,16 +1301,23 @@ def main():
         history["epochs"].append(epoch_record)
 
         if val_metrics is not None:
-            val_temporal_loss = val_metrics["mean_temporal_loss"]
-            if val_temporal_loss < best_val_temporal_loss:
-                best_val_temporal_loss = val_temporal_loss
+            if PREDICTION_TASK == "future_feature":
+                val_prediction_loss = val_metrics["mean_feature_mse"]
+                checkpoint_metric = "val_mean_feature_mse"
+                checkpoint_kind = "best_val_future_feature_mse"
+            else:
+                val_prediction_loss = val_metrics["mean_temporal_loss"]
+                checkpoint_metric = (
+                    "val_standardized_longitudinal_yaw_mse"
+                    if TASK_ALIGNED_TARGET == "ego_motion"
+                    else "val_mean_temporal_loss"
+                )
+                checkpoint_kind = "best_val_temporal_loss"
+            if val_prediction_loss < best_val_prediction_loss:
+                best_val_prediction_loss = val_prediction_loss
                 history["best_checkpoint"] = {
-                    "metric": (
-                        "val_standardized_longitudinal_yaw_mse"
-                        if TASK_ALIGNED_TARGET == "ego_motion"
-                        else "val_mean_temporal_loss"
-                    ),
-                    "value": val_temporal_loss,
+                    "metric": checkpoint_metric,
+                    "value": val_prediction_loss,
                     "epoch": epoch,
                     "path": best_student_checkpoint_path,
                 }
@@ -1161,48 +1326,54 @@ def main():
                     best_student_checkpoint_path,
                     history["config"],
                     epoch_record,
-                    checkpoint_kind="best_val_temporal_loss",
+                    checkpoint_kind=checkpoint_kind,
                 )
                 print(
                     f"Saved best student checkpoint at epoch {epoch} "
-                    f"with val_temporal_loss={val_temporal_loss:.6f} "
+                    f"with {checkpoint_metric}={val_prediction_loss:.6f} "
                     f"to {best_student_checkpoint_path}",
                     flush=True,
                 )
 
-        print(
-            f"Epoch {epoch:03d} | "
-            f"train_weighted={train_metrics['mean_weighted_loss']:.6f} | "
-            f"train_objective={train_metrics['mean_optimized_loss']:.6f} | "
-            f"train_top={train_metrics['mean_top_local_loss']:.6f} | "
-            f"train_top_std={train_metrics['mean_top_feature_std']:.6f} | "
-            f"train_top_poolstd={train_metrics['mean_top_pooled_std']:.6f} | "
-            f"train_varloss={train_metrics['mean_top_variance_loss']:.6f} | "
-            f"train_varframes={train_metrics['max_top_variance_sample_count']} | "
-            f"train_{temporal_loss_label}={train_metrics['mean_temporal_loss']:.6f} | "
-            f"train_normmae={train_metrics['mean_temporal_mae']:.6f} | "
-            f"train_forward_mae_m={train_metrics['mean_forward_displacement_mae_m']:.6f} | "
-            f"train_yaw_mae_rad={train_metrics['mean_yaw_change_mae_rad']:.6f} | "
-            f"train_{temporal_cosine_label}={train_metrics['mean_temporal_cosine']:.6f}",
-            flush=True,
-        )
-        if val_metrics is not None:
+        if PREDICTION_TASK == "future_feature":
+            print_feature_metrics(epoch, "train", train_metrics)
+        else:
             print(
                 f"Epoch {epoch:03d} | "
-                f"val_weighted={val_metrics['mean_weighted_loss']:.6f} | "
-                f"val_objective={val_metrics['mean_optimized_loss']:.6f} | "
-                f"val_top={val_metrics['mean_top_local_loss']:.6f} | "
-                f"val_top_std={val_metrics['mean_top_feature_std']:.6f} | "
-                f"val_top_poolstd={val_metrics['mean_top_pooled_std']:.6f} | "
-                f"val_varloss={val_metrics['mean_top_variance_loss']:.6f} | "
-                f"val_varframes={val_metrics['max_top_variance_sample_count']} | "
-                f"val_{temporal_loss_label}={val_metrics['mean_temporal_loss']:.6f} | "
-                f"val_normmae={val_metrics['mean_temporal_mae']:.6f} | "
-                f"val_forward_mae_m={val_metrics['mean_forward_displacement_mae_m']:.6f} | "
-                f"val_yaw_mae_rad={val_metrics['mean_yaw_change_mae_rad']:.6f} | "
-                f"val_{temporal_cosine_label}={val_metrics['mean_temporal_cosine']:.6f}",
+                f"train_weighted={train_metrics['mean_weighted_loss']:.6f} | "
+                f"train_objective={train_metrics['mean_optimized_loss']:.6f} | "
+                f"train_top={train_metrics['mean_top_local_loss']:.6f} | "
+                f"train_top_std={train_metrics['mean_top_feature_std']:.6f} | "
+                f"train_top_poolstd={train_metrics['mean_top_pooled_std']:.6f} | "
+                f"train_varloss={train_metrics['mean_top_variance_loss']:.6f} | "
+                f"train_varframes={train_metrics['max_top_variance_sample_count']} | "
+                f"train_{temporal_loss_label}={train_metrics['mean_temporal_loss']:.6f} | "
+                f"train_normmae={train_metrics['mean_temporal_mae']:.6f} | "
+                f"train_forward_mae_m={train_metrics['mean_forward_displacement_mae_m']:.6f} | "
+                f"train_yaw_mae_rad={train_metrics['mean_yaw_change_mae_rad']:.6f} | "
+                f"train_{temporal_cosine_label}={train_metrics['mean_temporal_cosine']:.6f}",
                 flush=True,
             )
+        if val_metrics is not None:
+            if PREDICTION_TASK == "future_feature":
+                print_feature_metrics(epoch, "val", val_metrics)
+            else:
+                print(
+                    f"Epoch {epoch:03d} | "
+                    f"val_weighted={val_metrics['mean_weighted_loss']:.6f} | "
+                    f"val_objective={val_metrics['mean_optimized_loss']:.6f} | "
+                    f"val_top={val_metrics['mean_top_local_loss']:.6f} | "
+                    f"val_top_std={val_metrics['mean_top_feature_std']:.6f} | "
+                    f"val_top_poolstd={val_metrics['mean_top_pooled_std']:.6f} | "
+                    f"val_varloss={val_metrics['mean_top_variance_loss']:.6f} | "
+                    f"val_varframes={val_metrics['max_top_variance_sample_count']} | "
+                    f"val_{temporal_loss_label}={val_metrics['mean_temporal_loss']:.6f} | "
+                    f"val_normmae={val_metrics['mean_temporal_mae']:.6f} | "
+                    f"val_forward_mae_m={val_metrics['mean_forward_displacement_mae_m']:.6f} | "
+                    f"val_yaw_mae_rad={val_metrics['mean_yaw_change_mae_rad']:.6f} | "
+                    f"val_{temporal_cosine_label}={val_metrics['mean_temporal_cosine']:.6f}",
+                    flush=True,
+                )
 
     end = datetime.now()
     print(f"TOTAL TIME TAKEN : {end-start}", flush=True)
@@ -1211,26 +1382,35 @@ def main():
         pickle.dump(history, handle)
     print(f"Saved training history to {OUTPUT_PATH}", flush=True)
 
-    student_checkpoint_path = SAVE_STUDENT_PATH or derive_checkpoint_path(OUTPUT_PATH, "_student.pt")
-    save_model_checkpoint(
-        student,
-        student_checkpoint_path,
-        history["config"],
-        history["epochs"][-1] if history["epochs"] else None,
-        checkpoint_kind="final_student",
-    )
-    print(f"Saved student checkpoint to {student_checkpoint_path}", flush=True)
-
-    if teacher is not None:
-        teacher_checkpoint_path = SAVE_TEACHER_PATH or derive_checkpoint_path(OUTPUT_PATH, "_teacher.pt")
+    if SAVE_FINAL_CHECKPOINTS:
+        student_checkpoint_path = SAVE_STUDENT_PATH or derive_checkpoint_path(
+            OUTPUT_PATH,
+            "_student.pt",
+        )
         save_model_checkpoint(
-            teacher,
-            teacher_checkpoint_path,
+            student,
+            student_checkpoint_path,
             history["config"],
             history["epochs"][-1] if history["epochs"] else None,
-            checkpoint_kind="final_teacher",
+            checkpoint_kind="final_student",
         )
-        print(f"Saved teacher checkpoint to {teacher_checkpoint_path}", flush=True)
+        print(f"Saved student checkpoint to {student_checkpoint_path}", flush=True)
+
+        if teacher is not None:
+            teacher_checkpoint_path = SAVE_TEACHER_PATH or derive_checkpoint_path(
+                OUTPUT_PATH,
+                "_teacher.pt",
+            )
+            save_model_checkpoint(
+                teacher,
+                teacher_checkpoint_path,
+                history["config"],
+                history["epochs"][-1] if history["epochs"] else None,
+                checkpoint_kind="final_teacher",
+            )
+            print(f"Saved teacher checkpoint to {teacher_checkpoint_path}", flush=True)
+    else:
+        print("Skipped final checkpoints; best validation checkpoint is retained.", flush=True)
 
 
 if __name__ == "__main__":
