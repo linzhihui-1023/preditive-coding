@@ -55,8 +55,9 @@ cancelled and is not part of the active experiment design.
   - Supports deterministic runs through `PREDIFY_SEED`.
   - Supports the `PREDIFY_RESET_EACH_FRAME=1` control without adding repeated
     model executions.
-  - Supports a reset/no-history current-teacher control that adds only
-    `F_teacher(I_t)` to the top prediction-context slot.
+  - Supports a reset/no-history current-top duplicate control that copies only
+    detached `F_student(I_t)` into the top prediction-context slot. Under the
+    frozen backbone this equals `F_teacher(I_t)`.
   - Freezes pretrained VGG forward stages by default. Feedback decoders and the
     temporal predictor train; `PREDIFY_TRAIN_BACKBONE=1` is an explicit
     adaptation ablation.
@@ -64,6 +65,8 @@ cancelled and is not part of the active experiment design.
     the final student and teacher checkpoints.
   - Computes optional collapse prevention across a sequence-local temporal
     window of pooled top features instead of across the batch dimension.
+  - Disables that window completely when its weight is zero and clears it on
+    every reset-each-frame step when it is enabled.
   - Detaches stored history so only the current frame receives variance
     gradients; the default window is 16 frames.
   - Estimates per-horizon motion mean and standard deviation from training
@@ -120,8 +123,9 @@ component using training-only statistics, and report physical component MAEs.
 
 The old inherited condition also contained `F_teacher(I_t)` through its saved
 previous top target, whereas reset-each-frame did not. The reported 15.7% A/B
-difference therefore cannot isolate long-term history. The corrected matrix
-adds a reset/current-teacher/no-history control.
+difference therefore cannot isolate long-term history. With frozen VGG,
+`F_teacher(I_t)=F_student(I_t)`, so the corrected matrix adds a reset/current-
+top-duplicate/no-history control.
 
 The earlier unseeded corrected run reached MSE 0.094732 at epoch 8, but its
 best weights were not saved. It remains exploratory evidence and is not used
@@ -152,24 +156,36 @@ must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Calibrate one fixed positive temporal-variance weight on the corrected
-   seed-0 inherited-EMA condition, using standardized motion loss and physical
-   component metrics. Freeze the selected value before mechanism comparisons.
-2. Run a corrected seed-0 matrix with recursive future target flow, frozen VGG,
-   and instantaneous local loss in every condition: inherited EMA, reset EMA,
-   reset EMA plus current-teacher context, inherited instantaneous error, and
-   inherited lag-1 error.
-3. Compare EMA with lag-1 to test recursive history against a one-step memory
-   baseline with the same coefficients and constant-signal scale.
-4. Repeat the corrected matrix with at least seeds 1 and 2, then report mean,
+1. Run the corrected seed-0 five-condition matrix shown below. Keep the top
+   variance weight fixed at zero in every frozen-backbone condition.
+2. Treat A versus C as the primary state-memory comparison, B versus C as the
+   current-top duplication check, A versus D as the dynamic-error comparison,
+   and A versus E as recursive memory versus a lag-1 FIR baseline.
+3. Repeat the corrected matrix with at least seeds 1 and 2, then report mean,
    standard deviation, and per-seed paired differences.
-5. If the mechanism advantage is stable, run a tau sweep and then add more
+4. If the mechanism advantage is stable, run a tau sweep and then add more
    train and validation drives.
-6. Reserve a separate test-drive set before reporting final generalization.
+5. Reserve a separate test-drive set before reporting final generalization.
 
-Every new run must explicitly record the variance weight. A weight of zero
-means the mechanism is disabled. A positive weight uses the temporal window
-and must satisfy `target_std > sqrt(eps)`.
+| Group | Cross-frame state | Error state | Extra current-top context | Purpose |
+| --- | --- | --- | --- | --- |
+| A | Inherit | Recursive EMA | From inherited state | Full method |
+| B | Reset | EMA, no effective history | None | Stateless baseline |
+| C | Reset | EMA, no effective history | Detached current-top duplicate | Extra-current-feature control |
+| D | Inherit | Instant | From inherited state | Test recursive dynamic error |
+| E | Inherit | Lag-1 | From inherited state | Test EMA against finite one-step memory |
+
+All five groups use recursive target flow, frozen VGG, instantaneous local
+loss, variance weight zero, temporal prediction weight one, identical dynamic
+parameters, seed, drives, training-only normalization statistics, and best-
+checkpoint selection by validation temporal loss. Formal runs set
+`PREDIFY_FORMAL_SPLIT=1` and explicitly provide disjoint train and validation
+drives.
+
+A positive variance weight is invalid while the backbone is frozen because
+the top-feature variance has no gradient path to the trainable feedback or
+temporal modules. Variance calibration is reserved for the separate
+`PREDIFY_TRAIN_BACKBONE=1` adaptation experiment.
 
 For the current complete training drive, horizon-1 normalization is based on
 153 samples: forward mean/std `0.466140/0.107030 m`, yaw mean/std

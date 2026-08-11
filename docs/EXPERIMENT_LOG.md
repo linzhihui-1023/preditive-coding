@@ -57,10 +57,11 @@ must not be compared with corrected standardized 2-DoF longitudinal-yaw runs.
 
 The inherited condition also received the previous top target, which at time
 `t` contains `F_teacher(I_t)`, while reset-each-frame did not. Its A/B
-difference therefore mixed temporal history with an extra current-frame EMA
-teacher representation. The old 15.7% difference is not evidence for long-term
-memory. A corrected matrix requires a reset/no-history control that injects
-only `F_teacher(I_t)` into the top context slot.
+difference therefore mixed temporal history with an extra current-frame top
+representation. The old 15.7% difference is not evidence for long-term
+memory. With the backbone frozen, `F_teacher(I_t)=F_student(I_t)`, so the
+corrected reset/no-history control duplicates the detached current student top
+feature in the top context slot.
 
 Server artifacts, not tracked by Git:
 

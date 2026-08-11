@@ -84,33 +84,33 @@ class TargetFlowCausalityTest(unittest.TestCase):
         )
         self.assertGreater(gradient_sum, 0.0)
 
-    def test_current_teacher_control_adds_only_current_top_representation(self):
+    def test_current_top_duplicate_adds_only_current_top_representation(self):
         self.model.reset()
         with torch.no_grad():
-            current_teacher_top = self.model.extract_top_forward_feature(self.current)
+            current_top = self.model.extract_top_forward_feature(self.current)
             future_top = self.model.extract_top_forward_feature(self.future_a)
             self.model.step_frame(
                 self.current,
                 top_target=future_top,
                 temporal_target_override=self.ego_motion,
-                current_teacher_top_context=current_teacher_top,
+                duplicate_current_top_context=True,
             )
 
         error_start = self.model.stage_channels[-1]
         prediction_start = error_start + sum(self.model.stage_channels)
-        teacher_top_start = prediction_start + sum(self.model.stage_channels[:-1])
+        current_top_start = prediction_start + sum(self.model.stage_channels[:-1])
         self.assertEqual(
             torch.count_nonzero(self.model.temporal_context[:, error_start:prediction_start]).item(),
             0,
         )
         self.assertEqual(
-            torch.count_nonzero(self.model.temporal_context[:, prediction_start:teacher_top_start]).item(),
+            torch.count_nonzero(self.model.temporal_context[:, prediction_start:current_top_start]).item(),
             0,
         )
         self.assertTrue(
             torch.equal(
-                self.model.temporal_context[:, teacher_top_start:],
-                current_teacher_top.mean(dim=(-1, -2)),
+                self.model.temporal_context[:, current_top_start:],
+                current_top.mean(dim=(-1, -2)),
             )
         )
 

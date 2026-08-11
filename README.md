@@ -38,8 +38,10 @@ state is initialized on the first frame and inherited until the drive boundary.
 Stored cross-frame state is detached, so training uses stateful recurrence with
 one-step gradients rather than BPTT. Primary mechanism experiments freeze the
 pretrained VGG backbone and train the feedback decoders plus temporal head.
-`PREDIFY_CURRENT_TEACHER_CONTEXT=1` provides the dedicated reset/no-history
-teacher-current control and requires `PREDIFY_RESET_EACH_FRAME=1`.
+`PREDIFY_CURRENT_TOP_DUPLICATE=1` provides the dedicated reset/no-history
+current-top duplicate control and requires `PREDIFY_RESET_EACH_FRAME=1`.
+Formal cross-drive runs can set `PREDIFY_FORMAL_SPLIT=1` to require explicit,
+disjoint `PREDIFY_TRAIN_DRIVES` and `PREDIFY_VAL_DRIVES`.
 
 Current status and reproducibility records are maintained in:
 

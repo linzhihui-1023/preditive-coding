@@ -8,6 +8,9 @@ from predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs import (
     TemporalFeatureVarianceWindow,
     build_optimizer,
     configure_student_trainability,
+    reset_stream_state,
+    validate_formal_drive_split,
+    validate_variance_configuration,
 )
 
 
@@ -98,6 +101,43 @@ class TemporalVarianceWindowTest(unittest.TestCase):
         window.reset()
         _, _, reset_count = window.compute(torch.tensor([[0.008, 0.016]]))
         self.assertEqual(reset_count, 1)
+
+    def test_stream_reset_clears_model_and_variance_history(self):
+        class ResetCounter:
+            def __init__(self):
+                self.count = 0
+
+            def reset(self):
+                self.count += 1
+
+        student = ResetCounter()
+        teacher = ResetCounter()
+        window = TemporalFeatureVarianceWindow(window_size=3)
+        window.compute(torch.ones(1, 2))
+
+        reset_stream_state(student, teacher, window)
+
+        self.assertEqual(student.count, 1)
+        self.assertEqual(teacher.count, 1)
+        self.assertEqual(window.history, [])
+
+
+class FormalExperimentConfigurationTest(unittest.TestCase):
+    def test_formal_split_requires_explicit_disjoint_drives(self):
+        with self.assertRaisesRegex(ValueError, "requires explicit"):
+            validate_formal_drive_split(True, "drive_train", "")
+        with self.assertRaisesRegex(ValueError, "must be disjoint"):
+            validate_formal_drive_split(True, "drive_shared", "drive_shared")
+
+        validate_formal_drive_split(True, "drive_train", "drive_val")
+        validate_formal_drive_split(False, "", "")
+
+    def test_positive_variance_weight_requires_trainable_backbone(self):
+        with self.assertRaisesRegex(ValueError, "frozen top feature"):
+            validate_variance_configuration(False, 0.001)
+
+        validate_variance_configuration(False, 0.0)
+        validate_variance_configuration(True, 0.001)
 
 
 if __name__ == "__main__":

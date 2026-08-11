@@ -29,6 +29,7 @@ KITTI_ROOT = os.environ.get("PREDIFY_KITTI_ROOT", "/home/lin/predify/kitti_raw")
 KITTI_DRIVE = os.environ.get("PREDIFY_KITTI_DRIVE", "2011_09_26/2011_09_26_drive_0005_sync")
 TRAIN_DRIVES_ENV = os.environ.get("PREDIFY_TRAIN_DRIVES", "")
 VAL_DRIVES_ENV = os.environ.get("PREDIFY_VAL_DRIVES", "")
+FORMAL_SPLIT = os.environ.get("PREDIFY_FORMAL_SPLIT", "0") == "1"
 KITTI_CAMERA = os.environ.get("PREDIFY_KITTI_CAMERA", "image_02")
 MAX_PAIRS = int(os.environ.get("PREDIFY_MAX_PAIRS", "0"))
 MAX_TRAIN_PAIRS = int(os.environ.get("PREDIFY_MAX_TRAIN_PAIRS", str(MAX_PAIRS)))
@@ -62,7 +63,16 @@ TEMPORAL_HORIZONS = tuple(
 )
 USE_PRETRAINED = os.environ.get("PREDIFY_PRETRAINED", "1") == "1"
 TRAIN_BACKBONE = os.environ.get("PREDIFY_TRAIN_BACKBONE", "0") == "1"
-CURRENT_TEACHER_CONTEXT = os.environ.get("PREDIFY_CURRENT_TEACHER_CONTEXT", "0") == "1"
+CURRENT_TOP_DUPLICATE_ENV = os.environ.get("PREDIFY_CURRENT_TOP_DUPLICATE", "").strip()
+LEGACY_CURRENT_TEACHER_CONTEXT_ENV = os.environ.get(
+    "PREDIFY_CURRENT_TEACHER_CONTEXT",
+    "0",
+).strip()
+CURRENT_TOP_DUPLICATE = (
+    CURRENT_TOP_DUPLICATE_ENV == "1"
+    if CURRENT_TOP_DUPLICATE_ENV
+    else LEGACY_CURRENT_TEACHER_CONTEXT_ENV == "1"
+)
 PCODER_WEIGHTS = os.environ.get("PREDIFY_PCODER_WEIGHTS", "/home/lin/predify/weights_pvgg16_imagenet")
 TOP_VARIANCE_WEIGHT = float(os.environ.get("PREDIFY_TOP_VARIANCE_WEIGHT", "0.0"))
 TOP_VARIANCE_TARGET = float(os.environ.get("PREDIFY_TOP_VARIANCE_TARGET", "0.01"))
@@ -119,6 +129,36 @@ ERROR_GAIN = parse_float_or_float_list(ERROR_GAIN_RAW)
 def parse_drive_list(raw_value, default_drive):
     drives = [value.strip() for value in raw_value.split(",") if value.strip()]
     return drives if drives else [default_drive]
+
+
+def validate_formal_drive_split(formal_split, train_drives_raw, val_drives_raw):
+    if not formal_split:
+        return
+    train_drives = (
+        set(parse_drive_list(train_drives_raw, "")) if train_drives_raw.strip() else set()
+    )
+    val_drives = (
+        set(parse_drive_list(val_drives_raw, "")) if val_drives_raw.strip() else set()
+    )
+    if not train_drives or not val_drives:
+        raise ValueError(
+            "PREDIFY_FORMAL_SPLIT=1 requires explicit non-empty "
+            "PREDIFY_TRAIN_DRIVES and PREDIFY_VAL_DRIVES."
+        )
+    overlap = sorted(train_drives & val_drives)
+    if overlap:
+        raise ValueError(
+            "Formal train and validation drives must be disjoint, but both contain: "
+            f"{overlap}."
+        )
+
+
+def validate_variance_configuration(train_backbone, variance_weight):
+    if variance_weight > 0 and not train_backbone:
+        raise ValueError(
+            "PREDIFY_TOP_VARIANCE_WEIGHT must be 0 when PREDIFY_TRAIN_BACKBONE=0; "
+            "the frozen top feature has no trainable gradient path."
+        )
 
 
 def seed_everything(seed):
@@ -585,6 +625,14 @@ class TemporalFeatureVarianceWindow:
         return variance_loss, pooled_std, int(samples.shape[0])
 
 
+def reset_stream_state(student, teacher=None, temporal_variance_window=None):
+    student.reset()
+    if teacher is not None:
+        teacher.reset()
+    if temporal_variance_window is not None:
+        temporal_variance_window.reset()
+
+
 def compute_top_variance_regularizer(top_forward_output, temporal_window=None):
     if temporal_window is not None:
         return temporal_window.compute(top_forward_output)
@@ -645,18 +693,16 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
     iterator = tqdm(total=total_batches, desc="train" if training else "val")
     for sequence in sequence_records:
         temporal_variance_window = (
-            TemporalFeatureVarianceWindow(TOP_VARIANCE_WINDOW) if STREAM_MODE else None
+            TemporalFeatureVarianceWindow(TOP_VARIANCE_WINDOW)
+            if STREAM_MODE and TOP_VARIANCE_WEIGHT > 0
+            else None
         )
         if STREAM_MODE:
-            student.reset()
-            if teacher is not None:
-                teacher.reset()
+            reset_stream_state(student, teacher, temporal_variance_window)
 
         for batch in sequence["loader"]:
             if STREAM_MODE and RESET_EACH_FRAME:
-                student.reset()
-                if teacher is not None:
-                    teacher.reset()
+                reset_stream_state(student, teacher, temporal_variance_window)
 
             if TASK_ALIGNED_TARGET == "ego_motion":
                 if motion_target_stats is None:
@@ -678,11 +724,6 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
             future_frames = future_frames.to(device, non_blocking=device.type == "cuda")
 
             next_frames = future_frames[:, 0]
-            current_teacher_top_context = (
-                teacher.extract_top_forward_feature(current_frames, detach=True)
-                if CURRENT_TEACHER_CONTEXT
-                else None
-            )
             top_target = resolve_top_target(student, teacher, next_frames)
             temporal_top_targets = None
             temporal_target_override = temporal_targets
@@ -697,7 +738,7 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
                     top_target=top_target,
                     temporal_top_targets=temporal_top_targets,
                     temporal_target_override=temporal_target_override,
-                    current_teacher_top_context=current_teacher_top_context,
+                    duplicate_current_top_context=CURRENT_TOP_DUPLICATE,
                 )
                 per_layer_losses, total_local_loss = student.collect_learn_flow_losses()
                 _, weighted_loss = combine_local_losses(per_layer_losses, LAYER_LOSS_WEIGHTS)
@@ -725,7 +766,7 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
                         top_target=top_target,
                         temporal_top_targets=temporal_top_targets,
                         temporal_target_override=temporal_target_override,
-                        current_teacher_top_context=current_teacher_top_context,
+                        duplicate_current_top_context=CURRENT_TOP_DUPLICATE,
                     )
                     per_layer_losses, total_local_loss = student.collect_learn_flow_losses()
                     _, weighted_loss = combine_local_losses(per_layer_losses, LAYER_LOSS_WEIGHTS)
@@ -854,6 +895,8 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
 
 def main():
     seed_everything(RANDOM_SEED)
+    validate_formal_drive_split(FORMAL_SPLIT, TRAIN_DRIVES_ENV, VAL_DRIVES_ENV)
+    validate_variance_configuration(TRAIN_BACKBONE, TOP_VARIANCE_WEIGHT)
 
     if len(LAYER_LOSS_WEIGHTS) != 5:
         raise ValueError(
@@ -878,14 +921,10 @@ def main():
         )
     if RESET_EACH_FRAME and not STREAM_MODE:
         raise ValueError("PREDIFY_RESET_EACH_FRAME=1 requires PREDIFY_STREAM_MODE=1.")
-    if CURRENT_TEACHER_CONTEXT and not RESET_EACH_FRAME:
+    if CURRENT_TOP_DUPLICATE and not RESET_EACH_FRAME:
         raise ValueError(
-            "PREDIFY_CURRENT_TEACHER_CONTEXT=1 is a no-history control and requires "
+            "PREDIFY_CURRENT_TOP_DUPLICATE=1 is a no-history control and requires "
             "PREDIFY_RESET_EACH_FRAME=1."
-        )
-    if CURRENT_TEACHER_CONTEXT and TOP_TARGET_SOURCE != "ema_teacher":
-        raise ValueError(
-            "PREDIFY_CURRENT_TEACHER_CONTEXT=1 requires PREDIFY_TOP_TARGET_SOURCE=ema_teacher."
         )
     if TARGET_FLOW_MODE not in {"recursive", "quasi_steady"}:
         raise ValueError("PREDIFY_TARGET_FLOW_MODE must be recursive or quasi_steady.")
@@ -933,8 +972,9 @@ def main():
         f"train_pairs={train_pairs}, val_pairs={val_pairs}, temporal_horizons={TEMPORAL_HORIZONS}, "
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
         f"fixed_ts_s={FIXED_TS_S}, fixed_ts_tol_s={FIXED_TS_TOL_S}, "
-        f"stream_mode={STREAM_MODE}, reset_each_frame={RESET_EACH_FRAME}, seed={RANDOM_SEED}, "
-        f"current_teacher_context={CURRENT_TEACHER_CONTEXT}, "
+        f"stream_mode={STREAM_MODE}, reset_each_frame={RESET_EACH_FRAME}, "
+        f"formal_split={FORMAL_SPLIT}, seed={RANDOM_SEED}, "
+        f"current_top_duplicate={CURRENT_TOP_DUPLICATE}, "
         f"shuffle_train_pairs={SHUFFLE_TRAIN_PAIRS}, shuffle_val_pairs={SHUFFLE_VAL_PAIRS}, "
         f"shuffle_seed={SHUFFLE_SEED}",
         flush=True,
@@ -957,6 +997,7 @@ def main():
         f"layer_loss_weights={LAYER_LOSS_WEIGHTS}, top_variance_weight={TOP_VARIANCE_WEIGHT}, "
         f"top_variance_target={TOP_VARIANCE_TARGET}, top_variance_eps={TOP_VARIANCE_EPS}, "
         f"top_variance_window={TOP_VARIANCE_WINDOW}, "
+        f"top_variance_window_active={TOP_VARIANCE_WEIGHT > 0}, "
         f"temporal_prediction_weight={TEMPORAL_PREDICTION_WEIGHT}, "
         f"temporal_target_mode={TEMPORAL_TARGET_MODE}, temporal_horizons={TEMPORAL_HORIZONS}, "
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
@@ -984,7 +1025,9 @@ def main():
             "fixed_ts_tol_s": FIXED_TS_TOL_S,
             "stream_mode": STREAM_MODE,
             "reset_each_frame": RESET_EACH_FRAME,
-            "current_teacher_context": CURRENT_TEACHER_CONTEXT,
+            "formal_split": FORMAL_SPLIT,
+            "current_top_duplicate": CURRENT_TOP_DUPLICATE,
+            "current_top_duplicate_source": "student_top_detached",
             "temporal_credit_assignment": "stateful_forward_one_step_gradient",
             "state_memory_detached": True,
             "seed": RANDOM_SEED,
@@ -1026,6 +1069,7 @@ def main():
             "top_variance_target": TOP_VARIANCE_TARGET,
             "top_variance_eps": TOP_VARIANCE_EPS,
             "top_variance_window": TOP_VARIANCE_WINDOW,
+            "top_variance_window_active": TOP_VARIANCE_WEIGHT > 0,
             "temporal_prediction_weight": TEMPORAL_PREDICTION_WEIGHT,
         },
         "epochs": [],

@@ -102,21 +102,23 @@ join that optimizer only in the explicit backbone-adaptation ablation. Feedback
 modules must not retain gradients while being omitted from optimizer parameter
 groups. The EMA teacher continues to track their learned parameters.
 
-## 2026-08-10: Use temporal variance in stream mode
+## 2026-08-10: Reserve temporal variance for backbone adaptation
 
 Status: accepted
 
-Batch variance is invalid when stream execution enforces batch size 1. Optional
-collapse prevention therefore computes per-channel variance over a
-sequence-local window of pooled top features. Stored previous-frame features
-are detached, so the current frame receives a gradient without retaining a
-graph across optimizer steps. The window resets at each true drive boundary
-and defaults to 16 frames.
+Batch variance is invalid when stream execution enforces batch size 1. The
+optional backbone-adaptation regularizer therefore computes per-channel
+variance over a sequence-local window of pooled top features. Stored previous-
+frame features are detached, so the current frame receives a gradient without
+retaining a graph across optimizer steps. The window resets whenever model
+state resets and defaults to 16 frames.
 
 The numerical guard requires `target_std > sqrt(eps)` whenever the variance
 weight is positive. The defaults are `target_std=0.01` and `eps=1e-6`; the old
-`eps=1e-4` made the hinge identically zero. A variance weight of zero is
-recorded explicitly as disabled rather than described as collapse prevention.
+`eps=1e-4` made the hinge identically zero. Frozen-backbone mechanism controls
+fix the weight at zero because top-feature variance has no gradient path to a
+trainable module. A positive weight is allowed only with
+`PREDIFY_TRAIN_BACKBONE=1`.
 
 ## 2026-08-10: Reset at every fixed-dt discontinuity
 
@@ -144,17 +146,18 @@ back to physical units for separate forward-displacement MAE in metres and yaw
 MAE in radians. Mixed-unit aggregate MSE and raw-vector cosine are not primary
 physical performance claims.
 
-## 2026-08-10: Separate teacher-current information from temporal history
+## 2026-08-10: Separate duplicated current-top information from history
 
 Status: accepted
 
-An inherited previous top target contains the EMA teacher representation of
-the current image. Therefore, the earlier inherited-versus-reset comparison
-does not isolate temporal memory. The corrected matrix includes a reset-each-
-frame control that supplies only the EMA teacher's current top feature to the
-temporal predictor. Dynamic-error and prediction-state history remain zero in
-this control. The old 15.7% difference is treated as confounded evidence and
-is not attributed to long-term temporal memory.
+An inherited previous top target contains the current image's top
+representation. Therefore, the earlier inherited-versus-reset comparison does
+not isolate temporal memory. With frozen VGG, teacher and student top features
+are identical. The corrected reset-each-frame control duplicates the detached
+current student top feature directly into the top previous-prediction slot;
+dynamic-error and lower prediction history remain zero. The old 15.7%
+difference is treated as confounded evidence and is not attributed to long-
+term temporal memory.
 
 ## 2026-08-10: Use one-step online temporal credit assignment
 
@@ -186,3 +189,24 @@ The implemented quantities are the instantaneous target error
 `d_t` term. Every layer must satisfy `abs(1 - K Ts/tau) < 1`; invalid or
 non-finite parameters fail during model construction rather than allowing an
 unstable recurrence to run.
+
+## 2026-08-11: Fix the formal frozen-backbone control matrix
+
+Status: accepted
+
+The five formal conditions are inherited EMA (A), reset EMA (B), reset EMA
+with a detached current-top duplicate (C), inherited instantaneous error (D),
+and inherited lag-1 error (E). A versus C is the primary state-memory test; B
+versus C checks the duplicated current feature; A versus D tests dynamic error;
+and A versus E tests recursive memory against finite one-step memory.
+
+All conditions fix recursive target flow, frozen VGG, instantaneous local
+loss, zero variance weight, temporal prediction weight one, dynamic
+parameters, initialization seed, drives, normalization statistics, and
+checkpoint criterion. Formal execution requires explicit disjoint train and
+validation drives through `PREDIFY_FORMAL_SPLIT=1`.
+
+Because the frozen student and teacher forward stages are identical,
+`TOP_TARGET_SOURCE=ema_teacher` is equivalent to a detached student top target
+in these experiments. EMA teacher behavior is not claimed as a mechanism of
+the frozen-backbone results.
