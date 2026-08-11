@@ -1,0 +1,5 @@
+numpy
+pillow
+tqdm
+toml
+git+https://github.com/miladmozafari/predify.git@7538a683a383c85dd5909e7aea2b868e931f39ff

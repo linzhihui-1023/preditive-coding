@@ -210,3 +210,15 @@ Because the frozen student and teacher forward stages are identical,
 `TOP_TARGET_SOURCE=ema_teacher` is equivalent to a detached student top target
 in these experiments. EMA teacher behavior is not claimed as a mechanism of
 the frozen-backbone results.
+
+## 2026-08-11: Isolate formal runs from the login shell
+
+Status: accepted
+
+The canonical five-group runner executes each process through `env -i` and
+explicitly supplies all data, model, state, optimizer, timing, seed, checkpoint,
+and compatibility variables. In particular, it sets the legacy
+`PREDIFY_CURRENT_TEACHER_CONTEXT=0` in every group and explicitly sets the new
+current-top duplicate switch per group. Every result stores the full Git
+revision. A GitHub Actions workflow supplies an independent unit-test status
+for the exact revision used by the matrix.

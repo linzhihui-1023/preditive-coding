@@ -43,6 +43,17 @@ current-top duplicate control and requires `PREDIFY_RESET_EACH_FRAME=1`.
 Formal cross-drive runs can set `PREDIFY_FORMAL_SPLIT=1` to require explicit,
 disjoint `PREDIFY_TRAIN_DRIVES` and `PREDIFY_VAL_DRIVES`.
 
+The reproducible seed-0 frozen-backbone matrix is launched with:
+
+```bash
+scripts/run_kitti_seed0_five_group_matrix.sh
+```
+
+The runner clears the inherited shell environment with `env -i`, explicitly
+sets both the new and legacy current-context variables, executes A through E
+sequentially, and stores the Git revision in every result. Individual groups
+can be selected by passing their letters, for example `...sh A C`.
+
 Current status and reproducibility records are maintained in:
 
 - [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)

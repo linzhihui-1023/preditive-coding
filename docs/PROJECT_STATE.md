@@ -75,6 +75,14 @@ cancelled and is not part of the active experiment design.
 - `predify2021/mce_scores/calculate_kitti_targetflow_pair_smoke.py`
   - Provides a sequential stream smoke check and resets when frame indices
     cross a filtered fixed-dt discontinuity.
+- `scripts/run_kitti_seed0_five_group_matrix.sh`
+  - Is the canonical A-E seed-0 runner for the frozen-backbone matrix.
+  - Starts from `env -i`, explicitly sets every mechanism and optimization
+    variable, forces the legacy current-teacher variable to zero, and records
+    the exact Git revision in each result.
+- `.github/workflows/tests.yml`
+  - Runs the 21 unit tests on pushes to `targetflow-arch` and pull requests.
+  - Pins the public base `predify` dependency by commit and uses CPU PyTorch.
 
 ## Available data
 
@@ -181,6 +189,12 @@ parameters, seed, drives, training-only normalization statistics, and best-
 checkpoint selection by validation temporal loss. Formal runs set
 `PREDIFY_FORMAL_SPLIT=1` and explicitly provide disjoint train and validation
 drives.
+
+The seed-0 runner fixes 10 epochs, learning rate `1e-4`, pretrained predictive-
+VGG weights, train drive 0005, validation drive 0011, and the existing training-
+only normalization procedure for all five conditions. It also explicitly sets
+`PREDIFY_CURRENT_TEACHER_CONTEXT=0` so a stale login-shell value cannot alter a
+run.
 
 A positive variance weight is invalid while the backbone is frozen because
 the top-feature variance has no gradient path to the trainable feedback or

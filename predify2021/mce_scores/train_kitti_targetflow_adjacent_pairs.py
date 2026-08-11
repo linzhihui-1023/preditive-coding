@@ -3,6 +3,7 @@ import math
 import os
 import pickle
 import random
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -159,6 +160,23 @@ def validate_variance_configuration(train_backbone, variance_weight):
             "PREDIFY_TOP_VARIANCE_WEIGHT must be 0 when PREDIFY_TRAIN_BACKBONE=0; "
             "the frozen top feature has no trainable gradient path."
         )
+
+
+def resolve_git_revision():
+    configured_revision = os.environ.get("PREDIFY_GIT_REVISION", "").strip()
+    if configured_revision:
+        return configured_revision
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parents[2],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    return result.stdout.strip() or "unknown"
 
 
 def seed_everything(seed):
@@ -895,6 +913,7 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
 
 def main():
     seed_everything(RANDOM_SEED)
+    git_revision = resolve_git_revision()
     validate_formal_drive_split(FORMAL_SPLIT, TRAIN_DRIVES_ENV, VAL_DRIVES_ENV)
     validate_variance_configuration(TRAIN_BACKBONE, TOP_VARIANCE_WEIGHT)
 
@@ -973,7 +992,7 @@ def main():
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
         f"fixed_ts_s={FIXED_TS_S}, fixed_ts_tol_s={FIXED_TS_TOL_S}, "
         f"stream_mode={STREAM_MODE}, reset_each_frame={RESET_EACH_FRAME}, "
-        f"formal_split={FORMAL_SPLIT}, seed={RANDOM_SEED}, "
+        f"formal_split={FORMAL_SPLIT}, seed={RANDOM_SEED}, git_revision={git_revision}, "
         f"current_top_duplicate={CURRENT_TOP_DUPLICATE}, "
         f"shuffle_train_pairs={SHUFFLE_TRAIN_PAIRS}, shuffle_val_pairs={SHUFFLE_VAL_PAIRS}, "
         f"shuffle_seed={SHUFFLE_SEED}",
@@ -1014,6 +1033,7 @@ def main():
 
     history = {
         "config": {
+            "git_revision": git_revision,
             "kitti_root": KITTI_ROOT,
             "kitti_drive": KITTI_DRIVE,
             "train_drives": tuple(train_drives),
