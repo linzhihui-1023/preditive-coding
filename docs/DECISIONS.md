@@ -1,5 +1,69 @@
 # Research Decisions
 
+## 2026-08-11: Make next-frame feature prediction the primary task
+
+Status: accepted
+
+The 2-DoF longitudinal-yaw motion target is no longer a primary result. It is
+retained only as a completed proxy-task diagnostic because the two-drive split
+is dominated by motion-regime mismatch and does not establish a temporal-state
+benefit.
+
+The primary research objective is now to predict the next-frame feature,
+improve feature consistency in a continuous video stream, resist image noise
+and blur, and support online adaptation after an environmental change. The
+first experiment under this objective keeps the existing Target Flow residual
+and dynamic state unchanged, replaces the motion head target with the next-
+frame feature, and retests whether inherited state helps. Error design changes
+are considered only if state still provides no benefit on the feature task.
+
+## 2026-08-11: Define the Target Flow residual without overclaiming
+
+Status: accepted
+
+At layer `l`, the implemented instantaneous residual is
+`r_t^l = F_t^l - T_t^l`. At the top layer,
+`T_t^L = stopgrad(F_(t+1)^L)`. In recursive mode, lower targets are produced by
+the learned feedback chain, `T_t^l = D_l(T_t^(l+1))`. Thus `r_t^l` contains
+information about the difference between the current representation and a
+future-frame-guided target.
+
+This residual is not the strict temporal feature-prediction error
+`F_(t+1)^l - Fhat_(t+1|t)^l`. Reports must call it a Target Flow residual or a
+future-guided inter-frame representation residual, not the error of the
+next-feature predictor.
+
+The current dynamic state remains
+`epsilon_t^l = (Ts/tau) r_t^l + (1 - K Ts/tau) epsilon_(t-1)^l`. This is the
+implemented recurrence; there is no independent `d_t` term. The existing
+stability condition remains required.
+
+## 2026-08-11: Preserve the causal feature-prediction order
+
+Status: accepted
+
+The prediction for `t -> t+1` is formed before `I_(t+1)` is used to construct
+the current Target Flow target or residual. Its legal inputs are the current
+feature `F_t` and state completed by the preceding transition, including
+`epsilon_(t-1)`. It must not consume `r_t` or `epsilon_t`, because both require
+the arrival of `I_(t+1)`.
+
+The causal loop is:
+
+```text
+F_t + epsilon_(t-1)
+    -> Fhat_(t+1|t)
+    -> observe F_(t+1)
+    -> r_t
+    -> epsilon_t
+    -> Fhat_(t+2|t+1)
+```
+
+Previous prediction memories may also be consumed only when they were
+completed and detached before the current prediction. Future features are
+valid supervision after prediction, never prediction context for the same
+transition.
+
 ## 2026-08-10: Use a real video stream
 
 Status: accepted

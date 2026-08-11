@@ -4,19 +4,39 @@ Last updated: 2026-08-11
 
 ## Active research direction
 
+The primary task is next-frame feature prediction, not the completed 2-DoF
+motion proxy. The intended outcome is a video representation that is more
+consistent across adjacent frames, robust to noise and blur, and able to adapt
+online when the environment changes.
+
 The active model operates on a real video-frame stream:
 
 1. The first frame initializes five layer states.
 2. Each later frame executes the model exactly once.
 3. Each frame inherits the previous five layer states, predictions, and dynamic
    errors.
-4. The current state predicts next-time features or a standardized 2-DoF
-   longitudinal-yaw motion target.
+4. The current feature and state completed at the previous transition predict
+   the next-frame feature.
 5. Training and validation preserve drive and frame order. Stream mode requires
    batch size 1 and rejects shuffled pair loaders.
 
 The earlier route that repeatedly ran multiple timesteps on the same image is
 cancelled and is not part of the active experiment design.
+
+The active experiment order is:
+
+1. Keep the existing Target Flow residual and dynamic recurrence.
+2. Replace the primary motion target with next-frame feature prediction.
+3. Revalidate state inheritance with causal, matched controls.
+4. Evaluate clean-stream feature prediction and consistency, then noise and
+   blur robustness, followed by online adaptation after an environment shift.
+5. Modify the error formulation only if inherited state still has no effect on
+   the feature task.
+
+For transition `t -> t+1`, prediction must use `F_t` and history completed at
+`t-1`, such as `epsilon_(t-1)`. The current residual `r_t` and dynamic state
+`epsilon_t` are formed only after `I_(t+1)` arrives and are available for the
+next transition.
 
 ## Current implementation
 
@@ -38,6 +58,8 @@ cancelled and is not part of the active experiment design.
     five previous-frame errors, and five previous-frame predictions.
   - Forms the temporal prediction before resolving targets derived from future
     frames.
+  - Already supports `temporal_target_mode=next_top`, which is the starting
+    point for the new primary next-frame feature experiment.
 - `predify2021/model_factory/targetflow/core.py`
   - Defines target-flow state, dynamic-error integration, local losses, and
     gradient diagnostics.
@@ -149,6 +171,9 @@ Seeds 1 and 2 are paused. More training drives and a motion-regime-aware split
 are required before repeating the matrix. Full component and quantile results
 are in `docs/EXPERIMENT_LOG.md`.
 
+This pause applies to the 2-DoF motion-proxy matrix. It does not block the new
+next-frame feature experiment, which now precedes any additional motion seeds.
+
 ## Superseded seeded control result
 
 The causal model and two controls were run for ten epochs at Git revision
@@ -215,18 +240,17 @@ must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Add multiple training drives and reserve disjoint validation/test drives;
-   inspect per-drive forward and yaw target distributions before fixing the
-   split.
-2. On the improved split, rerun the train-mean constant, Frozen VGG plus static
-   MLP, A, and C. Require a meaningful gain over the constant in both physical
-   components before expanding the matrix.
-3. Treat A versus C as the primary state-memory comparison, B versus C as the
-   current-top duplication check, A versus D as the dynamic-error comparison,
-   and A versus E as recursive memory versus a lag-1 FIR baseline.
-4. Only after the improved split passes the baseline gate, run seeds 0, 1, and
-   2 and report mean, standard deviation, and per-seed paired differences.
-5. Only if the mechanism advantage is stable, run a tau sweep.
+1. Define the next-top-feature loss and reporting metrics without changing the
+   existing residual or dynamic recurrence.
+2. Run a cheap causal state test: inherited state versus a matched no-history
+   control on next-frame feature prediction.
+3. If state helps, expand to clean feature consistency and controlled noise and
+   blur corruptions, then test online adaptation after an environment shift.
+4. If state does not help, inspect and revise the residual/state formulation
+   before running more seeds or a tau sweep.
+5. Treat the existing 2-DoF matrix as a proxy-task diagnostic only. Additional
+   motion seeds remain paused unless motion is later reintroduced as a
+   secondary evaluation.
 
 | Group | Cross-frame state | Error state | Extra current-top context | Purpose |
 | --- | --- | --- | --- | --- |
