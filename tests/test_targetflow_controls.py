@@ -12,7 +12,7 @@ from predify2021.model_factory.targetflow import (
 
 
 class TargetFlowErrorStateTest(unittest.TestCase):
-    def test_ema_and_lag1_use_distinct_memories_with_matched_coefficients(self):
+    def test_ema_and_two_tap_use_distinct_memories_with_matched_coefficients(self):
         forward = torch.tensor([10.0])
         target = torch.tensor([0.0])
         previous_state = torch.tensor([7.0])
@@ -28,7 +28,21 @@ class TargetFlowErrorStateTest(unittest.TestCase):
             error_gain=1.0,
             mode="ema",
         )
-        lag1 = build_targetflow_error(
+        two_tap = build_targetflow_error(
+            target,
+            forward,
+            previous_error=previous_state,
+            previous_instant_error=previous_instant,
+            sample_time=0.1,
+            time_constant=0.5,
+            error_gain=1.0,
+            mode="two_tap",
+        )
+
+        self.assertTrue(torch.allclose(ema, torch.tensor([7.6])))
+        self.assertTrue(torch.allclose(two_tap, torch.tensor([5.2])))
+
+        legacy_lag1 = build_targetflow_error(
             target,
             forward,
             previous_error=previous_state,
@@ -38,9 +52,7 @@ class TargetFlowErrorStateTest(unittest.TestCase):
             error_gain=1.0,
             mode="lag1",
         )
-
-        self.assertTrue(torch.allclose(ema, torch.tensor([7.6])))
-        self.assertTrue(torch.allclose(lag1, torch.tensor([5.2])))
+        self.assertTrue(torch.equal(two_tap, legacy_lag1))
 
     def test_unstable_error_dynamics_are_rejected(self):
         common = {

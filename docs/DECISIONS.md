@@ -139,9 +139,9 @@ independent choices. Formal memory controls use the instantaneous error for all
 five local losses, so they have the same current-frame loss, gradient
 coefficient, learning rate, and target-flow architecture.
 
-Error-state conditions are `instant`, recursive EMA, and lag-1 mixing. Lag-1
+Error-state conditions are `instant`, recursive EMA, and two-tap mixing. Two-tap
 uses `alpha*e_t + (1-K*alpha)*e_(t-1)` and, for the formal `K=1` setting,
-provides a one-step memory baseline with the same coefficients and
+provides a finite two-tap baseline with the same coefficients and
 constant-signal scale as recursive EMA. Using the filtered state directly in
 local loss is retained only as an explicitly named legacy ablation.
 
@@ -260,7 +260,7 @@ Status: accepted
 
 The five formal conditions are inherited EMA (A), reset EMA (B), reset EMA
 with a detached current-top duplicate (C), inherited instantaneous error (D),
-and inherited lag-1 error (E). A versus C is the primary state-memory test; B
+and inherited two-tap error (E). A versus C is the primary state-memory test; B
 versus C checks the duplicated current feature; A versus D tests dynamic error;
 and A versus E tests recursive memory against finite one-step memory.
 
@@ -297,13 +297,13 @@ residual predictor:
 
 `Fhat_(t+1|t) = F_t + P_theta(F_t, H_t)`.
 
-The learned current-only, instant, lag-1, and recursive conditions share the
+The learned current-only, latest, two-tap, and recursive conditions share the
 same predictor architecture and parameter count. Only `H_t` changes. A
 copy-current condition bypasses the predictor and reports `Fhat_(t+1|t)=F_t`.
 The old current-top-duplicate control belongs only to the motion experiment and
 is invalid in the future-feature matrix.
 
-Future-frame features are resolved only after prediction. Instant, lag-1, and
+Future-frame features are resolved only after prediction. Latest, two-tap, and
 recursive history inputs are snapshots produced by the previous completed
 transition; the residual formed after observing the current pair target is
 stored only for the next prediction. This is causal stateful recurrence with
@@ -313,3 +313,18 @@ Future-feature checkpoint selection uses validation feature MSE. Reports also
 include feature cosine, normalized feature error, and copy-current metrics.
 Future-feature MSE and residual-delta MSE are computed together and must remain
 numerically equal.
+
+The strict predictor error is stored with the theory-consistent sign
+`prediction_error_top = F_(t+1) - Fhat_(t+1|t)`. This differs from the Target
+Flow residual sign and must not be silently interchanged with it.
+
+At prediction time, `latest` is `e_(t-1)`. The finite condition is named
+`two_tap`, because it is
+`alpha e_(t-1) + (1-K alpha)e_(t-2)`, not a pure lag-1 residual. `instant` and
+`lag1` remain accepted only as legacy configuration aliases for `latest` and
+`two_tap` respectively.
+
+The frozen-backbone feature matrix uses `TOP_TARGET_SOURCE=student_self` and
+`TEMPORAL_TARGET_MODE=next_top`. A frozen EMA teacher would produce the same
+top target and add no independent mechanism, so it is omitted from this
+matrix.

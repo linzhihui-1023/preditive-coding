@@ -147,7 +147,7 @@ def build_targetflow_error(
     mode: Optional[str] = None,
     previous_instant_error: Optional[torch.Tensor] = None,
 ):
-    """Build an instant, recursive-EMA, or one-step lagged error state."""
+    """Build an instant, recursive-EMA, or two-tap finite error state."""
     instant_error = build_targetflow_instant_error(target_output, forward_output)
     if instant_error is None:
         return None
@@ -156,7 +156,7 @@ def build_targetflow_error(
         return instant_error
     if resolved_mode == "ema":
         memory_error = previous_error
-    elif resolved_mode == "lag1":
+    elif resolved_mode in {"lag1", "two_tap"}:
         memory_error = previous_instant_error
     else:
         raise ValueError(f"Unsupported target-flow error state mode: {resolved_mode}")

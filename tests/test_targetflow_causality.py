@@ -221,7 +221,7 @@ class TargetFlowCausalityTest(unittest.TestCase):
             parameter.numel()
             for parameter in self.model.future_feature_predictor.parameters()
         )
-        for mode in ("none", "instant", "lag1", "recursive"):
+        for mode in ("none", "latest", "two_tap", "recursive"):
             self.model.future_feature_history_mode = mode
             self.assertEqual(id(self.model.future_feature_predictor), predictor_id)
             self.assertEqual(
@@ -276,12 +276,12 @@ class TargetFlowCausalityTest(unittest.TestCase):
             self._future_feature_step(
                 self.current,
                 self.future_a,
-                history_mode="instant",
+                history_mode="latest",
             )
             return self._future_feature_step(
                 self.future_a,
                 current_pair_target,
-                history_mode="instant",
+                history_mode="latest",
             )["predicted_future_top"]
 
         prediction_a = predict_second(self.future_a)
@@ -301,14 +301,22 @@ class TargetFlowCausalityTest(unittest.TestCase):
         self.assertTrue(torch.equal(second["history_top"], previous_recursive))
 
         self.model.reset()
-        self._future_feature_step(self.current, self.future_a, history_mode="instant")
+        self._future_feature_step(self.current, self.future_a, history_mode="latest")
         previous_instant = self.model.instant_error_state_memory[-1].clone()
         second = self._future_feature_step(
             self.future_a,
             self.future_b,
-            history_mode="instant",
+            history_mode="latest",
         )
         self.assertTrue(torch.equal(second["history_top"], previous_instant))
+
+    def test_future_prediction_error_uses_target_minus_prediction_sign(self):
+        self.model.reset()
+        outputs = self._future_feature_step(self.current, self.future_a)
+        expected_error = (
+            outputs["future_top_target"] - outputs["predicted_future_top"]
+        )
+        self.assertTrue(torch.equal(outputs["prediction_error_top"], expected_error))
 
     def test_future_and_delta_mse_are_equivalent(self):
         self.model.reset()

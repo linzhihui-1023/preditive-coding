@@ -26,7 +26,7 @@ Each stream transition executes in this order:
 3. Predict `Fhat_(t+1|t)` from `F_t` and old history `H_t`.
 4. Extract the detached target `F_(t+1)`.
 5. Compute prediction and Target Flow losses.
-6. Update instant, lag-1, and recursive state for the next transition.
+6. Update latest, two-tap, and recursive state for the next transition.
 
 The current pair's residual never enters its own prediction. Stored state is
 detached, so this is stateful forward recurrence with one-step gradients, not
@@ -41,9 +41,14 @@ input changes.
 | --- | --- | --- |
 | Copy-current | `copy_current` | Predictor bypassed; `Fhat=F_t` |
 | Current-only | `none` | Zeros |
-| Instant | `instant` | Previous completed instant residual |
-| Lag-1 | `lag1` | Previous completed finite-memory state |
+| Latest | `latest` | `e_(t-1)` from the previous transition |
+| Two-tap | `two_tap` | `alpha e_(t-1) + (1-K alpha)e_(t-2)` |
 | Recursive | `recursive` | Previous completed recursive state |
+
+With the matrix parameters, `alpha=0.1035/0.5=0.207`. Thus two-tap history is
+`0.207e_(t-1)+0.793e_(t-2)`, while recursive history is
+`0.207e_(t-1)+0.793epsilon_(t-2)`. The legacy names `instant` and `lag1` are
+accepted as aliases, but new result tables use Latest and Two-tap.
 
 Run all five conditions:
 
@@ -65,6 +70,11 @@ Set `PREDIFY_MATRIX_OUTPUT_ROOT` to override that location. The runner starts
 each process with `env -i`, explicitly fixes all mechanism variables, and keeps
 only the best validation checkpoint per condition.
 
+The frozen-backbone matrix explicitly uses
+`PREDIFY_TOP_TARGET_SOURCE=student_self` and
+`PREDIFY_TEMPORAL_TARGET_MODE=next_top`. The detached student target is equal
+to a frozen EMA-teacher top feature without keeping a redundant teacher model.
+
 ## Losses And Metrics
 
 The optimized objective is:
@@ -84,13 +94,17 @@ Validation reports:
 - The same three metrics for copy-current.
 - Maximum future/delta MSE equivalence error.
 
+The signed diagnostic is
+`prediction_error_top = F_next - Fhat_(t+1|t)`, matching the project theory.
+MSE is sign invariant, but this stored tensor must retain the documented sign.
+
 Best checkpoints are selected by validation feature MSE.
 
 ## Interpretation Order
 
 1. `Current-only < Copy-current`: the predictor learned useful future change.
 2. `Recursive < Current-only`: history adds information beyond `F_t`.
-3. Compare Recursive with Instant and Lag-1 to test whether recursive memory is
+3. Compare Recursive with Latest and Two-tap to test whether recursive memory is
    better than simpler causal history.
 
 The current two-drive split is suitable for this initial mechanism check, not

@@ -44,7 +44,7 @@ next transition.
   - Implements five target-flow stages.
   - Defaults to recursive target flow: the detached future top feature is
     propagated through `T5 -> T4 -> T3 -> T2 -> T1`.
-  - Separates the cross-frame error state (`instant`, `ema`, or `lag1`) from the
+  - Separates the cross-frame error state (`instant`, `ema`, or `two_tap`) from the
     local-loss error source.
   - Defaults local optimization to instantaneous error so memory controls have
     identical current-frame local losses and gradient coefficients.
@@ -53,7 +53,7 @@ next transition.
     `PREDIFY_TASK`.
   - Predicts a residual feature map with
     `Fhat_(t+1|t) = F_t + P(F_t, H_t)`.
-  - Uses the same future predictor for `none`, `instant`, `lag1`, and
+  - Uses the same future predictor for `none`, `latest`, `two_tap`, and
     `recursive` history conditions; only `H_t` changes. `copy_current` bypasses
     the predictor as a non-learned baseline.
   - Keeps per-layer error and prediction memories across `step_frame` calls.
@@ -63,7 +63,7 @@ next transition.
   - Resolves the next-frame target through a deferred provider only after the
     future prediction is complete, then updates Target Flow residuals and
     history for the following transition.
-  - Maintains causal top-layer instant, lag-1, and recursive history snapshots
+  - Maintains causal top-layer latest, two-tap, and recursive history snapshots
     independently of the configured local-loss error state.
 - `predify2021/model_factory/targetflow/core.py`
   - Defines target-flow state, dynamic-error integration, local losses, and
@@ -110,7 +110,7 @@ next transition.
     variable, forces the legacy current-teacher variable to zero, and records
     the exact Git revision in each result.
 - `scripts/run_kitti_seed0_future_feature_matrix.sh`
-  - Runs copy-current, current-only, instant-history, lag-1-history, and
+  - Runs copy-current, current-only, latest-residual, two-tap, and
     recursive-history conditions in isolated environments.
   - Stores outputs under `/tmp/predify-storage` by default and retains only the
     best validation checkpoint per group.
@@ -120,16 +120,17 @@ next transition.
 
 ## Future-feature implementation status
 
-The causal future-feature path is implemented and unit tested. A two-pair
-train/two-pair validation GPU smoke run completed on `cuda:0` with EMA-teacher
-targets, pretrained feedback weights, backward optimization, feature metrics,
-and best-checkpoint selection. The smoke run verified exact equality of future
+The causal future-feature path is implemented and unit tested. An initial
+two-pair train/two-pair validation GPU smoke run completed on `cuda:0` with
+pretrained feedback weights, backward optimization, feature metrics, and
+best-checkpoint selection. The smoke run verified exact equality of future
 feature MSE and residual-delta MSE; its numerical accuracy is not an experiment
-result.
+result. The formal frozen-backbone matrix uses a detached student-self target,
+because an EMA teacher produces the same top feature in this regime.
 
 The seed-0 five-condition feature matrix has not yet been run. Its primary
 thresholds are current-only below copy-current, followed by recursive history
-below current-only. Recursive, instant, and lag-1 comparisons are interpreted
+below current-only. Recursive, latest, and two-tap comparisons are interpreted
 only after those two thresholds are checked.
 
 ## Available data
@@ -160,7 +161,7 @@ standardized 2-DoF longitudinal-yaw MSE.
 | B | Reset, no extra top | 5 | 11.443965 | 0.465796 | 0.005455 |
 | C | Reset, current-top duplicate | 6 | **11.018217** | **0.458364** | 0.006219 |
 | D | Inherit, instant error | 5 | 11.146288 | 0.477386 | **0.003696** |
-| E | Inherit, lag-1 error | 5 | 11.128227 | 0.477661 | 0.004047 |
+| E | Inherit, two-tap error | 5 | 11.128227 | 0.477661 | 0.004047 |
 
 A is 0.246% worse than C in the primary clean history comparison, so seed 0
 does not show a benefit from inherited temporal history. C is 3.720% better
@@ -284,7 +285,7 @@ must be rerun after the causal-context and positive-loss-weight correction.
 | B | Reset | EMA, no effective history | None | Stateless baseline |
 | C | Reset | EMA, no effective history | Detached current-top duplicate | Extra-current-feature control |
 | D | Inherit | Instant | From inherited state | Test recursive dynamic error |
-| E | Inherit | Lag-1 | From inherited state | Test EMA against finite one-step memory |
+| E | Inherit | Two-tap | From inherited state | Test EMA against finite two-tap memory |
 
 All five groups use recursive target flow, frozen VGG, instantaneous local
 loss, variance weight zero, temporal prediction weight one, identical dynamic

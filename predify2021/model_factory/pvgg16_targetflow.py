@@ -128,7 +128,10 @@ class PVGG16TargetFlow(nn.Module):
         self.target_flow_mode = target_flow_mode
         self.compute_local_param_grads = compute_local_param_grads
         self.error_state_mode = error_state_mode or ("ema" if dynamic_error else "instant")
-        if self.error_state_mode not in {"instant", "ema", "lag1"}:
+        self.error_state_mode = {
+            "lag1": "two_tap",
+        }.get(self.error_state_mode, self.error_state_mode)
+        if self.error_state_mode not in {"instant", "ema", "two_tap"}:
             raise ValueError(f"Unsupported error_state_mode: {self.error_state_mode}")
         if local_loss_error_source not in {"instant", "state"}:
             raise ValueError(
@@ -172,10 +175,14 @@ class PVGG16TargetFlow(nn.Module):
         self.stage_channels = (64, 128, 256, 512, 512)
         if task not in {"motion", "future_feature"}:
             raise ValueError(f"Unsupported task: {task}")
+        future_feature_history_mode = {
+            "instant": "latest",
+            "lag1": "two_tap",
+        }.get(future_feature_history_mode, future_feature_history_mode)
         if future_feature_history_mode not in {
             "none",
-            "instant",
-            "lag1",
+            "latest",
+            "two_tap",
             "recursive",
             "copy_current",
         }:
@@ -201,7 +208,7 @@ class PVGG16TargetFlow(nn.Module):
         self.error_state_memory = [None for _ in range(self.number_of_layers)]
         self.instant_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.recursive_error_state_memory = [None for _ in range(self.number_of_layers)]
-        self.lag1_error_state_memory = [None for _ in range(self.number_of_layers)]
+        self.two_tap_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
@@ -213,7 +220,7 @@ class PVGG16TargetFlow(nn.Module):
         self.error_state_memory = [None for _ in range(self.number_of_layers)]
         self.instant_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.recursive_error_state_memory = [None for _ in range(self.number_of_layers)]
-        self.lag1_error_state_memory = [None for _ in range(self.number_of_layers)]
+        self.two_tap_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
@@ -250,8 +257,8 @@ class PVGG16TargetFlow(nn.Module):
         if mode in {"none", "copy_current"}:
             return torch.zeros_like(current_top)
         memory_by_mode = {
-            "instant": self.instant_error_state_memory,
-            "lag1": self.lag1_error_state_memory,
+            "latest": self.instant_error_state_memory,
+            "two_tap": self.two_tap_error_state_memory,
             "recursive": self.recursive_error_state_memory,
         }
         history = self._resolve_memory(memory_by_mode[mode][-1], current_top)
@@ -434,7 +441,7 @@ class PVGG16TargetFlow(nn.Module):
                 {
                     "future_top_target": future_top_target,
                     "target_delta_top": future_top_target - current_top.detach(),
-                    "prediction_error_top": predicted_future - future_top_target,
+                    "prediction_error_top": future_top_target - predicted_future,
                 }
             )
         run_backward_target_flow(
@@ -480,20 +487,20 @@ class PVGG16TargetFlow(nn.Module):
                 mode="ema",
                 previous_instant_error=state.previous_instant_error,
             )
-            lag1_error = build_targetflow_error(
+            two_tap_error = build_targetflow_error(
                 state.target_output,
                 state.forward_output,
                 previous_error=None,
                 sample_time=self.dynamic_error_config.sample_time,
                 time_constant=float(self.error_time_constants[zero_based_idx].item()),
                 error_gain=float(self.error_gains[zero_based_idx].item()),
-                mode="lag1",
+                mode="two_tap",
                 previous_instant_error=state.previous_instant_error,
             )
             self.error_state_memory[zero_based_idx] = state.error.detach()
             self.instant_error_state_memory[zero_based_idx] = state.instant_error.detach()
             self.recursive_error_state_memory[zero_based_idx] = recursive_error.detach()
-            self.lag1_error_state_memory[zero_based_idx] = lag1_error.detach()
+            self.two_tap_error_state_memory[zero_based_idx] = two_tap_error.detach()
             self.prediction_state_memory[zero_based_idx] = state.target_output.detach()
 
         if self.task == "future_feature":

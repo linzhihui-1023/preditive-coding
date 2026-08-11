@@ -51,10 +51,17 @@ FEATURE_HISTORY_MODE = os.environ.get(
     "PREDIFY_FEATURE_HISTORY_MODE",
     "none",
 ).strip().lower()
+FEATURE_HISTORY_MODE = {
+    "instant": "latest",
+    "lag1": "two_tap",
+}.get(FEATURE_HISTORY_MODE, FEATURE_HISTORY_MODE)
 USE_DYNAMIC_ERROR = os.environ.get("PREDIFY_DYNAMIC_ERROR", "1") == "1"
 ERROR_STATE_MODE = os.environ.get("PREDIFY_ERROR_STATE_MODE", "").strip().lower()
 if not ERROR_STATE_MODE:
     ERROR_STATE_MODE = "ema" if USE_DYNAMIC_ERROR else "instant"
+ERROR_STATE_MODE = {
+    "lag1": "two_tap",
+}.get(ERROR_STATE_MODE, ERROR_STATE_MODE)
 LOCAL_LOSS_ERROR_SOURCE = os.environ.get(
     "PREDIFY_LOCAL_LOSS_ERROR_SOURCE",
     "instant",
@@ -1044,13 +1051,13 @@ def main():
         raise ValueError("PREDIFY_TASK must be motion or future_feature.")
     if FEATURE_HISTORY_MODE not in {
         "none",
-        "instant",
-        "lag1",
+        "latest",
+        "two_tap",
         "recursive",
         "copy_current",
     }:
         raise ValueError(
-            "PREDIFY_FEATURE_HISTORY_MODE must be none, instant, lag1, "
+            "PREDIFY_FEATURE_HISTORY_MODE must be none, latest, two_tap, "
             "recursive, or copy_current."
         )
     if PREDICTION_TASK == "future_feature" and TASK_ALIGNED_TARGET:
@@ -1091,8 +1098,10 @@ def main():
         )
     if TARGET_FLOW_MODE not in {"recursive", "quasi_steady"}:
         raise ValueError("PREDIFY_TARGET_FLOW_MODE must be recursive or quasi_steady.")
-    if ERROR_STATE_MODE not in {"instant", "ema", "lag1"}:
-        raise ValueError("PREDIFY_ERROR_STATE_MODE must be instant, ema, or lag1.")
+    if ERROR_STATE_MODE not in {"instant", "ema", "two_tap"}:
+        raise ValueError(
+            "PREDIFY_ERROR_STATE_MODE must be instant, ema, or two_tap."
+        )
     if LOCAL_LOSS_ERROR_SOURCE not in {"instant", "state"}:
         raise ValueError("PREDIFY_LOCAL_LOSS_ERROR_SOURCE must be instant or state.")
     if TOP_VARIANCE_WINDOW < 2:

@@ -39,8 +39,8 @@ COMMON_ENV=(
     "PREDIFY_EMA_DECAY=0.99"
     "PREDIFY_TRAIN_FRACTION=0.8"
     "PREDIFY_TARGET_FLOW_MODE=recursive"
-    "PREDIFY_TOP_TARGET_SOURCE=ema_teacher"
-    "PREDIFY_TEMPORAL_TARGET_MODE=ego_motion"
+    "PREDIFY_TOP_TARGET_SOURCE=student_self"
+    "PREDIFY_TEMPORAL_TARGET_MODE=next_top"
     "PREDIFY_TASK_ALIGNED_TARGET="
     "PREDIFY_TEMPORAL_HORIZONS=1"
     "PREDIFY_PRETRAINED=1"
@@ -81,8 +81,8 @@ run_group() {
     case "$group" in
         copy_current) history_mode=copy_current ;;
         current_only) history_mode=none ;;
-        instant) history_mode=instant ;;
-        lag1) history_mode=lag1 ;;
+        latest|instant) history_mode=latest ;;
+        two_tap|lag1) history_mode=two_tap ;;
         recursive) history_mode=recursive ;;
         *)
             echo "Unknown group '$group'." >&2
@@ -108,7 +108,7 @@ run_group() {
 
 groups=("$@")
 if [[ ${#groups[@]} -eq 0 ]]; then
-    groups=(copy_current current_only instant lag1 recursive)
+    groups=(copy_current current_only latest two_tap recursive)
 fi
 
 printf 'git_revision=%s\noutput_root=%s\ngroups=%s\n' \

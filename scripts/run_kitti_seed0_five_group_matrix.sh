@@ -99,7 +99,7 @@ run_group() {
         E)
             reset_each_frame=0
             current_top_duplicate=0
-            error_state_mode=lag1
+            error_state_mode=two_tap
             ;;
         *)
             echo "Unknown group '$group'; expected A, B, C, D, or E." >&2
