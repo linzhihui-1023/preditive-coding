@@ -1,5 +1,79 @@
 # Experiment Log
 
+## Formal frozen-backbone five-group matrix, seed 0
+
+Date: 2026-08-11
+
+Git revision: `6c446d901a581323208a335489a7c065f1946adc`
+
+CI status for the tested revision: passed 21 unit tests in GitHub Actions run
+`31473188368` (job `93720888577`).
+
+Shared configuration:
+
+- Train: `2011_09_26_drive_0005_sync`, 153 ordered frame pairs.
+- Validation: `2011_09_26_drive_0011_sync`, 232 ordered frame pairs.
+- Camera `image_02`; fixed interval 0.1035 seconds with tolerance 0.001
+  seconds; both drives contain one accepted contiguous segment.
+- Seed 0, ten epochs, batch size 1, learning rate `1e-4`, no shuffle.
+- Recursive five-layer target flow, frozen VGG backbone, trainable feedback
+  decoders and temporal predictor.
+- Instantaneous local-loss error, variance weight zero, standardized 2-DoF
+  longitudinal-yaw temporal loss weight 1.0.
+- Dynamic parameters recorded identically in all groups: `Ts=0.1035`,
+  `tau=0.5`, and `K=1.0`.
+- Best student checkpoint selected by minimum validation standardized
+  longitudinal-yaw MSE.
+
+The runner started each condition with `env -i`, explicitly set the current
+and legacy top-context variables, and recorded the exact Git revision. A
+post-run config audit found only the intended differences: B changes
+`reset_each_frame`; C additionally changes `current_top_duplicate`; D changes
+the error mode to `instant` (with the derived legacy `dynamic_error` flag
+false); E changes the error mode to `lag1`. Training-only normalization was
+identical in all five histories: forward mean/std `0.466140/0.107030 m` and
+yaw mean/std `-0.001483/0.016870 rad`.
+
+Best-checkpoint validation results:
+
+| Group | State/error condition | Best epoch | Standardized MSE | Standardized MAE | Forward MAE (m) | Yaw MAE (rad) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| A | Inherit, recursive EMA | 6 | 11.045343 | 2.458972 | 0.473039 | 0.008406 |
+| B | Reset, no extra top context | 5 | 11.443965 | 2.337672 | 0.465796 | 0.005455 |
+| C | Reset, current-top duplicate | 6 | **11.018217** | **2.325611** | **0.458364** | 0.006219 |
+| D | Inherit, instant error | 5 | 11.146288 | 2.339699 | 0.477386 | **0.003696** |
+| E | Inherit, lag-1 error | 5 | 11.128227 | 2.351370 | 0.477661 | 0.004047 |
+
+Predefined comparisons, using the second condition as the percentage
+denominator when A is compared with another group:
+
+- A versus C, the primary history comparison: A is 0.027126 MSE higher, or
+  0.246% worse. Seed 0 therefore shows no state-inheritance benefit after
+  controlling for the duplicated current top feature.
+- B versus C, the extra-current-feature check: C is 0.425748 lower than B, a
+  3.720% reduction relative to B. A substantial part of the old A/B gap can
+  therefore be explained by access to the extra current top representation.
+- A versus D: A is 0.100945 lower, a 0.906% reduction relative to D.
+- A versus E: A is 0.082884 lower, a 0.745% reduction relative to E.
+- A versus B is only an auxiliary comparison: A is 3.483% lower than B, but
+  this contrast remains confounded by the extra top representation.
+
+Conclusion:
+
+The corrected seed-0 matrix does not support a claim that inherited history
+improves the motion target: the clean no-history control C is marginally
+better than A. Recursive EMA is slightly better than instant and lag-1 error
+in standardized MSE, but both differences are below one percent and the
+component MAEs do not improve consistently. These are single-seed,
+two-drive mechanism-validation results, not generalization evidence. Seeds 1
+and 2 are required before judging whether any A/D or A/E difference is stable.
+
+All five runs completed without errors. Server artifacts, not tracked by Git:
+
+```text
+/home/lin/predify/experiments/seed0_frozen_matrix_6c446d9/
+```
+
 ## Superseded seeded temporal control matrix
 
 Date: 2026-08-10

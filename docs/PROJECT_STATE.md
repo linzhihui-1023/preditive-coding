@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 ## Active research direction
 
@@ -98,6 +98,33 @@ Both downloaded drives currently form one uninterrupted fixed-dt segment, so
 the newly fixed segment-boundary bug did not change their old sample order. The
 fix is required before adding drives that contain rejected timestamp steps.
 
+## Formal seed-0 control result
+
+The corrected frozen-backbone A-E matrix completed at Git revision `6c446d9`.
+All conditions used explicit isolated environments, disjoint drives,
+training-only target normalization, recursive target flow, instantaneous local
+loss, variance weight zero, and best-checkpoint selection by validation
+standardized 2-DoF longitudinal-yaw MSE.
+
+| Group | Condition | Best epoch | Standardized MSE | Forward MAE (m) | Yaw MAE (rad) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| A | Inherit, recursive EMA | 6 | 11.045343 | 0.473039 | 0.008406 |
+| B | Reset, no extra top | 5 | 11.443965 | 0.465796 | 0.005455 |
+| C | Reset, current-top duplicate | 6 | **11.018217** | **0.458364** | 0.006219 |
+| D | Inherit, instant error | 5 | 11.146288 | 0.477386 | **0.003696** |
+| E | Inherit, lag-1 error | 5 | 11.128227 | 0.477661 | 0.004047 |
+
+A is 0.246% worse than C in the primary clean history comparison, so seed 0
+does not show a benefit from inherited temporal history. C is 3.720% better
+than B, confirming that the duplicated current top representation materially
+affects the no-history baseline. A is 0.906% better than D and 0.745% better
+than E in standardized MSE, but these small differences are not yet stable
+evidence for recursive dynamic error and are not consistent across the two
+physical component MAEs.
+
+The full result, comparison definitions, CI identifiers, and server artifact
+path are recorded in `docs/EXPERIMENT_LOG.md`.
+
 ## Superseded seeded control result
 
 The causal model and two controls were run for ten epochs at Git revision
@@ -164,14 +191,14 @@ must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Run the corrected seed-0 five-condition matrix shown below. Keep the top
-   variance weight fixed at zero in every frozen-backbone condition.
+1. Repeat the corrected five-condition matrix with seeds 1 and 2, keeping the
+   top variance weight fixed at zero in every frozen-backbone condition.
 2. Treat A versus C as the primary state-memory comparison, B versus C as the
    current-top duplication check, A versus D as the dynamic-error comparison,
    and A versus E as recursive memory versus a lag-1 FIR baseline.
-3. Repeat the corrected matrix with at least seeds 1 and 2, then report mean,
-   standard deviation, and per-seed paired differences.
-4. If the mechanism advantage is stable, run a tau sweep and then add more
+3. After seeds 1 and 2, report mean, standard deviation, and per-seed paired
+   differences. Do not select a mechanism from seed 0 alone.
+4. Only if a mechanism advantage is stable, run a tau sweep and then add more
    train and validation drives.
 5. Reserve a separate test-drive set before reporting final generalization.
 
