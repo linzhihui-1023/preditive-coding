@@ -26,12 +26,14 @@ cancelled and is not part of the active experiment design.
 The active experiment order is:
 
 1. Keep the existing Target Flow residual and dynamic recurrence.
-2. Replace the primary motion target with next-frame feature prediction.
-3. Revalidate state inheritance with causal, matched controls.
-4. Evaluate clean-stream feature prediction and consistency, then noise and
-   blur robustness, followed by online adaptation after an environment shift.
-5. Modify the error formulation only if inherited state still has no effect on
-   the feature task.
+2. Use next-frame feature prediction as the primary task.
+3. Add a separate, strict top-layer Temporal Prediction Error state without
+   changing the historical Target Flow residual recurrence.
+4. Test Copy-current, Current-only, and Temporal Error under matched causal
+   controls before tuning the new error state.
+5. Use same-drive controlled corruption only as a mechanistic transient test;
+   broader robustness and online-adaptation claims require a viable held-out
+   predictor first.
 
 For transition `t -> t+1`, prediction must use `F_t` and history completed at
 `t-1`, such as `epsilon_(t-1)`. The current residual `r_t` and dynamic state
@@ -191,12 +193,23 @@ the validation trajectory shows severe cross-drive overfitting. The 3x3-first
 model is not parameter matched: it has 9.96M predictor parameters versus 1.57M
 for the 1x1 model.
 
-Seeds 1 and 2 and all history reruns remain paused. Current-only must first
-beat Copy-current on held-out video. The next decision is about data coverage
-and predictor regularization/capacity, not `tau`. The current data do not
-separate spatial architecture effects from parameter count or conservative
-near-zero prediction. Noise, blur, online adaptation, and broader state inputs
-remain downstream experiments.
+The first strict top-layer Temporal Prediction Error matrix completed at
+revision `3ffbff0`. Copy-current again reached `0.060080099`, Current-only
+reached `0.061797074`, and Temporal Error reached `0.061903913`. Current-only
+was 2.85781% worse than Copy-current, and Temporal Error was 0.17289% worse
+than Current-only. Both formal gates therefore failed. The independent
+Temporal Error state had a measurable numerical effect in this seed, but no
+held-out benefit. Because the basic predictor still fails the Copy-current
+gate, this does not establish that prediction-error memory is generally
+unhelpful.
+
+Seeds 1 and 2, `tau_e` tuning, and additional history reruns remain paused.
+Current-only must first beat Copy-current on held-out video. The next
+cross-drive decision is about data coverage and predictor
+regularization/capacity, not either error time constant. The current data do
+not separate spatial architecture effects from parameter count or
+conservative near-zero prediction. Broad noise, blur, online adaptation, and
+broader state claims remain downstream experiments.
 
 The same-drive controlled-corruption implementation is ready but no formal GPU
 run is recorded yet. It is a mechanistic transient-response experiment and
@@ -337,14 +350,17 @@ must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Define the next-top-feature loss and reporting metrics without changing the
-   existing residual or dynamic recurrence.
-2. Run a cheap causal state test: inherited state versus a matched no-history
-   control on next-frame feature prediction.
-3. If state helps, expand to clean feature consistency and controlled noise and
-   blur corruptions, then test online adaptation after an environment shift.
-4. If state does not help, inspect and revise the residual/state formulation
-   before running more seeds or a tau sweep.
+1. Run the ready same-drive controlled-corruption protocol only as a
+   mechanistic transient-response test, keeping its claims separate from
+   cross-drive generalization.
+2. Inspect the saved per-frame `e`, `E`, and `L` traces for step, ramp,
+   persistent-bias, and recovery phases; report Peak Error, Recovery Time,
+   AUEC, and excess AUEC rather than only mean MSE.
+3. Improve cross-drive predictor generalization through broader training data
+   or a controlled capacity/regularization study, then require Current-only to
+   beat Copy-current before interpreting inherited-state value.
+4. Keep seeds 1 and 2 and both Target Flow and Temporal Error `tau` sweeps
+   paused while the primary gate fails.
 5. Treat the existing 2-DoF matrix as a proxy-task diagnostic only. Additional
    motion seeds remain paused unless motion is later reintroduced as a
    secondary evaluation.

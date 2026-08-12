@@ -1,5 +1,23 @@
 # Research Decisions
 
+## 2026-08-12: Keep Temporal Error tuning behind the failed predictor gate
+
+Status: accepted
+
+The first three-group strict Temporal Prediction Error matrix completed at
+revision `3ffbff0`. Validation feature MSE was `0.060080099` for Copy-current,
+`0.061797074` for Current-only, and `0.061903913` for Temporal Error.
+Current-only was 2.85781% worse than Copy-current, so the predictor gate failed.
+Temporal Error was 0.17289% worse than Current-only, so the state-benefit gate
+also failed.
+
+This result does not justify tuning `tau_e`, running seeds 1 and 2, or claiming
+that prediction-error memory is broadly ineffective. The Temporal Error
+comparison is not decisive while Current-only fails its prerequisite. The
+same-drive controlled-corruption experiment may proceed as a mechanistic test
+of `e -> E -> L` transients, but it cannot replace the failed cross-drive gate
+or support a broad robustness claim.
+
 ## 2026-08-12: Add top-layer Temporal Prediction Error state
 
 Status: accepted

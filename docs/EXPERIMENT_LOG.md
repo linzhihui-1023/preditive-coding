@@ -1,5 +1,73 @@
 # Experiment Log
 
+## Top-layer Temporal Prediction Error matrix, seed 0
+
+Date: 2026-08-12
+
+Git revision: `3ffbff0156dc9435fe3b060f4c9999703729ea8a`
+
+The first strict Temporal Prediction Error matrix completed on the existing
+cross-drive split: 153 ordered training pairs from drive 0005 and 232 ordered
+validation pairs from drive 0011. All conditions used the frozen ImageNet
+VGG16 backbone, recursive Target Flow, the 1x1 future-feature predictor, seed
+0, and best-checkpoint selection by validation feature MSE. The Temporal Error
+condition used only the previous completed top-layer state:
+
+```text
+e_(t+1)^5 = F_(t+1)^5 - Fhat_(t+1|t)^5
+E_(t+1)^5 = 0.207 e_(t+1)^5 + 0.793 E_t^5
+Fhat_(t+1|t)^5 = F_t^5 + P(F_t^5, E_t^5)
+```
+
+The future target was observed only after prediction. Target Flow and Temporal
+Error parameters were configured independently, although both used
+`Ts=0.1035`, `tau=0.5`, and `K=1` in this run.
+
+| Condition | History input | Best epoch | Feature MSE | Feature cosine | Normalized feature error |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Copy-current | Predictor bypassed | 1 | **0.060080099** | **0.919904691** | **0.375766109** |
+| Current-only | Zeros | 2 | 0.061797074 | 0.915814666 | 0.384975467 |
+| Temporal Error | Previous completed `E_t^5` | 2 | 0.061903913 | 0.915660890 | 0.385387186 |
+
+Gate results:
+
+- Gate 1 failed. Current-only was 2.85781% worse than Copy-current.
+- Gate 2 failed. Temporal Error was 0.17289% worse than Current-only.
+- Temporal Error was 3.03564% worse than Copy-current.
+- Copy-current and Current-only exactly reproduced their prior 1x1 matrix
+  values, providing a direct configuration consistency check.
+
+Interpretation:
+
+- The strict Temporal Error path produces a numerically distinct result, but
+  this seed provides no evidence that it improves held-out next-feature
+  prediction.
+- Current-only still fails the prerequisite Copy-current gate. Therefore the
+  Temporal Error comparison is secondary and must not be generalized into a
+  claim that prediction-error memory is broadly useless.
+- Both learned conditions selected epoch 2 and then degraded on validation as
+  training error continued to fall. Cross-drive predictor generalization
+  remains the primary unresolved limitation.
+- This run is not the same-drive controlled-corruption experiment. It contains
+  no step, ramp, persistent-bias, recovery, Peak Error, Recovery Time, or AUEC
+  result.
+- Do not start a `tau_e` sweep or seeds 1 and 2 to rescue these failed primary
+  comparisons. A future same-drive corruption run may test transient response
+  mechanistically, but cannot replace the cross-drive predictor gate.
+
+All three best checkpoints were reloaded and audited. Their selected epochs,
+history modes, validation MSE values, checkpoint kind, and Git revision match
+the saved histories and manifest. No final checkpoints were retained, and no
+training log contains a traceback, runtime error, CUDA out-of-memory error, or
+NaN.
+
+Server artifacts, not tracked by Git:
+
+```text
+/tmp/predify-storage/experiments/seed0_future_feature_matrix_3ffbff0/
+size: about 4.0 GB
+```
+
 ## Same-drive controlled corruption protocol (not yet run)
 
 Date: 2026-08-12
