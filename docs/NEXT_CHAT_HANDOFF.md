@@ -15,7 +15,7 @@ Branch and private remote:
 ```text
 branch: targetflow-arch
 remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
-latest implementation and experiment revision: ae90a9f
+latest diagnostic implementation and experiment revision: 1605f29
 ```
 
 At handoff time the Git worktree was clean. Use this environment:
@@ -332,7 +332,33 @@ corruption, and disjoint raw-frame split tests. The exact `1ae6b27` GitHub
 Actions unit test run was previously reported successful; CI status for
 `ae90a9f` was not checked during this handoff.
 
+The feature-learnability diagnostic at `1605f29` passed the expanded full
+local suite: 57 tests. Its exact GitHub Actions status was not checked here.
+
 ## Current Decision And Next Step
+
+The forward-only VGG feature-task learnability matrix completed at revision
+`1605f29` on 148 drive-0005 and 227 drive-0011 forecast origins. It evaluated
+stage 3/4/5 at `h=1,2,3,5` with Copy-current, causal raw feature velocity, and
+a future-selected one-cell translation oracle. The full 24-entry matrix is in
+`docs/EXPERIMENT_LOG.md`.
+
+Raw constant velocity lost to Copy-current in every one of 4,500 per-frame
+rows, and adjacent one-step feature-delta cosine was negative at every stage
+on both drives. The oracle reduced aggregate Copy-current MSE by only
+0--6.726% on drive 0011 under this small global-shift search; drive 0005 had a
+different pattern and larger short-horizon stage-3/4 reductions. Do not turn
+this into a general unlearnability claim: no predictor was trained, and the
+oracle tests only one global integer translation.
+
+Versioned audit artifacts:
+
+```text
+results/vgg_feature_learnability_1605f29/
+```
+
+They contain the exact `summary.json`, all 4,500 per-frame CSV rows,
+provenance, and SHA-256 hashes.
 
 Paused:
 
@@ -407,6 +433,12 @@ evaluation:
 
 ```bash
 scripts/run_kitti_seed0_same_drive_controlled_corruption.sh
+```
+
+Run the forward-only VGG feature-task learnability matrix:
+
+```bash
+scripts/run_kitti_vgg_feature_learnability_matrix.sh
 ```
 
 Run only the 3x3-first Current-only diagnostic:

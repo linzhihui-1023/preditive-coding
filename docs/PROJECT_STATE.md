@@ -175,6 +175,17 @@ feature MSE and residual-delta MSE; its numerical accuracy is not an experiment
 result. The formal frozen-backbone matrix uses a detached student-self target,
 because an EMA teacher produces the same top feature in this regime.
 
+A forward-only task-learnability matrix completed at revision `1605f29` for
+VGG stage 3/4/5 and horizons 1/2/3/5 on both existing drives. Raw causal
+constant-velocity feature extrapolation was worse than Copy-current for all
+4,500 per-frame matrix rows; mean adjacent one-step delta cosine was negative
+at every stage on both drives. The future-selected one-cell translation oracle
+reduced aggregate Copy-current MSE by 0--6.726% on drive 0011, while drive 0005
+showed a different pattern with larger short-horizon stage-3/4 reductions.
+These are simple-baseline and spatial-alignment diagnostics, not a learned-
+predictor result or proof that the task is unlearnable. The summary and full
+per-frame CSV are versioned under `results/vgg_feature_learnability_1605f29/`.
+
 The seed-0 five-condition feature matrix completed at revision `94059be`.
 Copy-current achieved validation feature MSE `0.060080099`. Current-only was
 2.858% worse at `0.061797074`, so the predictor did not learn a useful future

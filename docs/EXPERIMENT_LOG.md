@@ -1,20 +1,89 @@
 # Experiment Log
 
-## VGG feature-task learnability matrix (protocol ready)
+## VGG feature-task learnability matrix
 
-The forward-only diagnostic evaluates VGG stage 3, 4, and 5 at horizons
-`h=1,2,3,5` on the existing drives 0005 and 0011. Every matrix entry compares
-Copy-current, causal constant-velocity feature extrapolation, and a
-future-selected translation oracle over `dy,dx in {-1,0,1}` feature cells.
-The oracle is explicitly noncausal and is only a spatial-displacement
-diagnostic. It is not reported as a prediction baseline.
+Date: 2026-08-12
 
-All horizons use forecast origins with a valid history frame and valid future
-frames through `h=5`. The diagnostic also records
-`cos(F_t-F_(t-1), F_(t+1)-F_t)` and
-`(MSE_copy-MSE_velocity)/MSE_copy`. Formal outputs are `summary.json` and one
-per-frame CSV; both will be versioned after the exact clean implementation
-revision completes on GPU.
+Git revision: `1605f29c28b214b25f2f4c2df6c06adf45c8f554`
+
+This forward-only diagnostic evaluated ImageNet VGG16 stage 3, 4, and 5 at
+`h=1,2,3,5`, corresponding to 0.1035, 0.2070, 0.3105, and 0.5175 seconds.
+Drive 0005 supplied 148 forecast origins and drive 0011 supplied 227. All
+origins have a valid history frame and valid futures through `h=5`, so every
+horizon within one drive uses the same sample set.
+
+The three comparisons are:
+
+```text
+Copy:       Fhat_(t+h) = F_t
+Velocity:   Fhat_(t+h) = F_t + h(F_t-F_(t-1))
+Translation oracle: future-selected integer translation of F_t
+```
+
+The oracle searched `dy,dx in {-1,0,1}` feature cells, used zero fill, and
+computed full-map MSE. Stage 3/4/5 have strides 4/8/16 input pixels, so the
+maximum searched displacement differs by stage. Because the future target
+selects the shift, oracle values are diagnostic lower bounds within this small
+translation family, not causal prediction results.
+
+Drive 0005:
+
+| Stage | h | Copy MSE | Velocity MSE | Velocity gain | Oracle MSE | Oracle gain | Adjacent delta cosine |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3 | 1 | 15.557438 | 43.886687 | -182.095% | 11.790630 | 24.212% | -0.3961 |
+| 3 | 2 | 18.350077 | 110.058762 | -499.773% | 17.628484 | 3.932% | -0.3961 |
+| 3 | 3 | 19.185980 | 204.529077 | -966.034% | 18.907528 | 1.451% | -0.3961 |
+| 3 | 5 | 19.992369 | 485.845376 | -2330.154% | 19.871251 | 0.606% | -0.3961 |
+| 4 | 1 | 2.185479 | 5.303839 | -142.685% | 1.542329 | 29.428% | -0.1969 |
+| 4 | 2 | 3.436122 | 15.472533 | -350.291% | 2.723608 | 20.736% | -0.1969 |
+| 4 | 3 | 3.973900 | 29.411911 | -640.127% | 3.562695 | 10.348% | -0.1969 |
+| 4 | 5 | 4.384387 | 69.518976 | -1485.603% | 4.224353 | 3.650% | -0.1969 |
+| 5 | 1 | 0.139504 | 0.321587 | -130.522% | 0.136297 | 2.298% | -0.1549 |
+| 5 | 2 | 0.236044 | 0.905048 | -283.424% | 0.197146 | 16.479% | -0.1549 |
+| 5 | 3 | 0.319733 | 1.790191 | -459.902% | 0.260107 | 18.649% | -0.1549 |
+| 5 | 5 | 0.436755 | 4.424232 | -912.979% | 0.376618 | 13.769% | -0.1549 |
+
+Drive 0011:
+
+| Stage | h | Copy MSE | Velocity MSE | Velocity gain | Oracle MSE | Oracle gain | Adjacent delta cosine |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3 | 1 | 4.971944 | 12.730875 | -156.054% | 4.971709 | 0.005% | -0.2971 |
+| 3 | 2 | 7.188927 | 34.655441 | -382.067% | 7.084794 | 1.449% | -0.2971 |
+| 3 | 3 | 8.445830 | 66.180344 | -683.586% | 8.288973 | 1.857% | -0.2971 |
+| 3 | 5 | 9.701977 | 157.552512 | -1523.922% | 9.549371 | 1.573% | -0.2971 |
+| 4 | 1 | 0.750586 | 1.769467 | -135.745% | 0.750586 | 0.000% | -0.1977 |
+| 4 | 2 | 1.236032 | 5.169621 | -318.243% | 1.232554 | 0.281% | -0.1977 |
+| 4 | 3 | 1.527861 | 10.001076 | -554.580% | 1.526526 | 0.087% | -0.1977 |
+| 4 | 5 | 1.850616 | 23.803775 | -1186.262% | 1.846047 | 0.247% | -0.1977 |
+| 5 | 1 | 0.061063 | 0.140873 | -130.703% | 0.061063 | 0.000% | -0.1874 |
+| 5 | 2 | 0.103505 | 0.394610 | -281.247% | 0.101744 | 1.702% | -0.1874 |
+| 5 | 3 | 0.141344 | 0.781827 | -453.136% | 0.131837 | 6.726% | -0.1874 |
+| 5 | 5 | 0.197528 | 1.922527 | -873.295% | 0.184736 | 6.476% | -0.1874 |
+
+`Velocity gain` and `Oracle gain` are ratios of aggregate means:
+`(MSE_copy-MSE_method)/MSE_copy`. Adjacent delta cosine is repeated across
+horizons because all horizons use the same origins and it always compares the
+one-step deltas immediately before and after `t`.
+
+Direct observations are limited to this diagnostic. Raw constant-velocity
+extrapolation was worse than Copy-current for every one of the 4,500 matrix
+rows, consistent with the negative adjacent-delta cosine means. On drive 0011,
+the small translation oracle reduced aggregate Copy-current MSE by 0--6.726%,
+so a single global integer feature shift does not account for most of that
+drive's error under this search. Drive 0005 has a different oracle pattern,
+including 24.212% and 29.428% reductions for stage-3 and stage-4 at `h=1`.
+This matrix does not test a learned predictor and does not by itself establish
+that future-feature prediction is unlearnable.
+
+The output audit verified revision, 4,500 unique matrix rows, exact raw-frame
+horizons, finite metrics, oracle MSE no greater than Copy-current, and exact
+agreement between CSV recomputation and all 24 summary entries.
+
+Versioned artifacts:
+
+```text
+results/vgg_feature_learnability_1605f29/
+```
 
 ## Top-layer Temporal Prediction Error matrix, seed 0
 
