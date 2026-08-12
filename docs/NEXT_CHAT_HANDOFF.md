@@ -17,7 +17,7 @@ active branch: predify-selective-adaptation-v2
 frozen baseline tag: predify-temporal-v1
 frozen baseline commit: 4cc7a21280881813dbb972415a74dc400843fcc6
 remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
-latest prediction-error separability evaluation revision: a28fed5
+latest matched-persistence evaluation revision: 99b7e21
 ```
 
 All selective-online-adaptation work must stay on
@@ -364,6 +364,27 @@ checked locally.
 
 ## Current Decision And Next Step
 
+The strict matched-marginal persistence gate completed at revision `99b7e21`
+on `predify-selective-adaptation-v2`. Persistent and shuffled conditions used
+the same 11x11 Gaussian blur, exactly 20 frames at each sigma in
+`{0.75, 1.5, 2.25, 3.0}`, identical 100% disturbance occupancy, the same raw
+frames, and the same frozen checkpoint. Four replicates counterbalanced every
+absolute frame across sigma values. Only temporal ordering differed.
+
+Drive 0005 selected higher `cos(e_t,e_(t-1))`; frozen drive-0011 evaluation
+reached `0.9725` AUROC over nonoverlapping eight-frame windows. Excluding the
+onset window gave `0.972222`, and individual held-out replicate AUROCs ranged
+from `0.95` to `1.00`. This passes the user-defined persistence gate, so the
+next work may design a small selective-online-adaptation mechanism. Do not
+modify or move `predify-temporal-v1`.
+
+The evidence is limited to two drives. Windows reuse video content and are
+diagnostic units, not independent drive samples. Full lightweight audit data:
+
+```text
+results/matched_blur_persistence_99b7e21/
+```
+
 The latest inference-only go/no-go reused the strict Temporal Error checkpoint
 from revision `3ffbff0` and evaluated at revision `a28fed5`. No optimizer was
 created and parameter versions remained unchanged. Both drives ran clean,
@@ -510,6 +531,12 @@ factor remains a learned correction that does not generalize past the causal
 warp or Copy-current on the held-out drive.
 
 ## Reproduction Commands
+
+Run the strict matched-marginal persistence diagnostic on the active branch:
+
+```bash
+scripts/run_kitti_matched_blur_persistence.sh
+```
 
 Run the inference-only prediction-error separability diagnostic:
 

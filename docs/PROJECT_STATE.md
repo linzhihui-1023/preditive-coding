@@ -208,6 +208,20 @@ selected raw norm does not require temporal history. The next experiment must
 use a time-randomized blur negative matched to the persistent blur in marginal
 severity before any controller is added.
 
+That matched-marginal gate completed on the new
+`predify-selective-adaptation-v2` branch at revision `99b7e21`. Persistent and
+shuffled blur had exactly the same kernel, sigma multiset, counts, occupancy,
+raw frames, and checkpoint; four replicates counterbalanced sigma exposure at
+every absolute frame. Drive 0005 selected higher error cosine, and frozen
+drive-0011 evaluation reached `0.9725` AUROC over nonoverlapping eight-frame
+windows (`0.972222` after excluding the onset window). Results are versioned
+under `results/matched_blur_persistence_99b7e21/`.
+
+This passes the user-defined persistence go/no-go and allows selective online
+adaptation work to begin on the new branch. It remains a two-drive mechanism
+diagnostic: correlated windows must not be represented as independent drives
+or used for a naive population confidence interval.
+
 A forward-only task-learnability matrix completed at revision `1605f29` for
 VGG stage 3/4/5 and horizons 1/2/3/5 on both existing drives. Raw causal
 constant-velocity feature extrapolation was worse than Copy-current for all

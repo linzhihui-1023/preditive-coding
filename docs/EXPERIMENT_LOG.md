@@ -1,5 +1,67 @@
 # Experiment Log
 
+## Matched-marginal blur persistence gate
+
+Date: 2026-08-12
+
+Evaluation revision: `99b7e210f7922c747a08d57b9340162f359527ad`
+
+Checkpoint revision: `3ffbff0156dc9435fe3b060f4c9999703729ea8a`
+
+This inference-only experiment tested whether the existing causal error trace
+distinguishes persistence when blur marginals are exactly matched. Every
+trajectory used 40 clean, 80 disturbed, and 30 recovery transitions. Both
+conditions used an 11x11 Gaussian kernel and exactly 20 future frames at each
+sigma in `{0.75, 1.5, 2.25, 3.0}`. Persistent blur arranged them as four
+20-frame dwell blocks; shuffled blur was a deterministic permutation with 61
+runs and maximum run length 3. Blur occupancy was 100% in both conditions.
+
+There were four counterbalanced replicates. Within every replicate the two
+conditions had identical sigma multisets. Across replicates, every absolute
+video frame saw every sigma exactly once in each condition, controlling the
+interaction between corruption strength and natural frame difficulty. The
+same raw frames and frozen checkpoint were used throughout. Absolute-frame
+scheduling kept a frame bit-identical when read as one sample's future and
+the next sample's current.
+
+The primary units were nonoverlapping eight-frame disturbance windows. Drive
+0005 selected metric and direction; these were frozen on drive 0011.
+
+| Statistic | Positive direction | 0005 window AUROC | 0011 window AUROC |
+| --- | --- | ---: | ---: |
+| `||e_t||` | Lower | 0.900000 | 0.976250 |
+| `EMA(||e_t||)` | Lower | 0.878750 | 0.990000 |
+| `cos(e_t,e_(t-1))` | Higher | **0.995000** | **0.972500** |
+| `Var(e_(t-7:t))` | Lower | 0.875625 | 0.978125 |
+
+Calibration selected cosine. Its held-out per-replicate window AUROCs were
+`0.98`, `0.98`, `1.00`, and `0.95`; leave-one-replicate-out AUROC ranged from
+`0.964444` to `0.981111`. Excluding the first eight-frame onset window gave
+`0.972222`. The secondary held-out per-frame cosine AUROC was `0.704531`, so
+temporal aggregation is doing meaningful work rather than merely multiplying
+the same frame-level number.
+
+Mean held-out disturbance cosine was `-0.122692` for persistent blur and
+`-0.322340` for shuffled blur. The corresponding mean absolute frame-to-frame
+sigma changes were `0.065625` and `0.965625`; this difference is the intended
+temporal-organization manipulation, not a marginal mismatch.
+
+The audit reproduced every summary AUROC from CSV, verified 2,400 unique
+records and 160 window rows, exact 40/80/30 phase counts, finite statistics,
+identical clean prefixes, exact pairwise sigma multisets, and exact per-frame
+counterbalancing. No optimizer, parameter update, traceback, OOM, or NaN
+occurred. Under the user-defined thresholds this is `go_promising`.
+
+The evidence supports proceeding to selective-adaptation mechanism design,
+but only as a two-drive mechanistic result. Windows within each drive share
+video content and are not independent drive samples.
+
+Versioned artifacts:
+
+```text
+results/matched_blur_persistence_99b7e21/
+```
+
 ## Prediction-error persistent-shift go/no-go
 
 Date: 2026-08-12

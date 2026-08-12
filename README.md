@@ -45,6 +45,13 @@ that exact snapshot and belongs only on branch
 `predify-selective-adaptation-v2`. Do not commit selective-adaptation changes
 to the frozen tag or use `targetflow-arch` as the active development branch.
 
+The first experiment on the new branch is an inference-only persistence gate.
+It compares long-dwell and temporally shuffled Gaussian blur while exactly
+matching blur type, sigma multiset, occupancy, raw frames, and checkpoint.
+Its implementation is launched by
+`scripts/run_kitti_matched_blur_persistence.sh`; audited lightweight results
+are under `results/matched_blur_persistence_99b7e21/`.
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

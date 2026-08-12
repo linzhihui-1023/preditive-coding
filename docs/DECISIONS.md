@@ -1,5 +1,28 @@
 # Research Decisions
 
+## 2026-08-12: Pass the matched-marginal persistence gate
+
+Status: accepted
+
+Revision `99b7e21` isolated temporal organization by giving persistent and
+shuffled blur exactly the same kernel, four-value sigma multiset, per-value
+counts, disturbed-frame occupancy, raw video frames, and frozen checkpoint.
+Four counterbalanced replicates also made every absolute frame see every sigma
+once per condition. No optimizer was created and no network parameter changed.
+
+Drive 0005 selected higher `cos(e_t,e_(t-1))`. With metric and direction
+frozen, drive 0011 reached primary nonoverlapping-eight-frame-window AUROC
+`0.9725`. Excluding the onset window gave `0.972222`; all four held-out
+replicates remained high (`0.95` to `1.00`). This passes the user-defined
+`go_promising` threshold and permits selective-online-adaptation mechanism
+design on `predify-selective-adaptation-v2`.
+
+This is a mechanistic go/no-go, not a population-level performance claim.
+Only two drives were available, and windows within a drive reuse the same
+video content. Do not report the 160 windows as independent drives or attach a
+naive confidence interval. Preserve the frozen `predify-temporal-v1` baseline
+and keep all adaptation changes on the new branch.
+
 ## 2026-08-12: Pass the first error-separability gate, not the persistence gate
 
 Status: accepted
