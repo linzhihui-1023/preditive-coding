@@ -1,5 +1,32 @@
 # Research Decisions
 
+## 2026-08-12: Do not use the persistence score as a 2-DoF degradation trigger
+
+Status: accepted
+
+Gate 3 at revision `80c4aee` froze both models and the detector definition.
+Gate 2's score remained the unmodified eight-frame mean
+`cos(e_t,e_(t-1))`, higher for more persistence. Its result hashes were locked,
+and all 2,400 Persistent/Shuffled detector rows reproduced exactly. The task
+model was the formal Group A seed-0 2-DoF epoch-6 checkpoint; signed forward
+and yaw MAE degradation used same-frame independently reset clean trajectories.
+
+On held-out drive 0011, forward score-versus-degradation Pearson was
+`-0.001291`, Spearman was `0.057782`, and score AUROC for `D>0` was `0.500651`.
+Persistent and Shuffled mean forward degradation was only `+0.000411 m` and
+`+0.000335 m` relative to clean (`+0.126%` and `+0.103%`). Yaw MAE improved in
+79 of 80 windows, so the one-positive-window yaw AUROC is not useful evidence.
+
+Gate 2 therefore detects temporal organization in prediction error, but that
+score is not a reliable task-degradation trigger for the tested 2-DoF model.
+Do not proceed directly to a controller driven by this score. A future trigger
+must be validated against a stronger downstream task with meaningful clean
+performance before online adaptation is enabled.
+
+The conclusion is task- and checkpoint-specific. The existing 2-DoF model has
+known cross-drive weaknesses, especially for yaw, so this does not establish
+that persistence is unrelated to every downstream task.
+
 ## 2026-08-12: Pass the matched-marginal persistence gate
 
 Status: accepted

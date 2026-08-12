@@ -222,6 +222,19 @@ adaptation work to begin on the new branch. It remains a two-drive mechanism
 diagnostic: correlated windows must not be represented as independent drives
 or used for a naive population confidence interval.
 
+Gate 3 froze Gate 2's eight-frame cosine detector and compared it with signed
+clean-relative physical 2-DoF MAE degradation at revision `80c4aee`. All Gate
+2 corrupted detector traces reproduced exactly. On held-out drive 0011,
+forward Pearson/Spearman were `-0.001291/0.057782` and score AUROC for positive
+degradation was `0.500651`. Yaw improved in 79 of 80 windows. The high
+persistence score therefore does not indicate task degradation for the tested
+motion checkpoint, and it must not directly drive an adaptation controller.
+
+This is not a universal downstream-task rejection. The existing 2-DoF proxy
+has weak cross-drive performance and especially poor yaw behavior. Results
+are versioned under
+`results/gate3_persistence_task_degradation_80c4aee/`.
+
 A forward-only task-learnability matrix completed at revision `1605f29` for
 VGG stage 3/4/5 and horizons 1/2/3/5 on both existing drives. Raw causal
 constant-velocity feature extrapolation was worse than Copy-current for all

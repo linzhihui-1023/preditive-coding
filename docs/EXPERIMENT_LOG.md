@@ -1,5 +1,85 @@
 # Experiment Log
 
+## Gate 3: frozen persistence score versus 2-DoF degradation
+
+Date: 2026-08-12
+
+Evaluation revision: `80c4aee7f1493479764c1f21c638dbac40ca4e32`
+
+Detector checkpoint revision: `3ffbff0156dc9435fe3b060f4c9999703729ea8a`
+
+Motion checkpoint revision: `6c446d901a581323208a335489a7c065f1946adc`
+
+Gate 3 asked only whether Gate 2's high persistence score corresponds to worse
+existing 2-DoF task performance. Both networks were frozen; no optimizer or
+online update was present. The detector was not reselected: throughout Gate 3,
+
+```text
+S = mean_8[cos(e_t,e_(t-1))]
+```
+
+with higher `S` meaning more persistent. Gate 2's tracked `summary.json` and
+`per_frame.csv` were SHA256 locked. Gate 3 reproduced all 2,400 corrupted
+detector rows, including sigma and all four error statistics, with maximum
+absolute delta exactly `0.0`.
+
+The three conditions were Clean, Persistent blur, and Shuffled blur. The two
+blur conditions were exactly the Gate 2 trajectories. Clean was an independent
+reset on the identical raw-frame/OXTS sequence. Task performance used the
+formal full-method Group A seed-0 motion checkpoint selected at epoch 6. Its
+standardized predictions were converted back to metres and radians. For each
+nonoverlapping eight-frame disturbed window:
+
+```text
+D_forward = MAE_forward(corrupted) - MAE_forward(clean)
+D_yaw     = MAE_yaw(corrupted) - MAE_yaw(clean)
+```
+
+Negative degradation was retained. No threshold, score direction, task
+metric, or window size was selected in Gate 3.
+
+Held-out drive 0011 results over all 80 corrupted windows:
+
+| Task component | Mean signed D | D > 0 | Pearson(S,D) | Spearman(S,D) | AUROC S for D > 0 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Forward | +0.000373 m | 40.0% | -0.001291 | 0.057782 | 0.500651 |
+| Yaw | -0.004657 rad | 1.25% | 0.027053 | 0.076020 | 0.974684* |
+
+`*` The yaw AUROC has only one positive-degradation window and is not stable
+evidence. Shuffled blur had zero positive yaw-degradation windows.
+
+Condition means on held-out drive 0011:
+
+| Condition | Mean S | Forward D | Forward D / clean | Yaw D | Yaw D / clean |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Persistent | -0.122692 | +0.000411 m | +0.126% | -0.004450 rad | -58.49% |
+| Shuffled | -0.322340 | +0.000335 m | +0.103% | -0.004865 rad | -63.94% |
+
+Persistent raised `S` by `0.199648` relative to Shuffled, as Gate 2 requires,
+but changed forward degradation by only `+0.000076 m`. Both corruptions
+improved yaw relative to clean; Persistent merely improved less. On drive 0005,
+both blur organizations improved both physical MAEs, and pooled score-versus-
+degradation AUROCs were near 0.5.
+
+The audit verified 2,700 unique trajectory rows, exact 40/80/30 phase counts,
+identical OXTS targets across all nine trajectories per drive, all 180 window
+means, all 160 signed clean differences, and independent Pearson/Spearman
+recomputation. Clean-prefix detector traces were bitwise identical. Motion
+replay variation across identical clean prefixes was at most `5.96e-8`, below
+the `1e-7` audit tolerance and negligible relative to reported degradation.
+
+Gate 3 answers no for this task/checkpoint: the matched persistence score is
+not a useful proxy for 2-DoF performance degradation. This blocks a controller
+that would treat high `S` alone as evidence that adaptation is needed. The
+existing motion proxy's known weak cross-drive/yaw behavior remains an
+important scope limitation.
+
+Versioned artifacts:
+
+```text
+results/gate3_persistence_task_degradation_80c4aee/
+```
+
 ## Matched-marginal blur persistence gate
 
 Date: 2026-08-12

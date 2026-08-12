@@ -23,7 +23,7 @@ active branch: predify-selective-adaptation-v2
 frozen baseline tag: predify-temporal-v1
 frozen baseline commit: 4cc7a21280881813dbb972415a74dc400843fcc6
 remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
-latest matched-persistence evaluation revision: 99b7e21
+latest Gate 3 evaluation revision: 80c4aee
 ```
 
 All selective-online-adaptation work must stay on
@@ -370,6 +370,29 @@ checked locally.
 
 ## Current Decision And Next Step
 
+Gate 3 completed at revision `80c4aee` with both networks frozen. It locked
+Gate 2's detector to the eight-frame mean error cosine and reproduced all
+2,400 corrupted detector rows exactly. Physical forward/yaw MAE came from the
+formal Group A seed-0 epoch-6 2-DoF checkpoint and was compared with an
+independently reset clean trajectory on the same frames and OXTS targets.
+
+On held-out drive 0011, forward `S-D` Pearson was `-0.001291`, Spearman was
+`0.057782`, and score AUROC for positive degradation was `0.500651`. Yaw MAE
+improved in 79 of 80 windows; its nominal AUROC has only one positive and must
+not be interpreted as a successful trigger. Persistent had much higher `S`
+than Shuffled but nearly identical forward degradation.
+
+Decision: do not build a controller that treats Gate 2's score alone as task
+degradation. The next research step must either validate a trigger against a
+stronger downstream task or redesign the utility signal. Keep both old models
+frozen and continue only in `/home/lin/predify2021_selective_adaptation`.
+
+Versioned audit artifacts:
+
+```text
+results/gate3_persistence_task_degradation_80c4aee/
+```
+
 The strict matched-marginal persistence gate completed at revision `99b7e21`
 on `predify-selective-adaptation-v2`. Persistent and shuffled conditions used
 the same 11x11 Gaussian blur, exactly 20 frames at each sigma in
@@ -537,6 +560,12 @@ factor remains a learned correction that does not generalize past the causal
 warp or Copy-current on the held-out drive.
 
 ## Reproduction Commands
+
+Run Gate 3 with both detector and 2-DoF task model frozen:
+
+```bash
+scripts/run_kitti_gate3_persistence_task_degradation.sh
+```
 
 Run the strict matched-marginal persistence diagnostic on the active branch:
 

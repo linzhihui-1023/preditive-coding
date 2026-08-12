@@ -58,6 +58,13 @@ Its implementation is launched by
 `scripts/run_kitti_matched_blur_persistence.sh`; audited lightweight results
 are under `results/matched_blur_persistence_99b7e21/`.
 
+Gate 3 then froze that detector and tested whether its eight-frame persistence
+score predicts clean-relative forward/yaw MAE degradation. For the existing
+frozen 2-DoF model it did not: held-out forward correlation and positive-
+degradation AUROC were near null, while yaw usually improved under both blur
+organizations. Results are under
+`results/gate3_persistence_task_degradation_80c4aee/`.
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 
