@@ -88,6 +88,16 @@ small artifacts and scope-limited interpretation are under
 `results/temporal_fusion_matrix_10191a6/`; the approximately 4 GB of
 checkpoints and logs remain server-side.
 
+The follow-up alignment condition first maps `F_(t-1)` into `F_t` coordinates
+with causal local matching, then passes
+`[F_(t-1)_aligned, F_t]` through the unchanged residual fusion and future
+predictor. It is a single-condition experiment with the previous Copy-current
+metrics frozen as its gate:
+
+```bash
+scripts/run_kitti_seed0_aligned_temporal_fusion.sh
+```
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

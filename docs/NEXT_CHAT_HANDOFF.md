@@ -619,6 +619,12 @@ Run the strict three-condition stage-5 temporal-fusion matrix:
 scripts/run_kitti_seed0_temporal_fusion_matrix.sh
 ```
 
+Run only the aligned-history Temporal Fusion follow-up:
+
+```bash
+scripts/run_kitti_seed0_aligned_temporal_fusion.sh
+```
+
 Run the three-condition 1x1 Temporal Error matrix:
 
 ```bash

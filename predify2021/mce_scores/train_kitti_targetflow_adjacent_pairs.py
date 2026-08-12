@@ -1253,9 +1253,14 @@ def main():
             "PREDIFY_FEATURE_HISTORY_MODE must be none, latest, two_tap, "
             "recursive, temporal_error, or copy_current."
         )
-    if TEMPORAL_FUSION_MODE not in {"none", "two_frame_residual"}:
+    if TEMPORAL_FUSION_MODE not in {
+        "none",
+        "two_frame_residual",
+        "aligned_two_frame_residual",
+    }:
         raise ValueError(
-            "PREDIFY_TEMPORAL_FUSION_MODE must be none or two_frame_residual."
+            "PREDIFY_TEMPORAL_FUSION_MODE must be none, two_frame_residual, "
+            "or aligned_two_frame_residual."
         )
     if TEMPORAL_FUSION_MODE != "none" and FEATURE_HISTORY_MODE != "none":
         raise ValueError(
@@ -1477,6 +1482,16 @@ def main():
             "future_feature_temporal_fusion_architecture": (
                 "concat_F_previous_F_current_to_512_k1_relu_512_k1_residual"
                 if TEMPORAL_FUSION_MODE == "two_frame_residual"
+                else (
+                    "align_F_previous_to_F_current_then_concat_to_512_k1_relu_512_k1_residual"
+                    if TEMPORAL_FUSION_MODE == "aligned_two_frame_residual"
+                    else "none"
+                )
+            ),
+            "future_feature_temporal_alignment": (
+                "local_match_F_previous_to_F_current_target_coordinates;"
+                "use_matched_source_not_historical_future_warp"
+                if TEMPORAL_FUSION_MODE == "aligned_two_frame_residual"
                 else "none"
             ),
             "future_feature_prediction_space": "full_stage5_feature_map",
@@ -1484,16 +1499,21 @@ def main():
             "future_motion_radius": FUTURE_MOTION_RADIUS,
             "future_motion_patch_size": FUTURE_MOTION_PATCH_SIZE,
             "future_feature_prediction_equation": (
-                "Z_current=F_current+T([F_previous,F_current]);"
+                "Z_current=F_current+T([align(F_previous,F_current),F_current]);"
                 "Fhat_next=Z_current+P([Z_current,0])"
-                if TEMPORAL_FUSION_MODE == "two_frame_residual"
+                if TEMPORAL_FUSION_MODE == "aligned_two_frame_residual"
                 else (
-                    "Fhat_next=F_current+residual_hat"
-                    if FUTURE_FEATURE_PREDICTION_FORM == "current_residual"
+                    "Z_current=F_current+T([F_previous,F_current]);"
+                    "Fhat_next=Z_current+P([Z_current,0])"
+                    if TEMPORAL_FUSION_MODE == "two_frame_residual"
                     else (
-                        "Fhat_next=warp(F_current,M(F_previous,F_current))"
-                        if FUTURE_FEATURE_PREDICTION_FORM == "historical_warp"
-                        else "Fhat_next=warp(F_current,M(F_previous,F_current))+residual_hat"
+                        "Fhat_next=F_current+residual_hat"
+                        if FUTURE_FEATURE_PREDICTION_FORM == "current_residual"
+                        else (
+                            "Fhat_next=warp(F_current,M(F_previous,F_current))"
+                            if FUTURE_FEATURE_PREDICTION_FORM == "historical_warp"
+                            else "Fhat_next=warp(F_current,M(F_previous,F_current))+residual_hat"
+                        )
                     )
                 )
             ),

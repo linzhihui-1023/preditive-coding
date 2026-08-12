@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import torch
 from torchvision.models import vgg16
@@ -24,6 +25,7 @@ class TemporalFusionTest(unittest.TestCase):
         cls.frame_d = torch.randn(1, 3, 32, 32)
 
     def setUp(self):
+        self.model.future_feature_temporal_fusion_mode = "two_frame_residual"
         self.model.reset()
         self.model.zero_grad(set_to_none=True)
 
@@ -79,17 +81,20 @@ class TemporalFusionTest(unittest.TestCase):
         )
 
     def test_current_future_target_cannot_change_fused_or_predicted_feature(self):
-        def predict_with_target(target):
+        def predict_with_target(target, fusion_mode):
+            self.model.future_feature_temporal_fusion_mode = fusion_mode
             self.model.reset()
             with torch.no_grad():
                 self._step(self.frame_a, self.frame_b)
                 outputs = self._step(self.frame_b, target)
             return outputs["fused_top"].clone(), outputs["predicted_future_top"].clone()
 
-        fused_c, predicted_c = predict_with_target(self.frame_c)
-        fused_d, predicted_d = predict_with_target(self.frame_d)
-        self.assertTrue(torch.equal(fused_c, fused_d))
-        self.assertTrue(torch.equal(predicted_c, predicted_d))
+        for fusion_mode in ("two_frame_residual", "aligned_two_frame_residual"):
+            with self.subTest(fusion_mode=fusion_mode):
+                fused_c, predicted_c = predict_with_target(self.frame_c, fusion_mode)
+                fused_d, predicted_d = predict_with_target(self.frame_d, fusion_mode)
+                self.assertTrue(torch.equal(fused_c, fused_d))
+                self.assertTrue(torch.equal(predicted_c, predicted_d))
 
     def test_feature_loss_reaches_fusion_and_predictor_without_bptt(self):
         with torch.no_grad():
@@ -117,6 +122,53 @@ class TemporalFusionTest(unittest.TestCase):
         self.assertIsNotNone(self.model.future_feature_previous_top_memory)
         self.model.reset()
         self.assertIsNone(self.model.future_feature_previous_top_memory)
+
+    def test_aligned_fusion_uses_matched_previous_not_future_warp(self):
+        self.model.future_feature_temporal_fusion_mode = (
+            "aligned_two_frame_residual"
+        )
+        with torch.no_grad():
+            first = {
+                key: value.clone() if torch.is_tensor(value) else value
+                for key, value in self._step(self.frame_a, self.frame_b).items()
+            }
+        self.assertFalse(first["alignment_applied"])
+        self.assertIsNone(first["aligned_previous_top"])
+        aligned = torch.full_like(first["current_top"], 3.0)
+        diagnostics = {
+            "aligned_source": aligned,
+            "dy": torch.zeros_like(aligned[:, 0], dtype=torch.int64),
+            "dx": torch.ones_like(aligned[:, 0], dtype=torch.int64),
+            "patch_matching_cost": torch.zeros_like(aligned[:, 0]),
+        }
+        fusion_inputs = []
+        hook = self.model.temporal_fusion_module[0].register_forward_pre_hook(
+            lambda _, inputs: fusion_inputs.append(inputs[0].detach().clone())
+        )
+        try:
+            with (
+                patch(
+                    "predify2021.model_factory.pvgg16_targetflow.align_source_to_target",
+                    return_value=diagnostics,
+                ),
+                patch(
+                    "predify2021.model_factory.pvgg16_targetflow.forward_splat_discrete",
+                    side_effect=AssertionError(
+                        "Aligned history must not use the historical future splat."
+                    ),
+                ),
+                torch.no_grad(),
+            ):
+                outputs = self._step(self.frame_b, self.frame_c)
+        finally:
+            hook.remove()
+
+        self.assertTrue(outputs["alignment_applied"])
+        self.assertTrue(torch.equal(outputs["raw_fusion_previous_top"], first["current_top"]))
+        self.assertTrue(torch.equal(outputs["aligned_previous_top"], aligned))
+        self.assertTrue(torch.equal(outputs["fusion_previous_top"], aligned))
+        self.assertTrue(torch.equal(fusion_inputs[0][:, :512], aligned))
+        self.assertFalse(outputs["aligned_previous_top"].requires_grad)
 
     def test_fusion_rejects_other_history_and_prediction_forms(self):
         with self.assertRaisesRegex(ValueError, "cannot be combined"):

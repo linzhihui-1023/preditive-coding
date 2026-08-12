@@ -15,6 +15,7 @@ from .core import (
     run_backward_target_flow,
 )
 from .spatial_motion import (
+    align_source_to_target,
     candidate_shifts,
     estimate_local_displacement,
     forward_splat_discrete,

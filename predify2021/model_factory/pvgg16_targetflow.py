@@ -9,6 +9,7 @@ from .targetflow import (
     TargetFlowFeedbackModule,
     TargetFlowLayerState,
     TemporalPredictionErrorConfig,
+    align_source_to_target,
     build_targetflow_error,
     build_targetflow_instant_error,
     build_temporal_prediction_error_state,
@@ -221,6 +222,7 @@ class PVGG16TargetFlow(nn.Module):
         if future_feature_temporal_fusion_mode not in {
             "none",
             "two_frame_residual",
+            "aligned_two_frame_residual",
         }:
             raise ValueError(
                 "Unsupported future_feature_temporal_fusion_mode: "
@@ -289,7 +291,10 @@ class PVGG16TargetFlow(nn.Module):
             nn.Conv2d(1024, self.stage_channels[-1], kernel_size=1),
         )
         self.temporal_fusion_module = None
-        if self.future_feature_temporal_fusion_mode == "two_frame_residual":
+        if self.future_feature_temporal_fusion_mode in {
+            "two_frame_residual",
+            "aligned_two_frame_residual",
+        }:
             self.temporal_fusion_module = nn.Sequential(
                 nn.Conv2d(2 * self.stage_channels[-1], self.stage_channels[-1], 1),
                 nn.ReLU(inplace=False),
@@ -399,16 +404,53 @@ class PVGG16TargetFlow(nn.Module):
             current_top,
         )
         if previous_top is None:
-            return current_top, None, torch.zeros_like(current_top), False
+            return (
+                current_top,
+                None,
+                torch.zeros_like(current_top),
+                False,
+                None,
+                None,
+                None,
+            )
         previous_top = previous_top.detach()
+        fusion_previous_top = previous_top
+        aligned_previous_top = None
+        alignment_diagnostics = None
+        if (
+            self.future_feature_temporal_fusion_mode
+            == "aligned_two_frame_residual"
+        ):
+            with torch.no_grad():
+                alignment_diagnostics = align_source_to_target(
+                    previous_top,
+                    current_top.detach(),
+                    radius=self.future_motion_radius,
+                    patch_size=self.future_motion_patch_size,
+                )
+            aligned_previous_top = alignment_diagnostics[
+                "aligned_source"
+            ].detach()
+            fusion_previous_top = aligned_previous_top
         fusion_residual = self.temporal_fusion_module(
-            torch.cat([previous_top, current_top], dim=1)
+            torch.cat([fusion_previous_top, current_top], dim=1)
         )
-        return current_top + fusion_residual, previous_top, fusion_residual, True
+        return (
+            current_top + fusion_residual,
+            fusion_previous_top,
+            fusion_residual,
+            True,
+            previous_top,
+            aligned_previous_top,
+            alignment_diagnostics,
+        )
 
     def _predict_future_top_feature(self, current_top: torch.Tensor):
         history_top = self._resolve_future_feature_history(current_top)
         fusion_previous_top = None
+        raw_fusion_previous_top = None
+        aligned_previous_top = None
+        alignment_diagnostics = None
         fusion_residual = torch.zeros_like(current_top)
         temporal_fusion_applied = False
         if self.future_feature_history_mode == "copy_current":
@@ -419,15 +461,29 @@ class PVGG16TargetFlow(nn.Module):
             warp_diagnostics = None
         else:
             form = self.future_feature_prediction_form
-            if self.future_feature_temporal_fusion_mode == "two_frame_residual":
+            if self.future_feature_temporal_fusion_mode in {
+                "two_frame_residual",
+                "aligned_two_frame_residual",
+            }:
                 (
                     prediction_base,
                     fusion_previous_top,
                     fusion_residual,
                     temporal_fusion_applied,
+                    raw_fusion_previous_top,
+                    aligned_previous_top,
+                    alignment_diagnostics,
                 ) = self._build_temporal_fusion_base(current_top)
-                motion_dy = None
-                motion_dx = None
+                motion_dy = (
+                    None
+                    if alignment_diagnostics is None
+                    else alignment_diagnostics["dy"].detach()
+                )
+                motion_dx = (
+                    None
+                    if alignment_diagnostics is None
+                    else alignment_diagnostics["dx"].detach()
+                )
                 warp_diagnostics = None
             elif form == "current_residual":
                 prediction_base = current_top
@@ -452,6 +508,14 @@ class PVGG16TargetFlow(nn.Module):
             "current_top": current_top,
             "history_top": history_top,
             "fusion_previous_top": fusion_previous_top,
+            "raw_fusion_previous_top": raw_fusion_previous_top,
+            "aligned_previous_top": aligned_previous_top,
+            "alignment_applied": aligned_previous_top is not None,
+            "alignment_patch_matching_cost": (
+                None
+                if alignment_diagnostics is None
+                else alignment_diagnostics["patch_matching_cost"].detach()
+            ),
             "fusion_residual_top": fusion_residual,
             "fused_top": prediction_base,
             "temporal_fusion_applied": temporal_fusion_applied,

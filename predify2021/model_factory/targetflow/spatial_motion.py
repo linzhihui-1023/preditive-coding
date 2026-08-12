@@ -111,6 +111,22 @@ def estimate_local_displacement(source, target, radius, patch_size):
     }
 
 
+def align_source_to_target(source, target, radius, patch_size):
+    """Place source features in target coordinates using causal local matching."""
+    motion = estimate_local_displacement(
+        source,
+        target,
+        radius=radius,
+        patch_size=patch_size,
+    )
+    return {
+        "aligned_source": motion["matched_source"],
+        "dy": motion["dy"],
+        "dx": motion["dx"],
+        "patch_matching_cost": motion["patch_matching_cost"],
+    }
+
+
 def forward_splat_discrete(feature, dy_field, dx_field, radius):
     """Move current features forward; average collisions and copy-fill holes."""
     if feature.ndim != 4 or dy_field.shape != feature.shape[:1] + feature.shape[-2:]:

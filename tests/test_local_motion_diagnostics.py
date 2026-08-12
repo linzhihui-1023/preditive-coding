@@ -10,6 +10,9 @@ from predify2021.mce_scores.diagnose_kitti_local_motion import (
     estimate_local_displacement,
     forward_splat_discrete,
 )
+from predify2021.model_factory.targetflow.spatial_motion import (
+    align_source_to_target,
+)
 
 
 class LocalMotionDiagnosticTest(unittest.TestCase):
@@ -57,6 +60,26 @@ class LocalMotionDiagnosticTest(unittest.TestCase):
             patch_size=1,
         )
         self.assertLess(result["result_mse"].item(), result["copy_mse"].item())
+
+    def test_alignment_places_previous_feature_in_current_coordinates(self):
+        generator = torch.Generator().manual_seed(11)
+        previous = torch.randn(1, 4, 7, 7, generator=generator)
+        current = translate_feature(previous, dy=0, dx=1)
+
+        result = align_source_to_target(
+            previous,
+            current,
+            radius=1,
+            patch_size=1,
+        )
+
+        raw_mse = (previous - current).square().mean()
+        aligned_mse = (result["aligned_source"] - current).square().mean()
+        self.assertLess(aligned_mse.item(), raw_mse.item())
+        torch.testing.assert_close(
+            result["aligned_source"][..., 1:],
+            current[..., 1:],
+        )
 
 
 if __name__ == "__main__":
