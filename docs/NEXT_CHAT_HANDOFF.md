@@ -559,6 +559,34 @@ Temporal Error implementation is now present and causally tested; the limiting
 factor remains a learned correction that does not generalize past the causal
 warp or Copy-current on the held-out drive.
 
+## Stage-5 Two-Frame Temporal Fusion Result
+
+The strict three-condition matrix was implemented and trained at revision
+`10191a6d2d04df325ffbc7959f9e633f0af43d3b`. It compared only Copy-current,
+Current-only, and two-frame residual Temporal Fusion, with the pretrained VGG
+and Target Flow feedback decoders frozen. Drive 0005 supplied 153 training
+transitions and held-out drive 0011 supplied 232 transitions.
+
+Best-checkpoint held-out metrics were:
+
+| Condition | Feature MSE | Cosine | Normalized error |
+| --- | ---: | ---: | ---: |
+| Copy-current | 0.06008010 | 0.91990469 | 0.37576611 |
+| Current-only | 0.06179707 | 0.91581467 | 0.38497547 |
+| Temporal Fusion | 0.06192617 | 0.91600015 | 0.38513246 |
+
+Temporal Fusion therefore did not pass the Copy-current gate in this matrix.
+It was active: its held-out fusion-residual RMS was `0.0464521`, and fusion was
+applied to all held-out samples except sample 0 immediately after the drive
+reset. Both learned methods improved on drive 0005 while worsening over epochs
+on drive 0011, so the observed limitation is held-out generalization rather
+than failure to optimize the training objective. Do not generalize this one
+seed, one stage, one architecture result to all forms of temporal modeling.
+
+Auditable outputs are tracked under
+`results/temporal_fusion_matrix_10191a6/`. The 4.0 GB server artifact remains at
+`/tmp/predify-storage/experiments/seed0_temporal_fusion_matrix_10191a6`.
+
 ## Reproduction Commands
 
 Run Gate 3 with both detector and 2-DoF task model frozen:

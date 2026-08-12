@@ -1,0 +1,5 @@
+git_revision=10191a6d2d04df325ffbc7959f9e633f0af43d3b
+output_root=/tmp/predify-storage/experiments/seed0_temporal_fusion_matrix_10191a6
+groups=copy_current current_only temporal_fusion
+train_drive=0005
+val_drive=0011

@@ -82,6 +82,12 @@ The runner trains on drive 0005, evaluates on held-out drive 0011, and writes
 both `summary.json` and a per-frame CSV with feature MSE, cosine similarity,
 normalized feature error, and fusion-state diagnostics.
 
+The formal seed-0 result did not clear Copy-current on drive 0011: Temporal
+Fusion MSE was `0.061926` versus `0.060080` for Copy-current. The complete
+small artifacts and scope-limited interpretation are under
+`results/temporal_fusion_matrix_10191a6/`; the approximately 4 GB of
+checkpoints and logs remain server-side.
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

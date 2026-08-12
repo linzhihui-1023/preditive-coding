@@ -384,7 +384,11 @@ def main():
 
     csv_path = output_dir / "per_frame.csv"
     with csv_path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=list(rows[0]),
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(rows)
     matrix = summarize_rows(rows)
