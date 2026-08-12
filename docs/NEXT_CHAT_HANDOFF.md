@@ -15,7 +15,7 @@ Branch and private remote:
 ```text
 branch: targetflow-arch
 remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
-latest diagnostic implementation and experiment revision: 1605f29
+latest local-motion diagnostic implementation and experiment revision: 06ec8e7
 ```
 
 At handoff time the Git worktree was clean. Use this environment:
@@ -336,6 +336,24 @@ The feature-learnability diagnostic at `1605f29` passed the expanded full
 local suite: 57 tests. Its exact GitHub Actions status was not checked here.
 
 ## Current Decision And Next Step
+
+The ordered local-motion diagnostic at `06ec8e7` completed without training.
+Future-selected local matching reduced stage-5 Copy MSE on both drives by
+12--19% at `h=1` and 29--45% at `h=3` for 1x1 matching; 3x3 matching retained
+smaller but positive reductions. Stage-4 reductions were larger.
+
+The causal historical 3x3 warp technically passed the stage-5 Copy gate on
+both drives. At `r=1`, gain was 6.837% on 0005 and only 0.221% on 0011; at
+`r=2`, it was 6.652% and 0.062%. Stage-4 causal gains were 21--42%. The next
+step is therefore allowed to implement
+`historical motion -> warp(F_t) -> predicted residual`, but reports must retain
+that the formal stage-5 held-out margin is weak.
+
+Versioned audit artifacts:
+
+```text
+results/vgg_local_motion_06ec8e7/
+```
 
 The forward-only VGG feature-task learnability matrix completed at revision
 `1605f29` on 148 drive-0005 and 227 drive-0011 forecast origins. It evaluated

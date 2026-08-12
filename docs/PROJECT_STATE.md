@@ -186,6 +186,16 @@ These are simple-baseline and spatial-alignment diagnostics, not a learned-
 predictor result or proof that the task is unlearnable. The summary and full
 per-frame CSV are versioned under `results/vgg_feature_learnability_1605f29/`.
 
+The ordered local-motion diagnostic completed at revision `06ec8e7`. Local
+future-selected matching reduced stage-5 Copy MSE on both drives by 12--19% at
+`h=1` and 29--45% at `h=3` for pointwise matching; structured 3x3 matching also
+reduced it, though less at `h=1`. Causal historical 3x3 warp passed the formal
+stage-5 Copy gate on both drives, but the held-out gain was only 0.221% for
+`r=1` and 0.062% for `r=2`. Stage-4 causal gains were much larger at 21--42%.
+This permits a warp-plus-residual predictor implementation while requiring the
+weak stage-5 margin to remain explicit. Exact summary and per-frame outputs
+are versioned under `results/vgg_local_motion_06ec8e7/`.
+
 The seed-0 five-condition feature matrix completed at revision `94059be`.
 Copy-current achieved validation feature MSE `0.060080099`. Current-only was
 2.858% worse at `0.061797074`, so the predictor did not learn a useful future

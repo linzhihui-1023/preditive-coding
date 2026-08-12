@@ -1,12 +1,76 @@
 # Experiment Log
 
-## Local matching and causal historical warp (protocol ready)
+## Local matching and causal historical warp
 
-The diagnostic order is fixed: future-selected local matching first for
-stage-5 at `h=1,3`, then stage-4, then causal historical motion estimation and
-forward warp. Both radii `r=1,2` and descriptor sizes 1x1 and 3x3 are recorded.
-The causal gate requires one fixed radius/patch configuration to beat
-Copy-current at stage-5, `h=1` on both drives before any predictor is changed.
+Date: 2026-08-12
+
+Git revision: `06ec8e79832b981873854da14939bcebb33f2974`
+
+The fixed execution order was future-selected local matching for stage-5 at
+`h=1,3`, the same diagnostic for stage-4, and finally causal historical motion
+estimation and forward warp. Both radii `r=1,2` and 1x1/3x3 descriptors were
+run. All methods used the same 150 drive-0005 and 229 drive-0011 origins valid
+from `t-1` through `t+3`.
+
+Future-selected local matching gain, defined as
+`(MSE_copy-MSE_local)/MSE_copy` using aggregate means:
+
+| Stage | h | Radius | Patch | Drive 0005 | Drive 0011 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 5 | 1 | 1 | 1x1 | 18.374% | 12.072% |
+| 5 | 1 | 2 | 1x1 | 19.391% | 13.231% |
+| 5 | 3 | 1 | 1x1 | 35.624% | 28.985% |
+| 5 | 3 | 2 | 1x1 | 44.777% | 33.115% |
+| 5 | 1 | 1 | 3x3 | 12.386% | 6.824% |
+| 5 | 1 | 2 | 3x3 | 13.282% | 7.944% |
+| 5 | 3 | 1 | 3x3 | 28.859% | 22.411% |
+| 5 | 3 | 2 | 3x3 | 38.666% | 26.200% |
+| 4 | 1 | 1 | 1x1 | 46.850% | 29.529% |
+| 4 | 1 | 2 | 1x1 | 50.683% | 31.868% |
+| 4 | 3 | 1 | 1x1 | 31.910% | 28.577% |
+| 4 | 3 | 2 | 1x1 | 46.544% | 37.373% |
+| 4 | 1 | 1 | 3x3 | 43.049% | 25.456% |
+| 4 | 1 | 2 | 3x3 | 47.688% | 28.626% |
+| 4 | 3 | 1 | 3x3 | 23.928% | 21.398% |
+| 4 | 3 | 2 | 3x3 | 40.528% | 31.985% |
+
+These are noncausal values: each target location or patch uses the future
+feature to choose a nearby source. The stable pointwise reductions support a
+local spatial-correspondence hypothesis, but 1x1 matching can also select a
+nearby feature with a convenient value and is not by itself motion prediction.
+The 3x3 rows retain substantial reductions while imposing more local
+structure.
+
+Causal historical warp at `h=1`:
+
+| Stage | Radius | Patch | 0005 Copy | 0005 warp | Gain | 0011 Copy | 0011 warp | Gain |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 5 | 1 | 1x1 | 0.139440 | 0.133229 | 4.454% | 0.060554 | 0.061838 | -2.121% |
+| 5 | 2 | 1x1 | 0.139440 | 0.134018 | 3.888% | 0.060554 | 0.062033 | -2.442% |
+| 5 | 1 | 3x3 | 0.139440 | 0.129907 | 6.837% | 0.060554 | 0.060420 | 0.221% |
+| 5 | 2 | 3x3 | 0.139440 | 0.130164 | 6.652% | 0.060554 | 0.060516 | 0.062% |
+| 4 | 1 | 1x1 | 2.177706 | 1.333488 | 38.766% | 0.744313 | 0.583636 | 21.587% |
+| 4 | 2 | 1x1 | 2.177706 | 1.322291 | 39.281% | 0.744313 | 0.584560 | 21.463% |
+| 4 | 1 | 3x3 | 2.177706 | 1.280373 | 41.205% | 0.744313 | 0.569829 | 23.442% |
+| 4 | 2 | 3x3 | 2.177706 | 1.256662 | 42.294% | 0.744313 | 0.569650 | 23.466% |
+
+The predeclared gate required one fixed radius/patch configuration to beat
+stage-5 Copy-current on both drives. The 3x3 configurations pass, so the next
+implementation may use historical warp as a base and predict only the
+post-warp residual. The held-out stage-5 gain is only 0.221% for `r=1` and
+0.062% for `r=2`; gate passage is therefore literal but weak. Stage-4 causal
+transport is much stronger and must not be substituted for the formal
+stage-5 result.
+
+The audit verified exact revision, 9,096 unique rows, frame horizons, finite
+metrics, per-row arithmetic, all 48 CSV-to-summary aggregates, and the causal
+gate. No network was trained in this diagnostic.
+
+Versioned artifacts:
+
+```text
+results/vgg_local_motion_06ec8e7/
+```
 
 ## VGG feature-task learnability matrix
 
