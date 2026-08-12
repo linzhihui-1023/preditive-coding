@@ -30,11 +30,40 @@ For Adversarial Attacks:
 
 [Link to the PVGG_Weights](https://www.dropbox.com/s/8lzp6wfo6n3bymk/weights_pvgg16_imagenet.zip?dl=0)
 
-## Stateful KITTI target-flow research
+## Research version boundary
 
-The active research branch extends PVGG16 with five-layer target-flow state and
-processes KITTI as an ordered video stream. Each frame executes the model once;
-state is initialized on the first frame and inherited until the drive boundary.
+The completed temporal-prediction research baseline is frozen at annotated
+Git tag `predify-temporal-v1`, which points to commit
+`4cc7a21280881813dbb972415a74dc400843fcc6`. That snapshot contains the Target
+Flow and strict Temporal Prediction Error implementations, formal training and
+controlled-corruption experiments, causal motion diagnostics, and the
+versioned prediction-error separability result. It must remain unchanged so
+the prediction direction can be reproduced or resumed independently.
+
+New work on prediction-error-driven selective online adaptation starts from
+that exact snapshot and belongs only on branch
+`predify-selective-adaptation-v2`. Do not commit selective-adaptation changes
+to the frozen tag or use `targetflow-arch` as the active development branch.
+
+To inspect or resume the frozen baseline without moving the new research
+branch:
+
+```bash
+git switch --detach predify-temporal-v1
+```
+
+To return to selective online adaptation development:
+
+```bash
+git switch predify-selective-adaptation-v2
+```
+
+## Frozen stateful KITTI target-flow baseline
+
+The frozen temporal baseline extends PVGG16 with five-layer target-flow state
+and processes KITTI as an ordered video stream. Each frame executes the model
+once; state is initialized on the first frame and inherited until the drive
+boundary.
 Stored cross-frame state is detached, so training uses stateful recurrence with
 one-step gradients rather than BPTT. Primary mechanism experiments freeze the
 pretrained VGG backbone and train the feedback decoders plus temporal head.

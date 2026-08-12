@@ -13,10 +13,18 @@ Repository:
 Branch and private remote:
 
 ```text
-branch: targetflow-arch
+active branch: predify-selective-adaptation-v2
+frozen baseline tag: predify-temporal-v1
+frozen baseline commit: 4cc7a21280881813dbb972415a74dc400843fcc6
 remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
 latest prediction-error separability evaluation revision: a28fed5
 ```
+
+All selective-online-adaptation work must stay on
+`predify-selective-adaptation-v2`. The annotated `predify-temporal-v1` tag is
+the immutable temporal-prediction baseline and must not be moved. The research
+details below document that frozen baseline and remain available if the
+prediction direction is resumed later.
 
 At handoff time the Git worktree was clean. Use this environment:
 
