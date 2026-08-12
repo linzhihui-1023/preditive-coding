@@ -1,5 +1,13 @@
 # Experiment Log
 
+## Local matching and causal historical warp (protocol ready)
+
+The diagnostic order is fixed: future-selected local matching first for
+stage-5 at `h=1,3`, then stage-4, then causal historical motion estimation and
+forward warp. Both radii `r=1,2` and descriptor sizes 1x1 and 3x3 are recorded.
+The causal gate requires one fixed radius/patch configuration to beat
+Copy-current at stage-5, `h=1` on both drives before any predictor is changed.
+
 ## VGG feature-task learnability matrix
 
 Date: 2026-08-12
