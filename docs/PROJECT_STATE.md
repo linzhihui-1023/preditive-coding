@@ -405,3 +405,11 @@ Dynamic error uses `e_t=F_t-T_t` and
 Code, configuration, Markdown records, and lightweight metric summaries belong
 in Git. KITTI data, pretrained weights, checkpoints, caches, and large pickle
 outputs remain on the server and are excluded by `.gitignore`.
+
+Completed code changes must be verified, committed, and pushed to
+`myprivate/targetflow-arch` without waiting for a separate push request.
+Completed formal training must likewise be audited, recorded in the tracked
+research documents, committed, and pushed. Large training artifacts remain on
+the server; their exact code revision and server path belong in the pushed
+record. Use an ordinary fast-forward push and never rewrite remote history
+unless the user explicitly requests it.

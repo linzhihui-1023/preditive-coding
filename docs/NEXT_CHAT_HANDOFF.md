@@ -397,3 +397,14 @@ docs/README_FUTURE_FEATURE_KITTI.md
 
 All formal runners use `env -i` and explicitly record critical variables. Do
 not rely on inherited shell variables, especially legacy compatibility flags.
+
+## Automatic GitHub Publication
+
+After a code change is complete and verified, commit it and push
+`targetflow-arch` to `myprivate` automatically. After a formal training run is
+complete, audit the histories, checkpoints, logs, and manifest; update the
+tracked result documents; commit those records; and push again automatically.
+Do not wait for a separate push request. Checkpoint files and other large
+artifacts stay on the server, but the pushed documentation must record their
+server path and exact training revision. Use only ordinary fast-forward pushes;
+never force-push unless the user explicitly requests history rewriting.
