@@ -64,6 +64,25 @@ Run selected conditions:
 scripts/run_kitti_seed0_future_feature_matrix.sh current_only recursive
 ```
 
+Run the Current-only spatial-predictor sufficiency diagnostic:
+
+```bash
+scripts/run_kitti_seed0_future_feature_predictor_sufficiency.sh 3
+```
+
+The value selects the first predictor convolution's kernel size. The second
+convolution remains 1x1. The default is 3 for this diagnostic runner; the
+formal history matrix explicitly fixes the value to 1.
+
+Recompute delta scale and direction statistics from a best checkpoint:
+
+```bash
+PREDIFY_DIAGNOSTIC_CHECKPOINT=/path/to/best_student.pt \
+PREDIFY_TRAIN_DRIVES=2011_09_26/2011_09_26_drive_0005_sync \
+PREDIFY_VAL_DRIVES=2011_09_26/2011_09_26_drive_0011_sync \
+python -m predify2021.mce_scores.diagnose_kitti_future_feature_delta
+```
+
 Outputs default to
 `/tmp/predify-storage/experiments/seed0_future_feature_matrix_<git-sha>`.
 Set `PREDIFY_MATRIX_OUTPUT_ROOT` to override that location. The runner starts
@@ -106,6 +125,10 @@ Best checkpoints are selected by validation feature MSE.
 2. `Recursive < Current-only`: history adds information beyond `F_t`.
 3. Compare Recursive with Latest and Two-tap to test whether recursive memory is
    better than simpler causal history.
+
+Do not interpret history comparisons until Current-only passes step 1 on the
+held-out drive. A predictor that only fits the training drive cannot establish
+whether history contains useful generalizable information.
 
 The current two-drive split is suitable for this initial mechanism check, not
 for a broad KITTI generalization claim. More drives are required after the

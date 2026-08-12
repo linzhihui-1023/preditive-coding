@@ -1,5 +1,77 @@
 # Experiment Log
 
+## Current-only delta and spatial-predictor diagnostic, seed 0
+
+Date: 2026-08-12
+
+Diagnostic and 3x3 experiment revision:
+`1ae6b2776c793e3d7d53300c9321dece8ba6a344`
+
+The diagnostic evaluated best validation checkpoints on all 153 ordered train
+pairs from drive 0005 and all 232 ordered validation pairs from drive 0011.
+For each frame it measured the true `delta F=F_(t+1)-F_t`, the Current-only
+prediction `delta_hat=P(F_t,0)`, their flattened L2 norms, norm ratio, cosine,
+and MSE against the matched Copy-current baseline. The backbone remained
+frozen. No history input or `tau` setting changed.
+
+True feature-change scale:
+
+| Split | Element mean | Element std | L2 P50 | L2 P90 | L2 P95 | RMS P50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Train 0005 | 0.000254 | 0.372769 | 114.175 | 148.687 | 151.860 | 0.360418 |
+| Validation 0011 | 0.000091 | 0.245113 | 80.726 | 98.295 | 101.554 | 0.254829 |
+
+Best-checkpoint predictor diagnostics:
+
+| Predictor | Best epoch | Split | MSE | Copy MSE | vs Copy | Norm ratio | Delta cosine |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1x1 | 2 | Train | 0.133647 | 0.138957 | -3.821% | 0.1582 | 0.1949 |
+| 1x1 | 2 | Validation | 0.061798 | 0.060081 | +2.858% | 0.3562 | 0.0683 |
+| 3x3-first | 1 | Train | 0.136159 | 0.138957 | -2.014% | 0.0952 | 0.1469 |
+| 3x3-first | 1 | Validation | 0.060632 | 0.060081 | +0.917% | 0.1789 | 0.0269 |
+
+The table uses a post-training pass through each saved best checkpoint. It is
+more precise than the online training average printed while weights change
+within an epoch. The old 1x1 checkpoint therefore improves train MSE by 3.82%,
+although its epoch-2 online average showed a 1.88% improvement.
+
+The 3x3 sufficiency run changed only the first future-predictor convolution
+from 1x1 to 3x3 with padding 1; the output convolution stayed 1x1. Its train
+MSE fell monotonically to 0.093191 by epoch 10, 32.93% below the fixed train
+Copy-current value 0.138955, while validation MSE rose to 0.095457. The best
+validation checkpoint remained epoch 1. This confirms that a spatial
+predictor can fit substantially more of the training-drive feature dynamics,
+but it generalizes poorly to the held-out drive.
+
+Interpretation:
+
+- The 1x1 predictor is not collapsing exactly to Copy-current, but its
+  predicted feature change is much too small and weakly aligned with the true
+  change. Validation direction is especially poor.
+- Adding spatial neighborhood access improves best validation MSE from
+  0.061798 to 0.060632, but still does not beat Copy-current.
+- The stronger 3x3 predictor rapidly fits drive 0005 and rapidly overfits drive
+  0011. The present result therefore cannot evaluate whether inherited state
+  is useful; Current-only has not passed the cross-drive Copy-current gate.
+- The 3x3-first predictor has 9,963,008 parameters versus 1,574,400 for 1x1.
+  This is a predictor-sufficiency diagnostic, not a parameter-matched
+  architecture ablation.
+- The current history matrix tests only the top Target Flow residual state. It
+  does not test prediction-state memory or lower-layer feedback-decoder state,
+  so its null result must not be generalized to the complete Predify state.
+
+Decision: do not tune `tau`, rerun history groups, or start seeds 1 and 2 yet.
+The next experiment should address cross-drive generalization with more
+training sequences or a deliberately train-only predictor-capacity study,
+then require Current-only to beat Copy-current before testing history again.
+
+Server artifacts, not tracked by Git:
+
+```text
+/tmp/predify-storage/experiments/seed0_future_feature_matrix_94059be/current_only_seed0_delta_diagnostics.json
+/tmp/predify-storage/experiments/seed0_future_feature_predictor_sufficiency_1ae6b27/
+```
+
 ## Causal future-feature matrix, seed 0
 
 Date: 2026-08-11

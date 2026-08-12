@@ -1,5 +1,22 @@
 # Research Decisions
 
+## 2026-08-12: Require predictor sufficiency before judging state
+
+Status: accepted
+
+Current-only must beat Copy-current on held-out ordered video before the
+history matrix is used to judge inherited state. Diagnostics must first report
+the true and predicted feature-change scale, norm ratio, and delta direction
+on both train and validation data. A training-only gain with a validation
+reversal is treated as cross-drive overfitting, not evidence that history is
+useless.
+
+The first 3x3 spatial-predictor diagnostic improves fitting but still fails the
+held-out Copy-current gate. Therefore `tau` tuning, history reruns, seeds 1 and
+2, and robustness experiments remain paused. This null result applies only to
+the tested top residual history; it is not a conclusion about prediction-state
+memory or lower-layer feedback-decoder state.
+
 ## 2026-08-11: Make next-frame feature prediction the primary task
 
 Status: accepted

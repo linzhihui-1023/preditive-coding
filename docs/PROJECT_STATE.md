@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 
 ## Active research direction
 
@@ -53,6 +53,8 @@ next transition.
     `PREDIFY_TASK`.
   - Predicts a residual feature map with
     `Fhat_(t+1|t) = F_t + P(F_t, H_t)`.
+  - Supports an explicit first-layer spatial kernel of 1 or 3 for the future
+    predictor. The default and formal history matrix remain 1x1.
   - Uses the same future predictor for `none`, `latest`, `two_tap`, and
     `recursive` history conditions; only `H_t` changes. `copy_current` bypasses
     the predictor as a non-learned baseline.
@@ -114,6 +116,14 @@ next transition.
     recursive-history conditions in isolated environments.
   - Stores outputs under `/tmp/predify-storage` by default and retains only the
     best validation checkpoint per group.
+- `predify2021/mce_scores/diagnose_kitti_future_feature_delta.py`
+  - Re-evaluates a Current-only best checkpoint on ordered train and validation
+    pairs and reports true/predicted delta scale, L2/RMS quantiles, norm ratio,
+    delta cosine, projection, and matched Copy-current MSE.
+- `scripts/run_kitti_seed0_future_feature_predictor_sufficiency.sh`
+  - Runs a Current-only seed-0 predictor with an explicitly selected 1x1 or
+    3x3 first convolution while keeping all history and dynamic-error controls
+    fixed.
 - `.github/workflows/tests.yml`
   - Runs the unit tests on pushes to `targetflow-arch` and pull requests.
   - Pins the public base `predify` dependency by commit and uses CPU PyTorch.
@@ -136,9 +146,22 @@ than current-only and therefore a numerical tie, not evidence for useful
 history. Latest and two-tap reached `0.061849746` and `0.061899316`.
 
 All learned conditions selected epoch 2 and then overfit while training MSE
-continued to improve. Seeds 1 and 2 are paused. The next step is to diagnose
-feature-delta scale and revise the residual/history formulation before noise,
-blur, online adaptation, or additional seeds.
+continued to improve. The follow-up best-checkpoint diagnostic showed that the
+1x1 Current-only delta norm is only 15.8% of the true train delta and its delta
+cosine is 0.195 on train and 0.068 on validation. It improves train MSE by
+3.82% but is 2.86% worse than Copy-current on validation.
+
+A 3x3-first Current-only sufficiency run completed at revision `1ae6b27`. Its
+best epoch-1 validation MSE is 0.060632, still 0.917% worse than Copy-current,
+while its online train MSE reaches 0.093191 by epoch 10 and validation degrades
+to 0.095457. Spatial capacity helps fit drive 0005 but exposes severe
+cross-drive overfitting. The 3x3-first model is not parameter matched: it has
+9.96M predictor parameters versus 1.57M for the 1x1 model.
+
+Seeds 1 and 2 and all history reruns remain paused. Current-only must first
+beat Copy-current on held-out video. The next decision is about data coverage
+and predictor regularization/capacity, not `tau`. Noise, blur, online
+adaptation, and broader state inputs remain downstream experiments.
 
 ## Available data
 
