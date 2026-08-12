@@ -1,5 +1,21 @@
 # Experiment Log
 
+## VGG feature-task learnability matrix (protocol ready)
+
+The forward-only diagnostic evaluates VGG stage 3, 4, and 5 at horizons
+`h=1,2,3,5` on the existing drives 0005 and 0011. Every matrix entry compares
+Copy-current, causal constant-velocity feature extrapolation, and a
+future-selected translation oracle over `dy,dx in {-1,0,1}` feature cells.
+The oracle is explicitly noncausal and is only a spatial-displacement
+diagnostic. It is not reported as a prediction baseline.
+
+All horizons use forecast origins with a valid history frame and valid future
+frames through `h=5`. The diagnostic also records
+`cos(F_t-F_(t-1), F_(t+1)-F_t)` and
+`(MSE_copy-MSE_velocity)/MSE_copy`. Formal outputs are `summary.json` and one
+per-frame CSV; both will be versioned after the exact clean implementation
+revision completes on GPU.
+
 ## Top-layer Temporal Prediction Error matrix, seed 0
 
 Date: 2026-08-12
