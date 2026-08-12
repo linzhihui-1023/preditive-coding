@@ -45,6 +45,12 @@ that exact snapshot and belongs only on branch
 `predify-selective-adaptation-v2`. Do not commit selective-adaptation changes
 to the frozen tag or use `targetflow-arch` as the active development branch.
 
+The local checkouts are also separated. The frozen baseline remains at
+`/home/lin/predify2021_targetflow`, checked out on `targetflow-arch` at
+`4cc7a21`. Selective-adaptation development uses the independent Git worktree
+`/home/lin/predify2021_selective_adaptation`. Run new experiments and make all
+new edits only from the latter directory.
+
 The first experiment on the new branch is an inference-only persistence gate.
 It compares long-dwell and temporally shuffled Gaussian blur while exactly
 matching blur type, sigma multiset, occupancy, raw frames, and checkpoint.

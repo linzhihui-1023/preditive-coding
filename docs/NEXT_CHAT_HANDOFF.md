@@ -7,7 +7,13 @@ Last updated: 2026-08-12
 Repository:
 
 ```text
-/home/lin/predify2021_targetflow
+/home/lin/predify2021_selective_adaptation
+```
+
+The frozen local baseline is a separate worktree:
+
+```text
+/home/lin/predify2021_targetflow -> targetflow-arch @ 4cc7a21
 ```
 
 Branch and private remote:
@@ -30,7 +36,7 @@ At handoff time the Git worktree was clean. Use this environment:
 
 ```bash
 conda activate predifyproject
-cd /home/lin/predify2021_targetflow
+cd /home/lin/predify2021_selective_adaptation
 ```
 
 Read this file first, then consult:
