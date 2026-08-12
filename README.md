@@ -103,9 +103,15 @@ The exact runner is:
 scripts/run_kitti_seed0_aligned_temporal_fusion.sh
 ```
 
-The aligned temporal-difference follow-up leaves `F_t` unchanged and feeds
-`[F_t, F_t - align(F_(t-1), F_t)]` directly to the existing residual Future
-Predictor. It is a separate single-condition run with no Temporal Fusion:
+The aligned temporal-difference follow-up at revision `750d11f` leaves `F_t`
+unchanged and feeds `[F_t, F_t - align(F_(t-1), F_t)]` directly to the existing
+residual Future Predictor. The single-condition seed-0 run used drive 0005 for
+training and the fixed Copy-current gate on drive 0011. It did not pass: MSE
+was `0.06180378` versus `0.06008010`, cosine was `0.91604762` versus
+`0.91990469`, and normalized error was `0.38434362` versus `0.37576611`.
+Auditable small artifacts are under
+`results/aligned_temporal_difference_750d11f/`; the checkpoint remains
+server-side. The exact runner is:
 
 ```bash
 scripts/run_kitti_seed0_aligned_temporal_difference.sh

@@ -608,6 +608,28 @@ Small auditable artifacts are tracked under
 logs remain at
 `/tmp/predify-storage/experiments/seed0_aligned_temporal_fusion_95aa61d`.
 
+## Aligned Temporal-Difference Result
+
+The single aligned temporal-difference experiment was implemented and trained
+at revision `750d11f5dab703cd089518eede05037e740d9c2e`. It computes
+`D_t = F_t - align(F_(t-1), F_t)` with current-coordinate local matching and
+predicts `Fhat_(t+1) = F_t + P([F_t, D_t])`. It does not create or train a
+Temporal Fusion module, and it never uses the historical future splat. The
+formal protocol remained seed 0, train drive 0005, held-out drive 0011, 10
+epochs, radius 1, patch size 3, and frozen VGG and feedback decoders.
+
+The best checkpoint was epoch 2. Held-out MSE was `0.06180378` against the
+required `< 0.06008010`; cosine was `0.91604762` against the required
+`> 0.91990469`; normalized error was `0.38434362` against the required
+`< 0.37576611`. All three checks failed. The independent replay recorded zero
+Temporal Fusion applications and an exact maximum base-to-`F_t` difference of
+`0.0` across all 385 rows.
+
+Small auditable artifacts are tracked under
+`results/aligned_temporal_difference_750d11f/`. The 1.41 GB best checkpoint
+and logs remain at
+`/tmp/predify-storage/experiments/seed0_aligned_temporal_difference_750d11f`.
+
 ## Reproduction Commands
 
 Run Gate 3 with both detector and 2-DoF task model frozen:
