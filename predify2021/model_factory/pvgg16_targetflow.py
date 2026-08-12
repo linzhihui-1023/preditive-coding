@@ -98,6 +98,7 @@ class PVGG16TargetFlow(nn.Module):
         error_gain=1.0,
         task: str = "motion",
         future_feature_history_mode: str = "none",
+        future_feature_predictor_kernel_size: int = 1,
     ):
         super().__init__()
         self.backbone = copy.deepcopy(backbone)
@@ -192,6 +193,14 @@ class PVGG16TargetFlow(nn.Module):
             )
         self.task = task
         self.future_feature_history_mode = future_feature_history_mode
+        if future_feature_predictor_kernel_size not in {1, 3}:
+            raise ValueError(
+                "future_feature_predictor_kernel_size must be 1 or 3, got "
+                f"{future_feature_predictor_kernel_size}."
+            )
+        self.future_feature_predictor_kernel_size = (
+            future_feature_predictor_kernel_size
+        )
         self.temporal_target_dim = 2 if self.temporal_target_mode == "ego_motion" else self.stage_channels[-1]
         temporal_context_dim = self.stage_channels[-1] + 2 * sum(self.stage_channels)
         self.temporal_predictor = nn.Sequential(
@@ -200,7 +209,12 @@ class PVGG16TargetFlow(nn.Module):
             nn.Linear(1024, self.temporal_target_dim * self.num_temporal_horizons),
         )
         self.future_feature_predictor = nn.Sequential(
-            nn.Conv2d(2 * self.stage_channels[-1], 1024, kernel_size=1),
+            nn.Conv2d(
+                2 * self.stage_channels[-1],
+                1024,
+                kernel_size=future_feature_predictor_kernel_size,
+                padding=future_feature_predictor_kernel_size // 2,
+            ),
             nn.ReLU(inplace=False),
             nn.Conv2d(1024, self.stage_channels[-1], kernel_size=1),
         )

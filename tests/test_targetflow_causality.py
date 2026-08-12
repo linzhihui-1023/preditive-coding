@@ -232,6 +232,24 @@ class TargetFlowCausalityTest(unittest.TestCase):
                 parameter_count,
             )
 
+    def test_future_predictor_can_use_a_three_by_three_spatial_layer(self):
+        spatial_model = PVGG16TargetFlow(
+            backbone=vgg16(weights=None),
+            task="future_feature",
+            future_feature_predictor_kernel_size=3,
+        )
+        first_layer = spatial_model.future_feature_predictor[0]
+        final_layer = spatial_model.future_feature_predictor[-1]
+
+        self.assertEqual(first_layer.kernel_size, (3, 3))
+        self.assertEqual(first_layer.padding, (1, 1))
+        self.assertEqual(final_layer.kernel_size, (1, 1))
+        sample = torch.randn(1, 1024, 14, 14)
+        self.assertEqual(
+            spatial_model.future_feature_predictor(sample).shape,
+            (1, 512, 14, 14),
+        )
+
     def test_future_target_provider_runs_after_predictor(self):
         events = []
         hook = self.model.future_feature_predictor.register_forward_hook(

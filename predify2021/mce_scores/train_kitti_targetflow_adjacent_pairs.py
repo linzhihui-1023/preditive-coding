@@ -55,6 +55,9 @@ FEATURE_HISTORY_MODE = {
     "instant": "latest",
     "lag1": "two_tap",
 }.get(FEATURE_HISTORY_MODE, FEATURE_HISTORY_MODE)
+FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE = int(
+    os.environ.get("PREDIFY_FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE", "1")
+)
 USE_DYNAMIC_ERROR = os.environ.get("PREDIFY_DYNAMIC_ERROR", "1") == "1"
 ERROR_STATE_MODE = os.environ.get("PREDIFY_ERROR_STATE_MODE", "").strip().lower()
 if not ERROR_STATE_MODE:
@@ -416,6 +419,9 @@ def build_student_model():
         error_gain=ERROR_GAIN,
         task=PREDICTION_TASK,
         future_feature_history_mode=FEATURE_HISTORY_MODE,
+        future_feature_predictor_kernel_size=(
+            FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE
+        ),
     )
     configure_student_trainability(student)
     return student.to(device)
@@ -1060,6 +1066,10 @@ def main():
             "PREDIFY_FEATURE_HISTORY_MODE must be none, latest, two_tap, "
             "recursive, or copy_current."
         )
+    if FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE not in {1, 3}:
+        raise ValueError(
+            "PREDIFY_FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE must be 1 or 3."
+        )
     if PREDICTION_TASK == "future_feature" and TASK_ALIGNED_TARGET:
         raise ValueError(
             "PREDIFY_TASK=future_feature requires an empty PREDIFY_TASK_ALIGNED_TARGET."
@@ -1144,6 +1154,7 @@ def main():
         f"train_pairs={train_pairs}, val_pairs={val_pairs}, temporal_horizons={TEMPORAL_HORIZONS}, "
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
         f"prediction_task={PREDICTION_TASK}, feature_history_mode={FEATURE_HISTORY_MODE}, "
+        f"future_feature_predictor_kernel_size={FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE}, "
         f"fixed_ts_s={FIXED_TS_S}, fixed_ts_tol_s={FIXED_TS_TOL_S}, "
         f"stream_mode={STREAM_MODE}, reset_each_frame={RESET_EACH_FRAME}, "
         f"formal_split={FORMAL_SPLIT}, seed={RANDOM_SEED}, git_revision={git_revision}, "
@@ -1208,6 +1219,13 @@ def main():
             "state_memory_detached": True,
             "prediction_task": PREDICTION_TASK,
             "future_feature_history_mode": FEATURE_HISTORY_MODE,
+            "future_feature_predictor_kernel_size": (
+                FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE
+            ),
+            "future_feature_predictor_architecture": (
+                f"concat_1024_to_1024_k{FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE}"
+                "_then_512_k1"
+            ),
             "future_feature_prediction_space": "full_stage5_feature_map",
             "future_feature_prediction_form": "residual_Fhat_next=F_current+delta_hat",
             "future_feature_causal_order": (

@@ -5,7 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PREDIFY_PYTHON_BIN:-/home/lin/anaconda3/envs/predifyproject/bin/python}"
 GIT_REVISION="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 SHORT_REVISION="${GIT_REVISION:0:7}"
-OUTPUT_ROOT="${PREDIFY_MATRIX_OUTPUT_ROOT:-/tmp/predify-storage/experiments/seed0_future_feature_matrix_${SHORT_REVISION}}"
+OUTPUT_ROOT="${PREDIFY_SUFFICIENCY_OUTPUT_ROOT:-/tmp/predify-storage/experiments/seed0_future_feature_predictor_sufficiency_${SHORT_REVISION}}"
 
 mkdir -p "$OUTPUT_ROOT"
 
@@ -23,7 +23,6 @@ COMMON_ENV=(
     "MKL_NUM_THREADS=24"
     "PREDIFY_GIT_REVISION=$GIT_REVISION"
     "PREDIFY_TASK=future_feature"
-    "PREDIFY_FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE=1"
     "PREDIFY_KITTI_ROOT=/home/lin/predify/kitti_raw"
     "PREDIFY_TRAIN_DRIVES=2011_09_26/2011_09_26_drive_0005_sync"
     "PREDIFY_VAL_DRIVES=2011_09_26/2011_09_26_drive_0011_sync"
@@ -75,46 +74,38 @@ COMMON_ENV=(
     "PREDIFY_SAVE_FINAL_CHECKPOINTS=0"
 )
 
-run_group() {
-    local group="$1"
-    local history_mode
+run_kernel() {
+    local kernel_size="$1"
+    if [[ "$kernel_size" != "1" && "$kernel_size" != "3" ]]; then
+        echo "Kernel size must be 1 or 3, got '$kernel_size'." >&2
+        return 2
+    fi
 
-    case "$group" in
-        copy_current) history_mode=copy_current ;;
-        current_only) history_mode=none ;;
-        latest|instant) history_mode=latest ;;
-        two_tap|lag1) history_mode=two_tap ;;
-        recursive) history_mode=recursive ;;
-        *)
-            echo "Unknown group '$group'." >&2
-            return 2
-            ;;
-    esac
-
-    local prefix="$OUTPUT_ROOT/${group}_seed0"
+    local prefix="$OUTPUT_ROOT/current_only_k${kernel_size}_seed0"
     if [[ -e "${prefix}.p" || -e "${prefix}.log" ]]; then
         echo "Refusing to overwrite artifacts at $prefix." >&2
         return 3
     fi
 
-    printf 'Starting group %s at %s\n' "$group" "$(date --iso-8601=seconds)"
+    printf 'Starting Current-only k%s predictor at %s\n' "$kernel_size" "$(date --iso-8601=seconds)"
     env -i \
         "${COMMON_ENV[@]}" \
-        "PREDIFY_FEATURE_HISTORY_MODE=$history_mode" \
+        "PREDIFY_FEATURE_HISTORY_MODE=none" \
+        "PREDIFY_FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE=$kernel_size" \
         "PREDIFY_OUTPUT_PATH=${prefix}.p" \
         "PREDIFY_SAVE_BEST_STUDENT_PATH=${prefix}_best_student.pt" \
         "$PYTHON_BIN" -u -m predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs \
         2>&1 | tee "${prefix}.log"
 }
 
-groups=("$@")
-if [[ ${#groups[@]} -eq 0 ]]; then
-    groups=(copy_current current_only latest two_tap recursive)
+kernels=("$@")
+if [[ ${#kernels[@]} -eq 0 ]]; then
+    kernels=(3)
 fi
 
-printf 'git_revision=%s\noutput_root=%s\ngroups=%s\n' \
-    "$GIT_REVISION" "$OUTPUT_ROOT" "${groups[*]}" > "$OUTPUT_ROOT/manifest.txt"
+printf 'git_revision=%s\noutput_root=%s\nkernels=%s\nhistory_mode=none\n' \
+    "$GIT_REVISION" "$OUTPUT_ROOT" "${kernels[*]}" > "$OUTPUT_ROOT/manifest.txt"
 
-for group in "${groups[@]}"; do
-    run_group "$group"
+for kernel_size in "${kernels[@]}"; do
+    run_kernel "$kernel_size"
 done

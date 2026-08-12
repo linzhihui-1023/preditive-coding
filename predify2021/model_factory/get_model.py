@@ -156,6 +156,7 @@ def get_model(
     error_gain=1.0,
     task="motion",
     future_feature_history_mode="none",
+    future_feature_predictor_kernel_size=1,
 ):
     canonical_name = canonicalize_model_name(name)
 
@@ -206,6 +207,9 @@ def get_model(
             error_gain=error_gain,
             task=task,
             future_feature_history_mode=future_feature_history_mode,
+            future_feature_predictor_kernel_size=(
+                future_feature_predictor_kernel_size
+            ),
         )
 
     elif canonical_name == "peffb0":
