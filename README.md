@@ -103,6 +103,14 @@ The exact runner is:
 scripts/run_kitti_seed0_aligned_temporal_fusion.sh
 ```
 
+The aligned temporal-difference follow-up leaves `F_t` unchanged and feeds
+`[F_t, F_t - align(F_(t-1), F_t)]` directly to the existing residual Future
+Predictor. It is a separate single-condition run with no Temporal Fusion:
+
+```bash
+scripts/run_kitti_seed0_aligned_temporal_difference.sh
+```
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

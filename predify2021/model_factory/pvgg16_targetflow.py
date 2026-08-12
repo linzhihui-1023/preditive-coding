@@ -211,6 +211,7 @@ class PVGG16TargetFlow(nn.Module):
             "two_tap",
             "recursive",
             "temporal_error",
+            "aligned_difference",
             "copy_current",
         }:
             raise ValueError(
@@ -270,6 +271,13 @@ class PVGG16TargetFlow(nn.Module):
         ):
             raise ValueError(
                 "Two-frame temporal fusion requires current_residual prediction."
+            )
+        if (
+            self.future_feature_history_mode == "aligned_difference"
+            and self.future_feature_prediction_form != "current_residual"
+        ):
+            raise ValueError(
+                "Aligned temporal difference requires current_residual prediction."
             )
         self.future_motion_radius = int(future_motion_radius)
         self.future_motion_patch_size = int(future_motion_patch_size)
@@ -398,6 +406,34 @@ class PVGG16TargetFlow(nn.Module):
             splat,
         )
 
+    def _build_aligned_difference_history(self, current_top: torch.Tensor):
+        previous_top = self._resolve_memory(
+            self.future_feature_previous_top_memory,
+            current_top,
+        )
+        if previous_top is None:
+            return torch.zeros_like(current_top), None, None, None
+        previous_top = previous_top.detach()
+        with torch.no_grad():
+            alignment_diagnostics = align_source_to_target(
+                previous_top,
+                current_top.detach(),
+                radius=self.future_motion_radius,
+                patch_size=self.future_motion_patch_size,
+            )
+            aligned_previous_top = alignment_diagnostics[
+                "aligned_source"
+            ].detach()
+            temporal_difference = (
+                current_top.detach() - aligned_previous_top
+            ).detach()
+        return (
+            temporal_difference,
+            previous_top,
+            aligned_previous_top,
+            alignment_diagnostics,
+        )
+
     def _build_temporal_fusion_base(self, current_top: torch.Tensor):
         previous_top = self._resolve_memory(
             self.future_feature_previous_top_memory,
@@ -446,11 +482,22 @@ class PVGG16TargetFlow(nn.Module):
         )
 
     def _predict_future_top_feature(self, current_top: torch.Tensor):
-        history_top = self._resolve_future_feature_history(current_top)
         fusion_previous_top = None
         raw_fusion_previous_top = None
         aligned_previous_top = None
         alignment_diagnostics = None
+        aligned_difference_raw_previous_top = None
+        aligned_temporal_difference_top = None
+        if self.future_feature_history_mode == "aligned_difference":
+            (
+                history_top,
+                aligned_difference_raw_previous_top,
+                aligned_previous_top,
+                alignment_diagnostics,
+            ) = self._build_aligned_difference_history(current_top)
+            aligned_temporal_difference_top = history_top
+        else:
+            history_top = self._resolve_future_feature_history(current_top)
         fusion_residual = torch.zeros_like(current_top)
         temporal_fusion_applied = False
         if self.future_feature_history_mode == "copy_current":
@@ -487,8 +534,16 @@ class PVGG16TargetFlow(nn.Module):
                 warp_diagnostics = None
             elif form == "current_residual":
                 prediction_base = current_top
-                motion_dy = None
-                motion_dx = None
+                motion_dy = (
+                    None
+                    if alignment_diagnostics is None
+                    else alignment_diagnostics["dy"].detach()
+                )
+                motion_dx = (
+                    None
+                    if alignment_diagnostics is None
+                    else alignment_diagnostics["dx"].detach()
+                )
                 warp_diagnostics = None
             else:
                 (
@@ -511,6 +566,19 @@ class PVGG16TargetFlow(nn.Module):
             "raw_fusion_previous_top": raw_fusion_previous_top,
             "aligned_previous_top": aligned_previous_top,
             "alignment_applied": aligned_previous_top is not None,
+            "aligned_difference_raw_previous_top": (
+                aligned_difference_raw_previous_top
+            ),
+            "aligned_difference_previous_top": (
+                aligned_previous_top
+                if self.future_feature_history_mode == "aligned_difference"
+                else None
+            ),
+            "aligned_temporal_difference_top": aligned_temporal_difference_top,
+            "aligned_difference_applied": (
+                aligned_temporal_difference_top is not None
+                and aligned_previous_top is not None
+            ),
             "alignment_patch_matching_cost": (
                 None
                 if alignment_diagnostics is None

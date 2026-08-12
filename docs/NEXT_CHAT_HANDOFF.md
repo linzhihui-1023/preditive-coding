@@ -646,6 +646,12 @@ Run only the aligned-history Temporal Fusion follow-up:
 scripts/run_kitti_seed0_aligned_temporal_fusion.sh
 ```
 
+Run only the aligned temporal-difference predictor follow-up:
+
+```bash
+scripts/run_kitti_seed0_aligned_temporal_difference.sh
+```
+
 Run the three-condition 1x1 Temporal Error matrix:
 
 ```bash

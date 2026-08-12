@@ -150,6 +150,38 @@ class FeedbackOptimizerTest(unittest.TestCase):
         )
         self.assertIsNotNone(optimizer)
 
+    def test_aligned_difference_trains_future_predictor_without_fusion(self):
+        student = _SmallFutureFeatureStudent(with_fusion=False)
+        with (
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.PREDICTION_TASK",
+                "future_feature",
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.FEATURE_HISTORY_MODE",
+                "aligned_difference",
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.TRAIN_BACKBONE",
+                False,
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.TRAIN_FEEDBACK_DECODERS",
+                False,
+            ),
+        ):
+            configure_student_trainability(student)
+            optimizer = build_optimizer(student)
+
+        trainable = {
+            name for name, parameter in student.named_parameters() if parameter.requires_grad
+        }
+        self.assertEqual(
+            trainable,
+            {"future_feature_predictor.weight", "future_feature_predictor.bias"},
+        )
+        self.assertIsNotNone(optimizer)
+
     def test_copy_current_has_no_optimizer_when_all_model_parts_are_frozen(self):
         student = _SmallFutureFeatureStudent(with_fusion=False)
         with (
