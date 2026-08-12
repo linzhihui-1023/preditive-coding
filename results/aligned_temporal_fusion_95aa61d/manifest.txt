@@ -1,0 +1,8 @@
+git_revision=95aa61d911dead2a89e0f749a74a0cef3329e42f
+output_root=/tmp/predify-storage/experiments/seed0_aligned_temporal_fusion_95aa61d
+condition=aligned_temporal_fusion
+train_drive=0005
+val_drive=0011
+copy_mse_gate=0.06008010
+copy_cosine_gate=0.91990469
+copy_normalized_error_gate=0.37576611

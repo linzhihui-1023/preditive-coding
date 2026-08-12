@@ -1,0 +1,1053 @@
+{
+  "best_checkpoint": {
+    "epoch": 2,
+    "metric": "val_mean_feature_mse",
+    "path": "/tmp/predify-storage/experiments/seed0_aligned_temporal_fusion_95aa61d/aligned_temporal_fusion_seed0_best_student.pt",
+    "value": 0.06191402369435748
+  },
+  "config": {
+    "batch_size": 1,
+    "current_top_duplicate": false,
+    "current_top_duplicate_source": "student_top_detached",
+    "dynamic_error": true,
+    "dynamic_error_definition": "r_t=F_t-T_t; epsilon_t=(Ts_r/tau_r)*r_t+(1-K_r*Ts_r/tau_r)*epsilon_(t-1); no independent d_t",
+    "ema_decay": 0.99,
+    "epochs": 10,
+    "error_gain": 1.0,
+    "error_sample_time": 0.1035,
+    "error_state_mode": "ema",
+    "error_time_constant": 0.5,
+    "feature_metric_eps": 1e-08,
+    "feature_prediction_weight": 1.0,
+    "feedback_decoder_trainable": false,
+    "fixed_ts_s": 0.1035,
+    "fixed_ts_tol_s": 0.001,
+    "formal_split": true,
+    "future_feature_causal_order": "snapshot_history,predict,observe_future_target,update_error_state",
+    "future_feature_history_mode": "none",
+    "future_feature_prediction_equation": "Z_current=F_current+T([align(F_previous,F_current),F_current]);Fhat_next=Z_current+P([Z_current,0])",
+    "future_feature_prediction_form": "current_residual",
+    "future_feature_prediction_space": "full_stage5_feature_map",
+    "future_feature_predictor_architecture": "concat_1024_to_1024_k1_then_512_k1",
+    "future_feature_predictor_kernel_size": 1,
+    "future_feature_previous_top_memory_detached": true,
+    "future_feature_temporal_alignment": "local_match_F_previous_to_F_current_target_coordinates;use_matched_source_not_historical_future_warp",
+    "future_feature_temporal_fusion_architecture": "align_F_previous_to_F_current_then_concat_to_512_k1_relu_512_k1_residual",
+    "future_feature_temporal_fusion_mode": "aligned_two_frame_residual",
+    "future_motion_patch_size": 3,
+    "future_motion_radius": 1,
+    "git_revision": "95aa61d911dead2a89e0f749a74a0cef3329e42f",
+    "kitti_camera": "image_02",
+    "kitti_drive": "2011_09_26/2011_09_26_drive_0005_sync",
+    "kitti_root": "/home/lin/predify/kitti_raw",
+    "layer_loss_weights": [
+      0.1,
+      0.1,
+      0.2,
+      0.2,
+      1.0
+    ],
+    "learning_rate": 0.0001,
+    "local_loss_error_source": "instant",
+    "local_reconstruction_weight": 0.0,
+    "motion_target_name": "none",
+    "motion_target_stats": null,
+    "optimized_parameter_names": [
+      "future_feature_predictor.0.weight",
+      "future_feature_predictor.0.bias",
+      "future_feature_predictor.2.weight",
+      "future_feature_predictor.2.bias",
+      "temporal_fusion_module.0.weight",
+      "temporal_fusion_module.0.bias",
+      "temporal_fusion_module.2.weight",
+      "temporal_fusion_module.2.bias"
+    ],
+    "optimizer_created": true,
+    "prediction_task": "future_feature",
+    "pretrained": true,
+    "reset_each_frame": false,
+    "same_drive_drive": null,
+    "same_drive_gap_frames": null,
+    "same_drive_split": false,
+    "same_drive_split_metadata": null,
+    "save_final_checkpoints": false,
+    "seed": 0,
+    "shuffle_seed": 0,
+    "shuffle_train_pairs": false,
+    "shuffle_val_pairs": false,
+    "state_memory_detached": true,
+    "stream_mode": true,
+    "target_flow_mode": "recursive",
+    "task_aligned_target": "none",
+    "temporal_credit_assignment": "stateful_forward_one_step_gradient",
+    "temporal_error_definition": "e_t=F_t-Fhat_(t|t-1); E_t=(Ts_e/tau_e)*e_t+(1-K_e*Ts_e/tau_e)*E_(t-1)",
+    "temporal_error_gain": 1.0,
+    "temporal_error_sample_time": 0.1035,
+    "temporal_error_time_constant": 0.5,
+    "temporal_horizons": [
+      1
+    ],
+    "temporal_prediction_weight": 1.0,
+    "temporal_target_mode": "next_top",
+    "top_target_source": "student_self",
+    "top_variance_eps": 1e-06,
+    "top_variance_target": 0.01,
+    "top_variance_weight": 0.0,
+    "top_variance_window": 16,
+    "top_variance_window_active": false,
+    "train_backbone": false,
+    "train_drives": [
+      "2011_09_26/2011_09_26_drive_0005_sync"
+    ],
+    "train_fraction": 0.8,
+    "train_pairs": 153,
+    "train_time_filter_stats": {
+      "train:2011_09_26/2011_09_26_drive_0005_sync:segment_0000": {
+        "candidate_samples": 153,
+        "contiguous_segment_lengths": [
+          153
+        ],
+        "dropped_samples": 0,
+        "dt_tolerance_s": 0.001,
+        "fixed_dt_s": 0.1035,
+        "max_horizon": 1,
+        "num_contiguous_segments": 1,
+        "subset_samples": 153,
+        "valid_samples": 153
+      }
+    },
+    "val_drives": [
+      "2011_09_26/2011_09_26_drive_0011_sync"
+    ],
+    "val_fraction": 0.2,
+    "val_pairs": 232,
+    "val_time_filter_stats": {
+      "val:2011_09_26/2011_09_26_drive_0011_sync:segment_0000": {
+        "candidate_samples": 232,
+        "contiguous_segment_lengths": [
+          232
+        ],
+        "dropped_samples": 0,
+        "dt_tolerance_s": 0.001,
+        "fixed_dt_s": 0.1035,
+        "max_horizon": 1,
+        "num_contiguous_segments": 1,
+        "subset_samples": 232,
+        "valid_samples": 232
+      }
+    },
+    "weight_decay": 0.0
+  },
+  "epochs": [
+    {
+      "epoch": 1,
+      "train": {
+        "max_feature_loss_equivalence_error": 2.9802322387695312e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.8361364388777539,
+        "mean_copy_current_feature_mse": 0.13895498284327437,
+        "mean_copy_current_normalized_feature_error": 0.5717023318889094,
+        "mean_feature_cosine": 0.8325848859899184,
+        "mean_feature_delta_mse": 0.14062157938001202,
+        "mean_feature_mse": 0.1406215791852256,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.5755404726742139,
+        "mean_optimized_loss": 0.1406215791852256,
+        "mean_per_layer_local_loss": [
+          1.3418803974693896,
+          5.304771158430311,
+          11.078385505800933,
+          2.235509340280022,
+          0.13895498284327437
+        ],
+        "mean_prediction_base_feature_mse": 0.13973486484363187,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6319715443000294,
+        "mean_top_local_loss": 0.13895498284327437,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 20.099501541237426,
+        "mean_weighted_loss": 3.4663991335949866,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 153,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      },
+      "val": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.9199046911350612,
+        "mean_copy_current_feature_mse": 0.06008009948157545,
+        "mean_copy_current_normalized_feature_error": 0.37576610893653384,
+        "mean_feature_cosine": 0.9160953505799688,
+        "mean_feature_delta_mse": 0.06192138056062033,
+        "mean_feature_mse": 0.061921380618827994,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.38507146308005885,
+        "mean_optimized_loss": 0.061921380618827994,
+        "mean_per_layer_local_loss": [
+          1.3953515676588848,
+          5.150312156512819,
+          10.041760341874484,
+          1.8842713303607086,
+          0.06008009948157545
+        ],
+        "mean_prediction_base_feature_mse": 0.061760185732995965,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6128485358223833,
+        "mean_top_local_loss": 0.06008009948157545,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 18.53177550743366,
+        "mean_weighted_loss": 3.0998528455865793,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 232,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      }
+    },
+    {
+      "epoch": 2,
+      "train": {
+        "max_feature_loss_equivalence_error": 2.9802322387695312e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.8361364388777539,
+        "mean_copy_current_feature_mse": 0.13895498284327437,
+        "mean_copy_current_normalized_feature_error": 0.5717023318889094,
+        "mean_feature_cosine": 0.8362929341839809,
+        "mean_feature_delta_mse": 0.13455894314288314,
+        "mean_feature_mse": 0.13455894321592804,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.5627845913366555,
+        "mean_optimized_loss": 0.13455894321592804,
+        "mean_per_layer_local_loss": [
+          1.3418803974693896,
+          5.304771158430311,
+          11.078385505800933,
+          2.235509340280022,
+          0.13895498284327437
+        ],
+        "mean_prediction_base_feature_mse": 0.13840831687150437,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6319715443000294,
+        "mean_top_local_loss": 0.13895498284327437,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 20.099501541237426,
+        "mean_weighted_loss": 3.4663991335949866,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 153,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      },
+      "val": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.9199046911350612,
+        "mean_copy_current_feature_mse": 0.06008009948157545,
+        "mean_copy_current_normalized_feature_error": 0.37576610893653384,
+        "mean_feature_cosine": 0.915201279109922,
+        "mean_feature_delta_mse": 0.06191402363012834,
+        "mean_feature_mse": 0.06191402369435748,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.38581801514173375,
+        "mean_optimized_loss": 0.06191402369435748,
+        "mean_per_layer_local_loss": [
+          1.3953515676588848,
+          5.150312156512819,
+          10.041760341874484,
+          1.8842713303607086,
+          0.06008009948157545
+        ],
+        "mean_prediction_base_feature_mse": 0.06105112674613965,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6128485358223833,
+        "mean_top_local_loss": 0.06008009948157545,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 18.53177550743366,
+        "mean_weighted_loss": 3.0998528455865793,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 232,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      }
+    },
+    {
+      "epoch": 3,
+      "train": {
+        "max_feature_loss_equivalence_error": 2.2351741790771484e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.8361364388777539,
+        "mean_copy_current_feature_mse": 0.13895498284327437,
+        "mean_copy_current_normalized_feature_error": 0.5717023318889094,
+        "mean_feature_cosine": 0.8394054061447094,
+        "mean_feature_delta_mse": 0.12992007022394853,
+        "mean_feature_mse": 0.12992007017525192,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.5531833458180521,
+        "mean_optimized_loss": 0.12992007017525192,
+        "mean_per_layer_local_loss": [
+          1.3418803974693896,
+          5.304771158430311,
+          11.078385505800933,
+          2.235509340280022,
+          0.13895498284327437
+        ],
+        "mean_prediction_base_feature_mse": 0.13632686380175205,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6319715443000294,
+        "mean_top_local_loss": 0.13895498284327437,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 20.099501541237426,
+        "mean_weighted_loss": 3.4663991335949866,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 153,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      },
+      "val": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.9199046911350612,
+        "mean_copy_current_feature_mse": 0.06008009948157545,
+        "mean_copy_current_normalized_feature_error": 0.37576610893653384,
+        "mean_feature_cosine": 0.9134291985939289,
+        "mean_feature_delta_mse": 0.06306511181575278,
+        "mean_feature_mse": 0.06306511177159525,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.3906414325124231,
+        "mean_optimized_loss": 0.06306511177159525,
+        "mean_per_layer_local_loss": [
+          1.3953515676588848,
+          5.150312156512819,
+          10.041760341874484,
+          1.8842713303607086,
+          0.06008009948157545
+        ],
+        "mean_prediction_base_feature_mse": 0.0616285742063814,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6128485358223833,
+        "mean_top_local_loss": 0.06008009948157545,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 18.53177550743366,
+        "mean_weighted_loss": 3.0998528455865793,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 232,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      }
+    },
+    {
+      "epoch": 4,
+      "train": {
+        "max_feature_loss_equivalence_error": 2.9802322387695312e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.8361364388777539,
+        "mean_copy_current_feature_mse": 0.13895498284327437,
+        "mean_copy_current_normalized_feature_error": 0.5717023318889094,
+        "mean_feature_cosine": 0.8428014937569114,
+        "mean_feature_delta_mse": 0.12574870404756927,
+        "mean_feature_mse": 0.12574870380408623,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.5444929268625047,
+        "mean_optimized_loss": 0.12574870380408623,
+        "mean_per_layer_local_loss": [
+          1.3418803974693896,
+          5.304771158430311,
+          11.078385505800933,
+          2.235509340280022,
+          0.13895498284327437
+        ],
+        "mean_prediction_base_feature_mse": 0.13625160487843493,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6319715443000294,
+        "mean_top_local_loss": 0.13895498284327437,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 20.099501541237426,
+        "mean_weighted_loss": 3.4663991335949866,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 153,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      },
+      "val": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.9199046911350612,
+        "mean_copy_current_feature_mse": 0.06008009948157545,
+        "mean_copy_current_normalized_feature_error": 0.37576610893653384,
+        "mean_feature_cosine": 0.9112592547618109,
+        "mean_feature_delta_mse": 0.06487664471557043,
+        "mean_feature_mse": 0.06487664481191414,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.39729043533062114,
+        "mean_optimized_loss": 0.06487664481191414,
+        "mean_per_layer_local_loss": [
+          1.3953515676588848,
+          5.150312156512819,
+          10.041760341874484,
+          1.8842713303607086,
+          0.06008009948157545
+        ],
+        "mean_prediction_base_feature_mse": 0.06421185311748935,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6128485358223833,
+        "mean_top_local_loss": 0.06008009948157545,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 18.53177550743366,
+        "mean_weighted_loss": 3.0998528455865793,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 232,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      }
+    },
+    {
+      "epoch": 5,
+      "train": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.8361364388777539,
+        "mean_copy_current_feature_mse": 0.13895498284327437,
+        "mean_copy_current_normalized_feature_error": 0.5717023318889094,
+        "mean_feature_cosine": 0.8461229583017187,
+        "mean_feature_delta_mse": 0.12221228949774325,
+        "mean_feature_mse": 0.12221228954643985,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.5370612857388515,
+        "mean_optimized_loss": 0.12221228954643985,
+        "mean_per_layer_local_loss": [
+          1.3418803974693896,
+          5.304771158430311,
+          11.078385505800933,
+          2.235509340280022,
+          0.13895498284327437
+        ],
+        "mean_prediction_base_feature_mse": 0.13694973000221783,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6319715443000294,
+        "mean_top_local_loss": 0.13895498284327437,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 20.099501541237426,
+        "mean_weighted_loss": 3.4663991335949866,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 153,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      },
+      "val": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.9199046911350612,
+        "mean_copy_current_feature_mse": 0.06008009948157545,
+        "mean_copy_current_normalized_feature_error": 0.37576610893653384,
+        "mean_feature_cosine": 0.9093973246114008,
+        "mean_feature_delta_mse": 0.06659444242089602,
+        "mean_feature_mse": 0.06659444262964073,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.4031087591730315,
+        "mean_optimized_loss": 0.06659444262964073,
+        "mean_per_layer_local_loss": [
+          1.3953515676588848,
+          5.150312156512819,
+          10.041760341874484,
+          1.8842713303607086,
+          0.06008009948157545
+        ],
+        "mean_prediction_base_feature_mse": 0.0658807084566496,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6128485358223833,
+        "mean_top_local_loss": 0.06008009948157545,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 18.53177550743366,
+        "mean_weighted_loss": 3.0998528455865793,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 232,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      }
+    },
+    {
+      "epoch": 6,
+      "train": {
+        "max_feature_loss_equivalence_error": 4.470348358154297e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.8361364388777539,
+        "mean_copy_current_feature_mse": 0.13895498284327437,
+        "mean_copy_current_normalized_feature_error": 0.5717023318889094,
+        "mean_feature_cosine": 0.8491708947942148,
+        "mean_feature_delta_mse": 0.11930198487795256,
+        "mean_feature_mse": 0.11930198414750348,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.5308766308563208,
+        "mean_optimized_loss": 0.11930198414750348,
+        "mean_per_layer_local_loss": [
+          1.3418803974693896,
+          5.304771158430311,
+          11.078385505800933,
+          2.235509340280022,
+          0.13895498284327437
+        ],
+        "mean_prediction_base_feature_mse": 0.1368416721378666,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6319715443000294,
+        "mean_top_local_loss": 0.13895498284327437,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 20.099501541237426,
+        "mean_weighted_loss": 3.4663991335949866,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 153,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      },
+      "val": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.9199046911350612,
+        "mean_copy_current_feature_mse": 0.06008009948157545,
+        "mean_copy_current_normalized_feature_error": 0.37576610893653384,
+        "mean_feature_cosine": 0.9077705288755482,
+        "mean_feature_delta_mse": 0.06814258564504441,
+        "mean_feature_mse": 0.06814258567715899,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.40805130169309417,
+        "mean_optimized_loss": 0.06814258567715899,
+        "mean_per_layer_local_loss": [
+          1.3953515676588848,
+          5.150312156512819,
+          10.041760341874484,
+          1.8842713303607086,
+          0.06008009948157545
+        ],
+        "mean_prediction_base_feature_mse": 0.06668416931944225,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6128485358223833,
+        "mean_top_local_loss": 0.06008009948157545,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 18.53177550743366,
+        "mean_weighted_loss": 3.0998528455865793,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 232,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      }
+    },
+    {
+      "epoch": 7,
+      "train": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.8361364388777539,
+        "mean_copy_current_feature_mse": 0.13895498284327437,
+        "mean_copy_current_normalized_feature_error": 0.5717023318889094,
+        "mean_feature_cosine": 0.8518441155845043,
+        "mean_feature_delta_mse": 0.11689603913064096,
+        "mean_feature_mse": 0.11689603903324776,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.525716471516229,
+        "mean_optimized_loss": 0.11689603903324776,
+        "mean_per_layer_local_loss": [
+          1.3418803974693896,
+          5.304771158430311,
+          11.078385505800933,
+          2.235509340280022,
+          0.13895498284327437
+        ],
+        "mean_prediction_base_feature_mse": 0.13622075716167495,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6319715443000294,
+        "mean_top_local_loss": 0.13895498284327437,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 20.099501541237426,
+        "mean_weighted_loss": 3.4663991335949866,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 153,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      },
+      "val": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.9199046911350612,
+        "mean_copy_current_feature_mse": 0.06008009948157545,
+        "mean_copy_current_normalized_feature_error": 0.37576610893653384,
+        "mean_feature_cosine": 0.9062953334430168,
+        "mean_feature_delta_mse": 0.06954597899738442,
+        "mean_feature_mse": 0.06954597919810049,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.4123452641069889,
+        "mean_optimized_loss": 0.06954597919810049,
+        "mean_per_layer_local_loss": [
+          1.3953515676588848,
+          5.150312156512819,
+          10.041760341874484,
+          1.8842713303607086,
+          0.06008009948157545
+        ],
+        "mean_prediction_base_feature_mse": 0.06701722997240722,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6128485358223833,
+        "mean_top_local_loss": 0.06008009948157545,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 18.53177550743366,
+        "mean_weighted_loss": 3.0998528455865793,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 232,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      }
+    },
+    {
+      "epoch": 8,
+      "train": {
+        "max_feature_loss_equivalence_error": 2.9802322387695312e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.8361364388777539,
+        "mean_copy_current_feature_mse": 0.13895498284327437,
+        "mean_copy_current_normalized_feature_error": 0.5717023318889094,
+        "mean_feature_cosine": 0.8541891941058091,
+        "mean_feature_delta_mse": 0.11485390878872934,
+        "mean_feature_mse": 0.11485390835045989,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.5213035148343229,
+        "mean_optimized_loss": 0.11485390835045989,
+        "mean_per_layer_local_loss": [
+          1.3418803974693896,
+          5.304771158430311,
+          11.078385505800933,
+          2.235509340280022,
+          0.13895498284327437
+        ],
+        "mean_prediction_base_feature_mse": 0.1354951775249313,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6319715443000294,
+        "mean_top_local_loss": 0.13895498284327437,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 20.099501541237426,
+        "mean_weighted_loss": 3.4663991335949866,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 153,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      },
+      "val": {
+        "max_feature_loss_equivalence_error": 7.450580596923828e-09,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.9199046911350612,
+        "mean_copy_current_feature_mse": 0.06008009948157545,
+        "mean_copy_current_normalized_feature_error": 0.37576610893653384,
+        "mean_feature_cosine": 0.9048904131712585,
+        "mean_feature_delta_mse": 0.07087014929857105,
+        "mean_feature_mse": 0.07087014929857105,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.41625583133307,
+        "mean_optimized_loss": 0.07087014929857105,
+        "mean_per_layer_local_loss": [
+          1.3953515676588848,
+          5.150312156512819,
+          10.041760341874484,
+          1.8842713303607086,
+          0.06008009948157545
+        ],
+        "mean_prediction_base_feature_mse": 0.06726423738893636,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6128485358223833,
+        "mean_top_local_loss": 0.06008009948157545,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 18.53177550743366,
+        "mean_weighted_loss": 3.0998528455865793,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 232,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      }
+    },
+    {
+      "epoch": 9,
+      "train": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.8361364388777539,
+        "mean_copy_current_feature_mse": 0.13895498284327437,
+        "mean_copy_current_normalized_feature_error": 0.5717023318889094,
+        "mean_feature_cosine": 0.8562808500395881,
+        "mean_feature_delta_mse": 0.11307255626698724,
+        "mean_feature_mse": 0.11307255646177367,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.5174281334175783,
+        "mean_optimized_loss": 0.11307255646177367,
+        "mean_per_layer_local_loss": [
+          1.3418803974693896,
+          5.304771158430311,
+          11.078385505800933,
+          2.235509340280022,
+          0.13895498284327437
+        ],
+        "mean_prediction_base_feature_mse": 0.1347679061437744,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6319715443000294,
+        "mean_top_local_loss": 0.13895498284327437,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 20.099501541237426,
+        "mean_weighted_loss": 3.4663991335949866,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 153,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      },
+      "val": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.9199046911350612,
+        "mean_copy_current_feature_mse": 0.06008009948157545,
+        "mean_copy_current_normalized_feature_error": 0.37576610893653384,
+        "mean_feature_cosine": 0.9035368412733078,
+        "mean_feature_delta_mse": 0.07213236923843365,
+        "mean_feature_mse": 0.07213236936689194,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.4198627507892148,
+        "mean_optimized_loss": 0.07213236936689194,
+        "mean_per_layer_local_loss": [
+          1.3953515676588848,
+          5.150312156512819,
+          10.041760341874484,
+          1.8842713303607086,
+          0.06008009948157545
+        ],
+        "mean_prediction_base_feature_mse": 0.06743903867579226,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6128485358223833,
+        "mean_top_local_loss": 0.06008009948157545,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 18.53177550743366,
+        "mean_weighted_loss": 3.0998528455865793,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 232,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      }
+    },
+    {
+      "epoch": 10,
+      "train": {
+        "max_feature_loss_equivalence_error": 2.9802322387695312e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.8361364388777539,
+        "mean_copy_current_feature_mse": 0.13895498284327437,
+        "mean_copy_current_normalized_feature_error": 0.5717023318889094,
+        "mean_feature_cosine": 0.8581772010310803,
+        "mean_feature_delta_mse": 0.11148386660451982,
+        "mean_feature_mse": 0.11148386692104775,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.5139499550161798,
+        "mean_optimized_loss": 0.11148386692104775,
+        "mean_per_layer_local_loss": [
+          1.3418803974693896,
+          5.304771158430311,
+          11.078385505800933,
+          2.235509340280022,
+          0.13895498284327437
+        ],
+        "mean_prediction_base_feature_mse": 0.13408460168569697,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6319715443000294,
+        "mean_top_local_loss": 0.13895498284327437,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 20.099501541237426,
+        "mean_weighted_loss": 3.4663991335949866,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 153,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      },
+      "val": {
+        "max_feature_loss_equivalence_error": 1.4901161193847656e-08,
+        "max_top_variance_sample_count": 1,
+        "mean_copy_current_feature_cosine": 0.9199046911350612,
+        "mean_copy_current_feature_mse": 0.06008009948157545,
+        "mean_copy_current_normalized_feature_error": 0.37576610893653384,
+        "mean_feature_cosine": 0.9022049955252943,
+        "mean_feature_delta_mse": 0.07335351401907873,
+        "mean_feature_mse": 0.07335351397090688,
+        "mean_forward_displacement_mae_m": 0.0,
+        "mean_forward_displacement_mae_m_per_horizon": [
+          0.0
+        ],
+        "mean_normalized_feature_error": 0.42327169213315535,
+        "mean_optimized_loss": 0.07335351397090688,
+        "mean_per_layer_local_loss": [
+          1.3953515676588848,
+          5.150312156512819,
+          10.041760341874484,
+          1.8842713303607086,
+          0.06008009948157545
+        ],
+        "mean_prediction_base_feature_mse": 0.06764901950473673,
+        "mean_standardized_motion_mae": null,
+        "mean_standardized_motion_mse": null,
+        "mean_temporal_cosine": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mean_temporal_mae": 0.0,
+        "mean_top_feature_std": 0.6128485358223833,
+        "mean_top_local_loss": 0.06008009948157545,
+        "mean_top_pooled_std": 0.0,
+        "mean_top_variance_loss": 0.0,
+        "mean_top_variance_sample_count": 1.0,
+        "mean_total_local_loss": 18.53177550743366,
+        "mean_weighted_loss": 3.0998528455865793,
+        "mean_yaw_change_mae_rad": 0.0,
+        "mean_yaw_change_mae_rad_per_horizon": [
+          0.0
+        ],
+        "num_batches": 232,
+        "num_sequences": 1,
+        "reset_each_frame": false,
+        "stream_mode": true
+      }
+    }
+  ]
+}

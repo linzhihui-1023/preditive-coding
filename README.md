@@ -88,11 +88,16 @@ small artifacts and scope-limited interpretation are under
 `results/temporal_fusion_matrix_10191a6/`; the approximately 4 GB of
 checkpoints and logs remain server-side.
 
-The follow-up alignment condition first maps `F_(t-1)` into `F_t` coordinates
-with causal local matching, then passes
+The aligned-history follow-up at revision `95aa61d` first maps `F_(t-1)` into
+`F_t` coordinates with causal local matching, then passes
 `[F_(t-1)_aligned, F_t]` through the unchanged residual fusion and future
-predictor. It is a single-condition experiment with the previous Copy-current
-metrics frozen as its gate:
+predictor. The single-condition seed-0 run trained on drive 0005 and used the
+previous Copy-current metrics as a fixed gate on drive 0011. It did not pass:
+MSE was `0.06191402` versus `0.06008010`, cosine was `0.91520128` versus
+`0.91990469`, and normalized error was `0.38581802` versus `0.37576611`.
+Auditable small artifacts are under
+`results/aligned_temporal_fusion_95aa61d/`; the checkpoint remains server-side.
+The exact runner is:
 
 ```bash
 scripts/run_kitti_seed0_aligned_temporal_fusion.sh

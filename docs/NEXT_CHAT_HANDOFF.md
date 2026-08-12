@@ -587,6 +587,27 @@ Auditable outputs are tracked under
 `results/temporal_fusion_matrix_10191a6/`. The 4.0 GB server artifact remains at
 `/tmp/predify-storage/experiments/seed0_temporal_fusion_matrix_10191a6`.
 
+## Aligned-History Temporal Fusion Result
+
+The single aligned-history follow-up was implemented and trained at revision
+`95aa61d911dead2a89e0f749a74a0cef3329e42f`. It uses local radius-1,
+patch-size-3 matching to place `F_(t-1)` directly in `F_t` coordinates before
+the residual Temporal Fusion module. It does not use the historical-warp
+future splat. The protocol remained seed 0, train drive 0005, held-out drive
+0011, 10 epochs, frozen VGG and feedback decoders, and the previous
+Copy-current metrics as fixed gates.
+
+The best checkpoint was epoch 2. Held-out MSE was `0.06191402` against the
+required `< 0.06008010`; cosine was `0.91520128` against the required
+`> 0.91990469`; normalized error was `0.38581802` against the required
+`< 0.37576611`. All three checks failed. Alignment was active on `231/232`
+held-out samples, with only the first post-reset sample lacking history.
+
+Small auditable artifacts are tracked under
+`results/aligned_temporal_fusion_95aa61d/`. The 1.41 GB best checkpoint and
+logs remain at
+`/tmp/predify-storage/experiments/seed0_aligned_temporal_fusion_95aa61d`.
+
 ## Reproduction Commands
 
 Run Gate 3 with both detector and 2-DoF task model frozen:
