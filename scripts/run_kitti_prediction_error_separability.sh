@@ -12,12 +12,11 @@ if [[ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]]; then
     echo "Refusing a formal separability run from a dirty worktree." >&2
     exit 2
 fi
-if [[ -e "$OUTPUT_ROOT" ]]; then
+if [[ -e "$OUTPUT_ROOT" || -e "${OUTPUT_ROOT}.log" ]]; then
     echo "Refusing to overwrite separability output: $OUTPUT_ROOT" >&2
     exit 3
 fi
 
-mkdir -p "$OUTPUT_ROOT"
 env -i \
     HOME=/home/lin \
     LANG=C.UTF-8 \
@@ -49,4 +48,4 @@ env -i \
     PREDIFY_ERROR_BLUR_SIGMA=3.0 \
     PREDIFY_ERROR_IID_NOISE_STD=0.08 \
     "$PYTHON_BIN" -u -m predify2021.mce_scores.evaluate_kitti_prediction_error_separability \
-    2>&1 | tee "$OUTPUT_ROOT/evaluation.log"
+    2>&1 | tee "${OUTPUT_ROOT}.log"
