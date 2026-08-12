@@ -1,6 +1,7 @@
 import unittest
 
 from predify2021.mce_scores.evaluate_kitti_gate3_persistence_task_degradation import (
+    ALLOWED_LEGACY_MOTION_MISSING_KEYS,
     DETECTOR_SCORE,
     _association,
     _average_ranks,
@@ -106,6 +107,19 @@ class Gate3MotionCheckpointTest(unittest.TestCase):
         checkpoint["config"]["task_aligned_target"] = "none"
         with self.assertRaisesRegex(ValueError, "task_aligned_target"):
             validate_motion_checkpoint(checkpoint, "motion")
+
+    def test_legacy_schema_allowlist_contains_only_unused_future_task_state(self):
+        self.assertEqual(
+            ALLOWED_LEGACY_MOTION_MISSING_KEYS,
+            {
+                "temporal_error_time_constant",
+                "temporal_error_gain",
+                "future_feature_predictor.0.weight",
+                "future_feature_predictor.0.bias",
+                "future_feature_predictor.2.weight",
+                "future_feature_predictor.2.bias",
+            },
+        )
 
 
 def _frame(condition, replicate, index, score, forward_error, yaw_error):

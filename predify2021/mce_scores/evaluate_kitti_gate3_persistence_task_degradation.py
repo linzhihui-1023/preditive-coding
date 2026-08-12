@@ -32,6 +32,14 @@ from predify2021.model_factory.get_model import get_model
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 DETECTOR_SCORE = "prediction_error_cosine_previous"
 CONDITIONS = ("clean",) + CORRUPTED_CONDITIONS
+ALLOWED_LEGACY_MOTION_MISSING_KEYS = {
+    "temporal_error_time_constant",
+    "temporal_error_gain",
+    "future_feature_predictor.0.weight",
+    "future_feature_predictor.0.bias",
+    "future_feature_predictor.2.weight",
+    "future_feature_predictor.2.bias",
+}
 
 
 def _sha256(path):
@@ -127,7 +135,14 @@ def build_motion_model(checkpoint, validation):
         error_gain=config["error_gain"],
         task="motion",
     )
-    model.load_state_dict(checkpoint["state_dict"], strict=True)
+    incompatible = model.load_state_dict(checkpoint["state_dict"], strict=False)
+    missing = set(incompatible.missing_keys)
+    unexpected = set(incompatible.unexpected_keys)
+    if missing != ALLOWED_LEGACY_MOTION_MISSING_KEYS or unexpected:
+        raise ValueError(
+            "Unexpected motion checkpoint schema difference: "
+            f"missing={sorted(missing)}, unexpected={sorted(unexpected)}."
+        )
     model.eval().to(DEVICE)
     for parameter in model.parameters():
         parameter.requires_grad_(False)
