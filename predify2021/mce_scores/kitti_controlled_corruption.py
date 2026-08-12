@@ -1,5 +1,6 @@
 import hashlib
 import math
+from collections import Counter
 from dataclasses import asdict, dataclass
 
 import torch
@@ -97,6 +98,69 @@ class ControlledCorruptionSchedule:
 
     def to_dict(self):
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class ExplicitSeveritySchedule:
+    """Absolute-frame schedule for matched-marginal temporal controls."""
+
+    baseline_frames: int
+    disturbance_severities: tuple
+    recovery_frames: int
+
+    def __post_init__(self):
+        if self.baseline_frames < 0:
+            raise ValueError("baseline_frames must be non-negative.")
+        if self.recovery_frames <= 0:
+            raise ValueError("recovery_frames must be positive.")
+        if not self.disturbance_severities:
+            raise ValueError("disturbance_severities must not be empty.")
+        for severity in self.disturbance_severities:
+            if not math.isfinite(float(severity)) or not 0.0 < float(severity) <= 1.0:
+                raise ValueError(
+                    "Every disturbance severity must be finite and in (0, 1], "
+                    f"got {severity!r}."
+                )
+
+    @property
+    def total_frames(self):
+        return (
+            self.baseline_frames
+            + len(self.disturbance_severities)
+            + self.recovery_frames
+        )
+
+    @property
+    def disturbance_onset_offset(self):
+        return self.baseline_frames
+
+    @property
+    def recovery_onset_offset(self):
+        return self.baseline_frames + len(self.disturbance_severities)
+
+    def phase_and_severity(self, frame_offset):
+        frame_offset = int(frame_offset)
+        if frame_offset < self.baseline_frames:
+            return "baseline", 0.0
+        disturbance_index = frame_offset - self.baseline_frames
+        if disturbance_index < len(self.disturbance_severities):
+            return "disturbance", float(
+                self.disturbance_severities[disturbance_index]
+            )
+        return "recovery", 0.0
+
+    def severity_counts(self):
+        return dict(Counter(float(value) for value in self.disturbance_severities))
+
+    def to_dict(self):
+        return {
+            "baseline_frames": self.baseline_frames,
+            "disturbance_severities": [
+                float(value) for value in self.disturbance_severities
+            ],
+            "disturbance_severity_counts": self.severity_counts(),
+            "recovery_frames": self.recovery_frames,
+        }
 
 
 @dataclass(frozen=True)
