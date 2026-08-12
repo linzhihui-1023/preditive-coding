@@ -1,5 +1,29 @@
 # Research Decisions
 
+## 2026-08-12: Pass the first error-separability gate, not the persistence gate
+
+Status: accepted
+
+The inference-only go/no-go at revision `a28fed5` used the existing strict
+Temporal Error checkpoint without updating any network. Calibration drive 0005
+selected low `||e_t||` as the score for persistent blur. With that direction
+and statistic frozen, held-out drive 0011 reached AUROC 0.959609 against pooled
+clean and i.i.d.-Gaussian-noise controls. This exceeds the user-defined 0.8
+`go_promising` threshold.
+
+The result justifies continuing prediction-error-based shift detection as a
+small diagnostic direction. It does not yet justify a controller. Blur reduced
+error norm, and raw instantaneous norm outperformed the temporal statistics on
+the calibration drive. More importantly, the persistent positive uses blur
+while the random negative uses Gaussian noise, so corruption type and temporal
+persistence are confounded.
+
+The next required gate is persistent blur versus an i.i.d. or temporally
+permuted blur control with matched marginal severity. Keep the same clean
+control, score directions, 40/80/30 schedule, frozen checkpoint, and no network
+updates. A controller or online adaptation mechanism remains downstream of
+that matched-persistence test.
+
 ## 2026-08-12: Keep warp transport, pause residual generalization claims
 
 Status: accepted

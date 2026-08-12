@@ -15,7 +15,7 @@ Branch and private remote:
 ```text
 branch: targetflow-arch
 remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
-latest warp-residual implementation/training revision: 79de554
+latest prediction-error separability evaluation revision: a28fed5
 ```
 
 At handoff time the Git worktree was clean. Use this environment:
@@ -356,6 +356,32 @@ checked locally.
 
 ## Current Decision And Next Step
 
+The latest inference-only go/no-go reused the strict Temporal Error checkpoint
+from revision `3ffbff0` and evaluated at revision `a28fed5`. No optimizer was
+created and parameter versions remained unchanged. Both drives ran clean,
+persistent-blur, and i.i.d.-Gaussian-noise trajectories with exactly 40 clean,
+80 disturbed, and 30 recovery prediction transitions.
+
+Drive 0005 selected lower raw `||e_t||` as the positive direction and best
+single statistic. Frozen evaluation on drive 0011 reached pooled AUROC
+`0.959609` (`0.937031` versus clean, `0.982188` versus i.i.d. noise). Excluding
+the first eight disturbance frames produced AUROC `0.971065`; eight-frame block
+means produced `0.985`. Under the user-defined threshold this is
+`go_promising`.
+
+Do not interpret this as evidence that `e` detects temporal persistence. Blur
+reduced error norm, the winning statistic was instantaneous, and the i.i.d.
+negative used a different corruption type. The next gate is a matched-marginal
+persistent-blur versus temporally randomized-blur experiment, with the same
+checkpoint, frozen score direction, clean control, and no network updates.
+Do not build a controller before that gate.
+
+Versioned audit artifacts:
+
+```text
+results/prediction_error_separability_a28fed5/
+```
+
 The ordered local-motion diagnostic at `06ec8e7` completed without training.
 Future-selected local matching reduced stage-5 Copy MSE on both drives by
 12--19% at `h=1` and 29--45% at `h=3` for 1x1 matching; 3x3 matching retained
@@ -476,6 +502,12 @@ factor remains a learned correction that does not generalize past the causal
 warp or Copy-current on the held-out drive.
 
 ## Reproduction Commands
+
+Run the inference-only prediction-error separability diagnostic:
+
+```bash
+scripts/run_kitti_prediction_error_separability.sh
+```
 
 Run the formal causal warp-residual matrix and per-frame replay:
 

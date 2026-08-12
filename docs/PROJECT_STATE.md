@@ -194,6 +194,20 @@ feature MSE and residual-delta MSE; its numerical accuracy is not an experiment
 result. The formal frozen-backbone matrix uses a detached student-self target,
 because an EMA teacher produces the same top feature in this regime.
 
+The first inference-only prediction-error separability gate completed at
+revision `a28fed5` using the existing strict Temporal Error checkpoint. With
+drive 0005 selecting score direction and statistic, low raw `||e_t||` separated
+persistent blur from frame-matched clean and i.i.d.-noise controls on drive
+0011 at AUROC `0.959609`. The first-eight-frame-excluded AUROC was `0.971065`,
+so the result is not carried by the shift onset. All 900 per-frame records are
+versioned under `results/prediction_error_separability_a28fed5/`.
+
+This passes the user-defined first go threshold but not a persistence-specific
+mechanism gate. Blur and Gaussian noise have different marginals, and the
+selected raw norm does not require temporal history. The next experiment must
+use a time-randomized blur negative matched to the persistent blur in marginal
+severity before any controller is added.
+
 A forward-only task-learnability matrix completed at revision `1605f29` for
 VGG stage 3/4/5 and horizons 1/2/3/5 on both existing drives. Raw causal
 constant-velocity feature extrapolation was worse than Copy-current for all

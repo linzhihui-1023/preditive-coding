@@ -1,5 +1,83 @@
 # Experiment Log
 
+## Prediction-error persistent-shift go/no-go
+
+Date: 2026-08-12
+
+Evaluation revision: `a28fed59116f12fc641384d786b86600ebcf04e4`
+
+Checkpoint revision: `3ffbff0156dc9435fe3b060f4c9999703729ea8a`
+
+This inference-only diagnostic reused the strict Temporal Error best
+checkpoint from the original three-group matrix. It created no optimizer and
+the evaluator verified that every parameter version remained unchanged. Each
+drive ran three independently reset trajectories over the same 150 ordered
+transitions:
+
+```text
+40 clean -> 80 disturbance -> 30 clean recovery
+```
+
+The conditions were normal clean video, persistent Gaussian blur (11x11,
+sigma 3.0), and per-absolute-frame i.i.d. Gaussian RGB noise (std 0.08).
+Corruption was applied in `[0,1]` RGB space after resize/crop and before
+ImageNet normalization. An absolute raw frame therefore remained identical
+when read first as a future and then as the next current frame.
+
+For strict Temporal Prediction Error
+`e_t=F_t-Fhat_(t|t-1)`, the predeclared causal statistics were `||e_t||`, an
+EMA of that norm with alpha 0.207, `cos(e_t,e_(t-1))`, and mean elementwise
+temporal variance over the latest 8 errors. Only the 80 frame-matched
+disturbance transitions entered classification: persistent blur was positive;
+clean and i.i.d. noise were negative.
+
+Drive 0005 was used only to choose the direction of each score and the best
+single statistic. Those choices were frozen before reporting drive 0011.
+
+| Statistic | Positive direction | 0005 pooled AUROC | 0011 pooled AUROC |
+| --- | --- | ---: | ---: |
+| `||e_t||` | Lower | **0.951094** | **0.959609** |
+| `EMA(||e_t||)` | Lower | 0.921250 | 0.966875 |
+| `cos(e_t,e_(t-1))` | Higher | 0.681484 | 0.772188 |
+| `Var(e_(t-7:t))` | Lower | 0.902813 | 0.942734 |
+
+The calibration rule selected raw `||e_t||`; the numerically higher held-out
+EMA AUROC is reported but was not selected post hoc. For selected `||e_t||`,
+drive-0011 pairwise AUROC was 0.937031 against clean and 0.982188 against i.i.d.
+noise. Mean disturbance-phase norms were:
+
+| Drive | Persistent blur | Clean | i.i.d. noise |
+| --- | ---: | ---: | ---: |
+| 0005 | 81.4584 | 117.5187 | 121.5470 |
+| 0011 | 59.4953 | 86.7701 | 107.2486 |
+
+The effect was not an onset-only shortcut. With the first eight disturbed
+transitions excluded, selected-score AUROC was 0.958912 on 0005 and 0.971065
+on 0011. AUROC over nonoverlapping eight-frame score means was 0.960 and 0.985.
+On each drive, persistent blur had the correctly oriented score against each
+matched control on 79 of 80 individual disturbance frames.
+
+Under the user-specified engineering thresholds, held-out AUROC 0.959609 is a
+`go_promising` result. The interpretation is narrower than “prediction error
+detects persistence”: blur lowers feature prediction-error norm, and the
+selected statistic is instantaneous. Because persistent blur and i.i.d.
+Gaussian noise differ in corruption type and marginal effect, this experiment
+shows that the tested conditions are separable from `e`; it does not isolate
+temporal persistence. Before designing a controller, the next gate should
+compare persistent blur with a time-randomized blur control matched in marginal
+severity.
+
+The audit verified 900 unique drive/condition/stream rows, exact 40/80/30 phase
+counts, finite statistics, identical clean prefixes across all conditions,
+calibration-only score orientation, and exact CSV-to-summary AUROCs. No
+traceback, OOM, NaN, or network update occurred.
+
+Versioned artifacts:
+
+```text
+results/prediction_error_separability_a28fed5/
+```
+
 ## Stage-5 causal warp-residual matrix
 
 Date: 2026-08-12
