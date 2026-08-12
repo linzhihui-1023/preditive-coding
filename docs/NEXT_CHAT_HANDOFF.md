@@ -79,11 +79,13 @@ update state for the next transition
 The predictor must not consume `I_(t+1)`, current-pair residual `r_t`, or
 updated state `epsilon_t` before making the current prediction.
 
-Two signs must remain distinct:
+The two residual/error families must remain distinct:
 
 ```text
 Target Flow residual: r_t^l = F_t^l - T_t^l
-future prediction error: prediction_error_top = F_(t+1)^5 - Fhat_(t+1|t)^5
+Target Flow state: epsilon_t^l <- r_t^l
+Temporal Prediction Error: e_t^5 = F_t^5 - Fhat_(t|t-1)^5
+Temporal Error state: E_t^5 <- e_t^5
 ```
 
 The top Target Flow residual uses the next-frame target only after prediction.
@@ -91,12 +93,11 @@ Recursive target flow propagates the detached top target through all five
 feedback levels. There is no independent `d_t` term in the implemented error
 formula.
 
-The new strict top-layer Temporal Prediction Error is a third, separate
-quantity:
+The strict top-layer Temporal Prediction Error recurrence is:
 
 ```text
-e_(t+1)^5 = F_(t+1)^5 - Fhat_(t+1|t)^5
-E_(t+1)^5 = alpha_e e_(t+1)^5 + (1-K_e alpha_e)E_t^5
+e_t^5 = F_t^5 - Fhat_(t|t-1)^5
+E_t^5 = alpha_e e_t^5 + (1-K_e alpha_e)E_(t-1)^5
 ```
 
 Prediction for `t -> t+1` can use only the previously completed `E_t^5`.
@@ -347,11 +348,15 @@ Current-only validation MSE < Copy-current validation MSE       FAILED
 Temporal Error validation MSE < Current-only validation MSE     FAILED
 ```
 
-The ready same-drive controlled-corruption runner may be executed next, but
-only as a mechanistic transient-response experiment. It must preserve its
-20-raw-frame gap and report per-frame `e`, `E`, and `L`, Peak Error, Recovery
-Time, AUEC, and excess AUEC. It is not a substitute for the failed cross-drive
-gate and is not broad robustness evidence.
+The ready same-drive controlled-corruption runner uses drive 0011 with raw
+train frames 0--138, gap 139--158, and validation 159--204. It runs independent
+step-bias, ramp-bias, and i.i.d.-noise trajectories, resetting before every
+clean and corrupted stream. Bias and noise are never mixed. Primary outputs
+are per-frame signed `delta L=L_corrupted-L_clean`, signed/absolute excess
+integrals, Recovery Time, `RMS(F_t)`, `RMS(E_t)`, predictor input-weight scale,
+and `P(F_t,E_t)-P(F_t,0)`. Raw Peak Error and raw AUEC are secondary. This is a
+short mechanistic trace, not a substitute for the failed cross-drive gate or
+broad robustness evidence.
 
 For the cross-drive research path, the next discussion should choose a clean
 way to address predictor generalization. Leading options are:

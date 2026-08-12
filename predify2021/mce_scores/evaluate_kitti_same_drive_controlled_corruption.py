@@ -184,12 +184,80 @@ def _tensor_rms(tensor):
     return math.sqrt(float(tensor.detach().float().square().mean().cpu().item()))
 
 
+def summarize_predictor_input_weights(model):
+    weight = model.future_feature_predictor[0].weight.detach().float()
+    input_channels = int(weight.shape[1])
+    if input_channels % 2 != 0:
+        raise ValueError(
+            "Future-feature predictor input channels must split evenly into F and E, "
+            f"got {input_channels}."
+        )
+    split = input_channels // 2
+    feature_weight_rms = _tensor_rms(weight[:, :split])
+    history_weight_rms = _tensor_rms(weight[:, split:])
+    return {
+        "feature_input_weight_rms": feature_weight_rms,
+        "history_input_weight_rms": history_weight_rms,
+        "history_to_feature_weight_rms_ratio": history_weight_rms
+        / max(feature_weight_rms, 1e-12),
+    }
+
+
+def compute_history_utilization(model, outputs):
+    current_top = outputs["current_top"].detach()
+    history_top = outputs["history_top"].detach()
+    predicted_delta = outputs["predicted_delta_top"].detach()
+    future_target = outputs["future_top_target"].detach()
+    history_mode = model.future_feature_history_mode
+
+    if history_mode == "copy_current":
+        zero_history_delta = torch.zeros_like(predicted_delta)
+        history_contribution = torch.zeros_like(predicted_delta)
+        utilization_applicable = False
+    else:
+        zero_history_delta = model.future_feature_predictor(
+            torch.cat([current_top, torch.zeros_like(history_top)], dim=1)
+        ).detach()
+        history_contribution = predicted_delta - zero_history_delta
+        utilization_applicable = history_mode == "temporal_error"
+
+    zero_history_error = future_target - (current_top + zero_history_delta)
+    actual_error = future_target - (current_top + predicted_delta)
+    current_rms = _tensor_rms(current_top)
+    history_rms = _tensor_rms(history_top)
+    delta_rms = _tensor_rms(predicted_delta)
+    contribution_rms = _tensor_rms(history_contribution)
+    return {
+        "history_utilization_applicable": utilization_applicable,
+        "current_feature_rms": current_rms,
+        "history_input_rms": history_rms,
+        "history_to_feature_rms_ratio": history_rms / max(current_rms, 1e-12),
+        "predicted_delta_rms": delta_rms,
+        "zero_history_predicted_delta_rms": _tensor_rms(zero_history_delta),
+        "history_contribution_rms": contribution_rms,
+        "history_contribution_to_delta_rms_ratio": contribution_rms
+        / max(delta_rms, 1e-12),
+        "zero_history_feature_mse": float(
+            zero_history_error.float().square().mean().cpu().item()
+        ),
+        "history_feature_mse_change": float(
+            (
+                actual_error.float().square().mean()
+                - zero_history_error.float().square().mean()
+            )
+            .cpu()
+            .item()
+        ),
+    }
+
+
 def summarize_temporal_response(records):
     phase_order = (
         "baseline",
         "step_change",
         "ramp_change",
         "persistent_bias",
+        "iid_noise",
         "recovery",
     )
     metric_names = (
@@ -197,6 +265,12 @@ def summarize_temporal_response(records):
         "corrupted_temporal_error_input_rms",
         "corrupted_temporal_error_state_rms",
         "corrupted_feature_mse",
+        "corrupted_current_feature_rms",
+        "corrupted_history_input_rms",
+        "corrupted_history_to_feature_rms_ratio",
+        "corrupted_history_contribution_rms",
+        "corrupted_history_contribution_to_delta_rms_ratio",
+        "corrupted_history_feature_mse_change",
     )
     phase_means = {}
     for phase in phase_order:
@@ -264,6 +338,7 @@ def _evaluate_stream(model, dataset, val_sample_indices):
             temporal_state = model.temporal_error_state_memory
             if temporal_state is None:
                 raise RuntimeError("Temporal prediction error state was not updated.")
+            utilization = compute_history_utilization(model, outputs)
             records.append(
                 {
                     "stream_index": stream_index,
@@ -291,6 +366,7 @@ def _evaluate_stream(model, dataset, val_sample_indices):
                     "copy_current_feature_mse": float(
                         copy_error.square().mean().cpu().item()
                     ),
+                    **utilization,
                 }
             )
     return records
@@ -310,6 +386,15 @@ def _merge_clean_and_corrupted(clean_records, corrupted_records):
         "temporal_error_state_rms",
         "feature_mse",
         "copy_current_feature_mse",
+        "current_feature_rms",
+        "history_input_rms",
+        "history_to_feature_rms_ratio",
+        "predicted_delta_rms",
+        "zero_history_predicted_delta_rms",
+        "history_contribution_rms",
+        "history_contribution_to_delta_rms_ratio",
+        "zero_history_feature_mse",
+        "history_feature_mse_change",
     )
     for clean, corrupted in zip(clean_records, corrupted_records):
         if clean["future_raw_frame_index"] != corrupted["future_raw_frame_index"]:
@@ -321,6 +406,9 @@ def _merge_clean_and_corrupted(clean_records, corrupted_records):
         }
         record["current_severity"] = corrupted["current_severity"]
         record["future_severity"] = corrupted["future_severity"]
+        record["history_utilization_applicable"] = corrupted[
+            "history_utilization_applicable"
+        ]
         for metric_name in metric_names:
             record[f"clean_{metric_name}"] = clean[metric_name]
             record[f"corrupted_{metric_name}"] = corrupted[metric_name]
@@ -342,12 +430,13 @@ def _write_frame_artifacts(output_dir, label, records):
     return jsonl_path, csv_path
 
 
-def _plot_recovery_curves(output_path, records_by_label):
-    figure, axes = plt.subplots(3, 1, figsize=(11, 9), sharex=True)
+def _plot_recovery_curves(output_path, records_by_label, trajectory_name):
+    figure, axes = plt.subplots(4, 1, figsize=(11, 11), sharex=True)
     phase_colors = {
         "step_change": "#f5c2c7",
         "ramp_change": "#ffe69c",
         "persistent_bias": "#badbcc",
+        "iid_noise": "#d8c7e8",
         "recovery": "#cfe2ff",
     }
     first_records = next(iter(records_by_label.values()))
@@ -363,11 +452,17 @@ def _plot_recovery_curves(output_path, records_by_label):
         x_values = [record["future_raw_frame_index"] for record in records]
         axes[0].plot(
             x_values,
+            [record["signed_excess_feature_mse"] for record in records],
+            label=label,
+            linewidth=1.8,
+        )
+        axes[1].plot(
+            x_values,
             [record["corrupted_feature_mse"] for record in records],
             label=f"{label} corrupted",
             linewidth=1.8,
         )
-        axes[0].plot(
+        axes[1].plot(
             x_values,
             [record["clean_feature_mse"] for record in records],
             label=f"{label} clean",
@@ -375,30 +470,104 @@ def _plot_recovery_curves(output_path, records_by_label):
             linestyle="--",
             alpha=0.75,
         )
-        axes[1].plot(
+        axes[2].plot(
             x_values,
             [record["corrupted_prediction_error_rms"] for record in records],
             label=label,
             linewidth=1.8,
         )
-        axes[2].plot(
+        axes[3].plot(
             x_values,
             [record["corrupted_temporal_error_state_rms"] for record in records],
             label=label,
             linewidth=1.8,
         )
 
-    axes[0].set_ylabel("L_t feature MSE")
-    axes[1].set_ylabel("e_(t+1) RMS")
-    axes[2].set_ylabel("E_(t+1) RMS")
-    axes[2].set_xlabel("Absolute future raw frame index")
+    axes[0].axhline(0.0, color="black", linewidth=0.8, alpha=0.6)
+    axes[0].set_ylabel("signed delta L_t")
+    axes[1].set_ylabel("L_t feature MSE")
+    axes[2].set_ylabel("e_t RMS")
+    axes[3].set_ylabel("E_t RMS")
+    axes[3].set_xlabel("Absolute future raw frame index")
     for axis in axes:
         axis.grid(True, alpha=0.25)
         axis.legend(loc="best", fontsize=8)
-    figure.suptitle("Same-drive controlled corruption and recovery")
+    figure.suptitle(f"Same-drive controlled corruption: {trajectory_name}")
     figure.tight_layout()
     figure.savefig(output_path, dpi=160)
     plt.close(figure)
+
+
+def build_independent_trajectory_specs(
+    validation_raw_frame_count,
+    baseline_frames,
+    recovery_frames,
+    ramp_frames,
+    bias_rgb,
+    noise_std,
+    seed,
+):
+    disturbed_frames = (
+        int(validation_raw_frame_count) - int(baseline_frames) - int(recovery_frames)
+    )
+    if disturbed_frames <= 1:
+        raise ValueError(
+            "Validation segment is too short for baseline, disturbance, and recovery: "
+            f"raw_frames={validation_raw_frame_count}, baseline={baseline_frames}, "
+            f"recovery={recovery_frames}."
+        )
+    if not 1 < ramp_frames <= disturbed_frames:
+        raise ValueError(
+            f"ramp_frames must be in [2, {disturbed_frames}], got {ramp_frames}."
+        )
+
+    bias_config = ControlledCorruptionConfig(
+        corruption_type="bias",
+        bias_rgb=bias_rgb,
+        noise_std=0.0,
+        seed=seed,
+    )
+    noise_config = ControlledCorruptionConfig(
+        corruption_type="iid_gaussian",
+        bias_rgb=(0.0, 0.0, 0.0),
+        noise_std=noise_std,
+        seed=seed,
+    )
+    return {
+        "step_bias": {
+            "schedule": ControlledCorruptionSchedule(
+                trajectory="step_hold_recovery",
+                baseline_frames=baseline_frames,
+                transition_frames=1,
+                hold_frames=disturbed_frames - 1,
+                recovery_frames=recovery_frames,
+            ),
+            "corruption": bias_config,
+            "interpretation": "abrupt fixed RGB bias, hold, then clean recovery",
+        },
+        "ramp_bias": {
+            "schedule": ControlledCorruptionSchedule(
+                trajectory="ramp_hold_recovery",
+                baseline_frames=baseline_frames,
+                transition_frames=ramp_frames,
+                hold_frames=disturbed_frames - ramp_frames,
+                recovery_frames=recovery_frames,
+            ),
+            "corruption": bias_config,
+            "interpretation": "gradual fixed RGB bias, hold, then clean recovery",
+        },
+        "iid_noise": {
+            "schedule": ControlledCorruptionSchedule(
+                trajectory="iid_noise_recovery",
+                baseline_frames=baseline_frames,
+                transition_frames=0,
+                hold_frames=disturbed_frames,
+                recovery_frames=recovery_frames,
+            ),
+            "corruption": noise_config,
+            "interpretation": "absolute-frame deterministic i.i.d. Gaussian-noise negative control",
+        },
+    }
 
 
 def main():
@@ -436,27 +605,20 @@ def main():
     if gap_frames != 20:
         raise ValueError("Controlled evaluation requires exactly 20 raw gap frames.")
 
-    schedule = ControlledCorruptionSchedule(
-        baseline_frames=int(os.environ.get("PREDIFY_CORRUPTION_BASELINE_FRAMES", "6")),
-        step_frames=int(os.environ.get("PREDIFY_CORRUPTION_STEP_FRAMES", "3")),
-        ramp_frames=int(os.environ.get("PREDIFY_CORRUPTION_RAMP_FRAMES", "5")),
-        persistent_frames=int(
-            os.environ.get("PREDIFY_CORRUPTION_PERSISTENT_FRAMES", "7")
-        ),
-        recovery_frames=int(
-            os.environ.get("PREDIFY_CORRUPTION_RECOVERY_FRAMES", "9")
-        ),
-        step_level=float(os.environ.get("PREDIFY_CORRUPTION_STEP_LEVEL", "0.5")),
+    baseline_frames = int(
+        os.environ.get("PREDIFY_CORRUPTION_BASELINE_FRAMES", "10")
     )
-    corruption_config = ControlledCorruptionConfig(
-        bias_rgb=_parse_float_tuple(
-            os.environ.get("PREDIFY_CORRUPTION_BIAS_RGB", "0.15,-0.08,0.05"),
-            3,
-            "PREDIFY_CORRUPTION_BIAS_RGB",
-        ),
-        noise_std=float(os.environ.get("PREDIFY_CORRUPTION_NOISE_STD", "0.03")),
-        seed=int(os.environ.get("PREDIFY_CORRUPTION_SEED", "0")),
+    recovery_frames = int(
+        os.environ.get("PREDIFY_CORRUPTION_RECOVERY_FRAMES", "18")
     )
+    ramp_frames = int(os.environ.get("PREDIFY_CORRUPTION_RAMP_FRAMES", "8"))
+    bias_rgb = _parse_float_tuple(
+        os.environ.get("PREDIFY_CORRUPTION_BIAS_RGB", "0.15,-0.08,0.05"),
+        3,
+        "PREDIFY_CORRUPTION_BIAS_RGB",
+    )
+    noise_std = float(os.environ.get("PREDIFY_CORRUPTION_NOISE_STD", "0.03"))
+    corruption_seed = int(os.environ.get("PREDIFY_CORRUPTION_SEED", "0"))
     recovery_fraction = float(
         os.environ.get("PREDIFY_RECOVERY_THRESHOLD_FRACTION", "0.1")
     )
@@ -464,26 +626,23 @@ def main():
         os.environ.get("PREDIFY_RECOVERY_CONSECUTIVE_FRAMES", "3")
     )
 
-    corrupted_dataset = ControlledCorruptionKITTIDataset(
+    split_probe_dataset = ControlledCorruptionKITTIDataset(
         root,
         drive,
         camera=camera,
         horizons=(1,),
         fixed_dt_s=fixed_dt_s,
         dt_tolerance_s=dt_tolerance_s,
-        schedule=schedule,
-        corruption_config=corruption_config,
-        corruption_enabled=True,
+        corruption_enabled=False,
     )
-    _, corrupted_val, split_metadata = build_same_drive_train_val_subsets(
-        corrupted_dataset,
+    _, validation_subset, split_metadata = build_same_drive_train_val_subsets(
+        split_probe_dataset,
         train_fraction=train_fraction,
         val_fraction=val_fraction,
         gap_frames=gap_frames,
     )
     schedule_start = split_metadata["val_raw_frame_range"][0]
-    corrupted_dataset.schedule_start_raw_index = schedule_start
-    val_sample_indices = tuple(int(index) for index in corrupted_val.indices)
+    val_sample_indices = tuple(int(index) for index in validation_subset.indices)
     if val_sample_indices != tuple(
         range(val_sample_indices[0], val_sample_indices[-1] + 1)
     ):
@@ -492,28 +651,20 @@ def main():
             "validation stream."
         )
 
-    clean_dataset = ControlledCorruptionKITTIDataset(
-        root,
-        drive,
-        camera=camera,
-        horizons=(1,),
-        fixed_dt_s=fixed_dt_s,
-        dt_tolerance_s=dt_tolerance_s,
-        schedule=schedule,
-        corruption_config=corruption_config,
-        schedule_start_raw_index=schedule_start,
-        corruption_enabled=False,
-    )
     validation_raw_frame_count = (
         split_metadata["val_raw_frame_range"][1] - schedule_start + 1
     )
-    if schedule.total_frames != validation_raw_frame_count:
-        raise ValueError(
-            f"Corruption schedule has {schedule.total_frames} raw frames, but the "
-            f"20% validation range has {validation_raw_frame_count}; they must match."
-        )
+    trajectory_specs = build_independent_trajectory_specs(
+        validation_raw_frame_count=validation_raw_frame_count,
+        baseline_frames=baseline_frames,
+        recovery_frames=recovery_frames,
+        ramp_frames=ramp_frames,
+        bias_rgb=bias_rgb,
+        noise_std=noise_std,
+        seed=corruption_seed,
+    )
 
-    records_by_label = {}
+    records_by_trajectory = {name: {} for name in trajectory_specs}
     checkpoint_summaries = {}
     for label, checkpoint_path in checkpoint_specs:
         if not checkpoint_path.is_file():
@@ -526,42 +677,81 @@ def main():
             split_metadata=split_metadata,
         )
         model = _build_model(checkpoint, validation)
-        clean_records = _evaluate_stream(model, clean_dataset, val_sample_indices)
-        corrupted_records = _evaluate_stream(
-            model,
-            corrupted_dataset,
-            val_sample_indices,
-        )
-        merged_records = _merge_clean_and_corrupted(clean_records, corrupted_records)
-        recovery_metrics = compute_controlled_recovery_metrics(
-            merged_records,
-            sample_time_s=fixed_dt_s,
-            recovery_fraction=recovery_fraction,
-            recovery_consecutive_frames=recovery_consecutive_frames,
-        )
-        jsonl_path, csv_path = _write_frame_artifacts(
-            output_dir,
-            label,
-            merged_records,
-        )
-        records_by_label[label] = merged_records
         checkpoint_summaries[label] = {
             "checkpoint_path": str(checkpoint_path.resolve()),
             **validation,
-            "frame_jsonl": str(jsonl_path.resolve()),
-            "recovery_curve_csv": str(csv_path.resolve()),
-            "metrics": recovery_metrics,
-            "temporal_response": summarize_temporal_response(merged_records),
+            "predictor_input_weights": summarize_predictor_input_weights(model),
+            "trajectories": {},
         }
+        for trajectory_name, trajectory_spec in trajectory_specs.items():
+            print(f"  trajectory {trajectory_name}", flush=True)
+            schedule = trajectory_spec["schedule"]
+            corruption_config = trajectory_spec["corruption"]
+            clean_dataset = ControlledCorruptionKITTIDataset(
+                root,
+                drive,
+                camera=camera,
+                horizons=(1,),
+                fixed_dt_s=fixed_dt_s,
+                dt_tolerance_s=dt_tolerance_s,
+                schedule=schedule,
+                corruption_config=corruption_config,
+                schedule_start_raw_index=schedule_start,
+                corruption_enabled=False,
+            )
+            corrupted_dataset = ControlledCorruptionKITTIDataset(
+                root,
+                drive,
+                camera=camera,
+                horizons=(1,),
+                fixed_dt_s=fixed_dt_s,
+                dt_tolerance_s=dt_tolerance_s,
+                schedule=schedule,
+                corruption_config=corruption_config,
+                schedule_start_raw_index=schedule_start,
+                corruption_enabled=True,
+            )
+            clean_records = _evaluate_stream(model, clean_dataset, val_sample_indices)
+            corrupted_records = _evaluate_stream(
+                model,
+                corrupted_dataset,
+                val_sample_indices,
+            )
+            merged_records = _merge_clean_and_corrupted(
+                clean_records,
+                corrupted_records,
+            )
+            recovery_metrics = compute_controlled_recovery_metrics(
+                merged_records,
+                sample_time_s=fixed_dt_s,
+                recovery_fraction=recovery_fraction,
+                recovery_consecutive_frames=recovery_consecutive_frames,
+            )
+            artifact_label = f"{label}__{trajectory_name}"
+            jsonl_path, csv_path = _write_frame_artifacts(
+                output_dir,
+                artifact_label,
+                merged_records,
+            )
+            records_by_trajectory[trajectory_name][label] = merged_records
+            checkpoint_summaries[label]["trajectories"][trajectory_name] = {
+                "frame_jsonl": str(jsonl_path.resolve()),
+                "recovery_curve_csv": str(csv_path.resolve()),
+                "metrics": recovery_metrics,
+                "temporal_response": summarize_temporal_response(merged_records),
+            }
         del model
         del checkpoint
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    curve_path = output_dir / "controlled_corruption_recovery.png"
-    _plot_recovery_curves(curve_path, records_by_label)
+    curve_paths = {}
+    for trajectory_name, records_by_label in records_by_trajectory.items():
+        curve_path = output_dir / f"{trajectory_name}_recovery.png"
+        _plot_recovery_curves(curve_path, records_by_label, trajectory_name)
+        curve_paths[trajectory_name] = str(curve_path.resolve())
     summary = {
-        "experiment": "kitti_same_drive_controlled_corruption",
+        "experiment": "kitti_same_drive_independent_controlled_corruption",
         "git_revision": _resolve_git_revision(),
         "device": str(DEVICE),
         "kitti_root": str(Path(root).resolve()),
@@ -570,23 +760,37 @@ def main():
         "fixed_dt_s": fixed_dt_s,
         "fixed_dt_tolerance_s": dt_tolerance_s,
         "split": split_metadata,
-        "schedule": schedule.to_dict(),
-        "corruption": {
-            **corruption_config.to_dict(),
-            "injection_point": "after_resize_center_crop_before_imagenet_normalize",
-            "randomness_key": "sha256(seed,drive,camera,absolute_frame_name)",
+        "trajectory_reset_policy": "reset before every clean and corrupted trajectory",
+        "trajectories": {
+            name: {
+                "schedule": spec["schedule"].to_dict(),
+                "corruption": spec["corruption"].to_dict(),
+                "interpretation": spec["interpretation"],
+            }
+            for name, spec in trajectory_specs.items()
         },
+        "injection_point": "after_resize_center_crop_before_imagenet_normalize",
+        "randomness_key": "sha256(seed,drive,camera,absolute_frame_name)",
+        "paper_claim_ready": False,
+        "limitation": (
+            "same-drive mechanistic diagnostic on one short continuous validation segment; "
+            "not evidence of broad robustness or cross-drive generalization"
+        ),
         "metric_definitions": {
-            "peak_error": "maximum corrupted L_t feature MSE from disturbance onset through recovery",
+            "signed_excess": "delta L_t = corrupted feature MSE - paired clean feature MSE",
+            "peak_error_secondary": "maximum raw corrupted L_t from disturbance through recovery",
             "recovery_time": (
-                "frames after recovery onset until excess MSE remains below baseline plus "
-                f"{recovery_fraction:.3f} of peak excursion for "
+                "frames after recovery onset until signed excess remains within "
+                f"{recovery_fraction:.3f} of the peak absolute excursion from baseline for "
                 f"{recovery_consecutive_frames} consecutive frames"
             ),
-            "auec": "sum of per-frame feature MSE times fixed_dt_s",
-            "excess_auec": "sum max(corrupted MSE - paired clean MSE, 0) times fixed_dt_s",
+            "signed_excess_auec": "sum signed delta L_t times fixed_dt_s",
+            "absolute_excess_auec": "sum abs(delta L_t) times fixed_dt_s",
+            "positive_excess_auec": "sum max(delta L_t, 0) times fixed_dt_s",
+            "state_scale": "per-frame RMS(F_t) and RMS(previous completed E_t)",
+            "state_utilization": "P(F_t,E_t)-P(F_t,0) on the same frame and checkpoint",
         },
-        "recovery_curve_png": str(curve_path.resolve()),
+        "recovery_curve_pngs": curve_paths,
         "checkpoints": checkpoint_summaries,
     }
     with summary_path.open("w") as handle:

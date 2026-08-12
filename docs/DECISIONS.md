@@ -24,9 +24,9 @@ Status: accepted
 
 Future-feature history now gets a separate top-layer Temporal Prediction Error
 state. It is not the Target Flow residual. The strict prediction error is
-`e_(t+1)^5 = F_(t+1)^5 - Fhat_(t+1|t)^5`, computed only after the current
-prediction is made and the next-frame top feature is observed. The carried
-state is `E_(t+1)^5 = alpha_e e_(t+1)^5 + (1 - K_e alpha_e) E_t^5`.
+`e_t^5 = F_t^5 - Fhat_(t|t-1)^5`, computed only after the prediction made at
+`t-1` and the frame-`t` top feature are both available. The carried state is
+`E_t^5 = alpha_e e_t^5 + (1 - K_e alpha_e) E_(t-1)^5`.
 
 The first implementation tests only the top layer because the active task is
 `F_t^5 -> F_(t+1)^5`. It adds a distinct `temporal_error` history mode for the
@@ -307,9 +307,9 @@ a different training regime.
 
 Status: accepted
 
-The implemented quantities are the instantaneous target error
-`e_t = F_t - T_t` and the dynamic state
-`epsilon_t = (Ts/tau)e_t + (1 - K Ts/tau)epsilon_(t-1)`. There is no separate
+The implemented Target Flow quantity is the residual
+`r_t = F_t - T_t` and its dynamic state
+`epsilon_t = (Ts_r/tau_r)r_t + (1 - K_r Ts_r/tau_r)epsilon_(t-1)`. There is no separate
 `d_t` term. Every layer must satisfy `abs(1 - K Ts/tau) < 1`; invalid or
 non-finite parameters fail during model construction rather than allowing an
 unstable recurrence to run.
@@ -408,8 +408,10 @@ planned. Additional seeds are not used to rescue a failed primary comparison.
 
 Status: accepted
 
-Controlled step, ramp, persistent-bias, and recovery phases live in a separate
-evaluation module. Training remains clean and unchanged except for an explicit
+Controlled step-bias, ramp-bias, and i.i.d.-noise trajectories live in a
+separate evaluation module. They are independent experiments, not phases of
+one composite trajectory, and model state resets before every clean and
+corrupted stream. Training remains clean and unchanged except for an explicit
 same-drive split option. The split is defined over raw frame positions: the
 first 60% is training data, the next 20 raw frames form a gap, and the next
 contiguous 20% is validation. Samples are included only if every raw frame they
@@ -417,18 +419,25 @@ read lies inside one region, and train/validation raw-frame sets must be
 disjoint.
 
 Corruption is applied after resize and center crop in unnormalized `[0,1]` RGB
-space, before ImageNet normalization. Any stochastic component is keyed by
-experiment seed, drive, camera, and absolute frame name. Re-reading an
-absolute frame as a future image and then as the next current image must return
-the identical corrupted tensor.
+space, before ImageNet normalization. Persistent systematic bias contains only
+fixed RGB bias. Per-frame Gaussian noise is a separate negative control with no
+bias. Its deterministic realization is keyed by experiment seed, drive,
+camera, and absolute frame name, so re-reading an absolute frame as a future
+image and then as the next current image returns the identical tensor.
 
 Evaluation runs clean and corrupted counterfactual streams in frame order and
 saves each frame's strict prediction error `e`, accumulated Temporal Error
-state `E`, and feature MSE `L`. Primary transient metrics are Peak Error,
-Recovery Time, AUEC, and clean-adjusted excess AUEC. Recovery is censored when
-the curve does not remain within its configured threshold for the required
-consecutive frames. These results test controlled within-drive response only;
-they are not evidence of cross-drive generalization.
+state `E`, feature MSE `L`, and signed
+`delta L=L_corrupted-L_clean`. Signed excess and its signed/absolute integrals
+are primary; negative values are retained to expose improvement, overshoot, or
+state overcompensation. Positive-part excess, raw Peak Error, and raw AUEC are
+secondary. Recovery is censored when signed excess does not remain within its
+configured absolute threshold for the required consecutive frames. The
+evaluator also reports `RMS(F_t)`, `RMS(E_t)`, predictor input-weight scale, and
+`P(F_t,E_t)-P(F_t,0)` to distinguish an ignored or very small state from a
+normally scaled but uninformative state. These results test controlled
+within-drive response only; they are not evidence of cross-drive
+generalization.
 
 ## 2026-08-12: Limit the first Temporal Error matrix to three groups
 

@@ -33,7 +33,7 @@ COMMON_ENV=(
     "PREDIFY_TASK=future_feature"
     "PREDIFY_FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE=1"
     "PREDIFY_KITTI_ROOT=/home/lin/predify/kitti_raw"
-    "PREDIFY_KITTI_DRIVE=2011_09_26/2011_09_26_drive_0005_sync"
+    "PREDIFY_KITTI_DRIVE=2011_09_26/2011_09_26_drive_0011_sync"
     "PREDIFY_TRAIN_DRIVES="
     "PREDIFY_VAL_DRIVES="
     "PREDIFY_FORMAL_SPLIT=0"
@@ -108,10 +108,10 @@ run_training_group() {
         2>&1 | tee "${prefix}.log"
 }
 
-printf 'git_revision=%s\noutput_root=%s\ndrive=%s\ngroups=copy_current current_only temporal_error\ntrain_fraction=0.6\nminimum_gap_frames=20\nval_fraction=0.2\n' \
+printf 'git_revision=%s\noutput_root=%s\ndrive=%s\ngroups=copy_current current_only temporal_error\ntrajectories=step_bias ramp_bias iid_noise\ntrajectory_reset=1\ntrain_fraction=0.6\nminimum_gap_frames=20\nval_fraction=0.2\n' \
     "$GIT_REVISION" \
     "$OUTPUT_ROOT" \
-    "2011_09_26/2011_09_26_drive_0005_sync" > "$OUTPUT_ROOT/manifest.txt"
+    "2011_09_26/2011_09_26_drive_0011_sync" > "$OUTPUT_ROOT/manifest.txt"
 
 run_training_group copy_current copy_current
 run_training_group current_only none
@@ -124,12 +124,9 @@ env -i \
     "${COMMON_ENV[@]}" \
     "PREDIFY_CONTROLLED_CHECKPOINTS=$CHECKPOINTS" \
     "PREDIFY_CONTROLLED_OUTPUT_DIR=$CONTROLLED_DIR" \
-    "PREDIFY_CORRUPTION_BASELINE_FRAMES=6" \
-    "PREDIFY_CORRUPTION_STEP_FRAMES=3" \
-    "PREDIFY_CORRUPTION_RAMP_FRAMES=5" \
-    "PREDIFY_CORRUPTION_PERSISTENT_FRAMES=7" \
-    "PREDIFY_CORRUPTION_RECOVERY_FRAMES=9" \
-    "PREDIFY_CORRUPTION_STEP_LEVEL=0.5" \
+    "PREDIFY_CORRUPTION_BASELINE_FRAMES=10" \
+    "PREDIFY_CORRUPTION_RAMP_FRAMES=8" \
+    "PREDIFY_CORRUPTION_RECOVERY_FRAMES=18" \
     "PREDIFY_CORRUPTION_BIAS_RGB=0.15,-0.08,0.05" \
     "PREDIFY_CORRUPTION_NOISE_STD=0.03" \
     "PREDIFY_CORRUPTION_SEED=0" \

@@ -49,10 +49,9 @@ but are excluded from this first formal matrix and from the runner's accepted
 groups.
 
 Temporal error is a separate top-layer state. It uses the strict future-feature
-prediction error
-`e_(t+1)^5 = F_(t+1)^5 - Fhat_(t+1|t)^5`, then stores
-`E_(t+1)^5 = alpha_e e_(t+1)^5 + (1-K_e alpha_e)E_t^5` for the next
-transition. In the first version `alpha_e=0.207`, controlled by
+prediction error `e_t^5 = F_t^5 - Fhat_(t|t-1)^5`, then stores
+`E_t^5 = alpha_e e_t^5 + (1-K_e alpha_e)E_(t-1)^5` for the next transition. In
+the first version `alpha_e=0.207`, controlled by
 `PREDIFY_TEMPORAL_ERROR_TS=0.1035`, `PREDIFY_TEMPORAL_ERROR_TAU=0.5`, and
 `PREDIFY_TEMPORAL_ERROR_GAIN=1.0`. This is not the Target Flow residual and
 does not change the meaning of `recursive`.
@@ -127,8 +126,10 @@ Validation reports:
 - The same three metrics for copy-current.
 - Maximum future/delta MSE equivalence error.
 
-The signed diagnostic is
-`prediction_error_top = F_next - Fhat_(t+1|t)`, matching the project theory.
+The signed diagnostic is the Temporal Prediction Error
+`e_t = F_t - Fhat_(t|t-1)`. In the implementation of transition `t -> t+1`,
+this is stored as
+`prediction_error_top = F_next - Fhat_(t+1|t)` after the prediction is made.
 MSE is sign invariant, but this stored tensor must retain the documented sign.
 
 Best checkpoints are selected by validation feature MSE.
@@ -154,9 +155,12 @@ val:   next contiguous 20% of raw frames
 
 Every pair is admitted only when all raw frames it reads lie inside its split.
 The implementation collects every raw frame index used by train and validation
-and fails unless the sets are disjoint. For drive 0005 this produces raw train
-frames 0--91, gap frames 92--111, and raw validation frames 112--141; the
-remaining tail is unused.
+and fails unless the sets are disjoint. The current runner uses the longer
+drive 0011: raw train frames 0--138, gap frames 139--158, and raw validation
+frames 159--204, giving 45 evaluated transitions. The remaining tail is
+unused. This is longer than the old 29-transition drive-0005 diagnostic but is
+still explicitly classified as a short mechanistic trace, not a paper-scale
+adaptation curve.
 
 Corruption is applied after the existing resize and center crop in the
 unnormalized `[0,1]` RGB pixel domain, then ImageNet normalization is applied.
@@ -165,21 +169,42 @@ absolute frame used first as `future` and then as the next sample's `current`
 is exactly the same corrupted tensor. The script never calls
 `torch.randn_like(image)` without an absolute-frame seed.
 
-The validation trajectory contains baseline, step change, ramp change,
-persistent bias, and recovery phases. Evaluation runs paired clean and
-corrupted counterfactual streams and saves one JSONL row per frame, a recovery
-curve CSV, and a PNG with:
+Step, ramp, and random noise are not concatenated. The evaluator runs three
+independent trajectories, resetting model state before every clean and
+corrupted stream:
 
-- strict Temporal Prediction Error magnitude `e_(t+1)`;
-- accumulated Temporal Error state magnitude `E_(t+1)`;
+```text
+step_bias: baseline -> abrupt fixed RGB bias -> hold -> recovery
+ramp_bias: baseline -> gradual fixed RGB bias -> hold -> recovery
+iid_noise: baseline -> per-frame i.i.d. Gaussian noise -> recovery
+```
+
+Because phases are assigned by the absolute future frame, the 45 transitions
+contain 9 baseline transitions. Step-bias then has 1 step, 17 hold, and 18
+recovery transitions; ramp-bias has 8 ramp, 10 hold, and 18 recovery
+transitions; i.i.d. noise has 18 disturbed and 18 recovery transitions.
+
+The bias trajectories contain no Gaussian noise. The i.i.d. noise trajectory
+contains no RGB bias and acts as a negative control for an unpredictable
+disturbance. Evaluation saves one JSONL row per frame and one recovery CSV per
+checkpoint and trajectory, plus a PNG per trajectory with:
+
+- strict Temporal Prediction Error magnitude `e_t`;
+- accumulated Temporal Error state magnitude `E_t`;
 - prediction loss `L_t` as stage-5 feature MSE;
-- Peak Error, Recovery Time, AUEC, and clean-adjusted excess AUEC.
+- signed `delta L_t = L_t(corrupted)-L_t(clean)` as the primary curve;
+- signed, absolute, and positive-part excess AUEC;
+- secondary raw Peak Error and raw AUEC;
+- `RMS(F_t)`, `RMS(E_t)`, predictor input-weight scale, and the activation
+  contribution `P(F_t,E_t)-P(F_t,0)`.
 
-Recovery Time is measured after corruption returns to zero: excess MSE must
-remain below baseline plus 10% of the peak excursion for three consecutive
+Signed excess is never clipped, so negative values expose temporary
+improvement, overshoot, or overcompensation. The positive-part integral is
+retained only as an auxiliary metric. Recovery Time is measured after
+corruption returns to zero: signed excess must remain within 10% of the peak
+absolute excursion from its paired-clean baseline for three consecutive
 frames. Unrecovered streams are marked censored rather than assigned a fake
-finite recovery time. AUEC integrates the full disturbance-and-recovery curve
-using the fixed sample interval.
+finite recovery time.
 
 The evaluator accepts only checkpoints that record the matching same-drive
 split. Existing cross-drive checkpoints are intentionally rejected: this

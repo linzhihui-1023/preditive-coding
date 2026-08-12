@@ -12,9 +12,13 @@ from predify2021.mce_scores.kitti_controlled_corruption import (
     ControlledCorruptionConfig,
     ControlledCorruptionKITTIDataset,
     ControlledCorruptionSchedule,
+    apply_controlled_corruption,
     compute_controlled_recovery_metrics,
 )
 from predify2021.mce_scores.evaluate_kitti_same_drive_controlled_corruption import (
+    build_independent_trajectory_specs,
+    compute_history_utilization,
+    summarize_predictor_input_weights,
     validate_controlled_checkpoint,
 )
 from predify2021.mce_scores.kitti_pairs import (
@@ -71,12 +75,11 @@ class SameDriveRawFrameSplitTest(unittest.TestCase):
 class ControlledCorruptionDatasetTest(unittest.TestCase):
     def _schedule(self):
         return ControlledCorruptionSchedule(
+            trajectory="step_hold_recovery",
             baseline_frames=0,
-            step_frames=1,
-            ramp_frames=1,
-            persistent_frames=2,
+            transition_frames=1,
+            hold_frames=3,
             recovery_frames=1,
-            step_level=1.0,
         )
 
     def test_same_absolute_frame_is_identical_as_future_then_current(self):
@@ -88,7 +91,8 @@ class ControlledCorruptionDatasetTest(unittest.TestCase):
                 drive,
                 schedule=self._schedule(),
                 corruption_config=ControlledCorruptionConfig(
-                    bias_rgb=(0.05, -0.02, 0.01),
+                    corruption_type="iid_gaussian",
+                    bias_rgb=(0.0, 0.0, 0.0),
                     noise_std=0.08,
                     seed=17,
                 ),
@@ -144,7 +148,7 @@ class ControlledCorruptionDatasetTest(unittest.TestCase):
             self.assertTrue(torch.equal(standard_current, controlled_current))
             self.assertTrue(torch.equal(standard_future, controlled_future[0]))
 
-    def test_schedule_has_step_ramp_persistent_and_recovery_phases(self):
+    def test_step_schedule_has_independent_step_hold_and_recovery_phases(self):
         schedule = self._schedule()
         phases = [schedule.phase_and_severity(index)[0] for index in range(5)]
         severities = [schedule.phase_and_severity(index)[1] for index in range(5)]
@@ -153,13 +157,60 @@ class ControlledCorruptionDatasetTest(unittest.TestCase):
             phases,
             [
                 "step_change",
-                "ramp_change",
+                "persistent_bias",
                 "persistent_bias",
                 "persistent_bias",
                 "recovery",
             ],
         )
         self.assertEqual(severities, [1.0, 1.0, 1.0, 1.0, 0.0])
+
+    def test_bias_and_iid_noise_are_separate_corruption_types(self):
+        image = torch.full((3, 8, 8), 0.5)
+        bias_config = ControlledCorruptionConfig(
+            corruption_type="bias",
+            bias_rgb=(0.1, 0.0, 0.0),
+            noise_std=0.0,
+        )
+        noise_config = ControlledCorruptionConfig(
+            corruption_type="iid_gaussian",
+            bias_rgb=(0.0, 0.0, 0.0),
+            noise_std=0.1,
+            seed=3,
+        )
+
+        biased = apply_controlled_corruption(
+            image, 1.0, bias_config, "drive", "image_02", "000.png"
+        )
+        noisy = apply_controlled_corruption(
+            image, 1.0, noise_config, "drive", "image_02", "000.png"
+        )
+
+        self.assertTrue(torch.allclose(biased[0], torch.full((8, 8), 0.6)))
+        self.assertTrue(torch.equal(biased[1:], image[1:]))
+        self.assertFalse(torch.equal(noisy, biased))
+
+    def test_independent_trajectory_specs_each_fill_validation_segment(self):
+        specs = build_independent_trajectory_specs(
+            validation_raw_frame_count=46,
+            baseline_frames=10,
+            recovery_frames=18,
+            ramp_frames=8,
+            bias_rgb=(0.15, -0.08, 0.05),
+            noise_std=0.03,
+            seed=0,
+        )
+
+        self.assertEqual(set(specs), {"step_bias", "ramp_bias", "iid_noise"})
+        self.assertTrue(
+            all(spec["schedule"].total_frames == 46 for spec in specs.values())
+        )
+        self.assertEqual(specs["step_bias"]["corruption"].corruption_type, "bias")
+        self.assertEqual(specs["ramp_bias"]["corruption"].noise_std, 0.0)
+        self.assertEqual(
+            specs["iid_noise"]["corruption"].corruption_type,
+            "iid_gaussian",
+        )
 
 
 class ControlledRecoveryMetricTest(unittest.TestCase):
@@ -192,10 +243,72 @@ class ControlledRecoveryMetricTest(unittest.TestCase):
         )
 
         self.assertEqual(metrics["peak_error_mse"], 5.0)
-        self.assertEqual(metrics["peak_excess_mse"], 4.0)
+        self.assertEqual(metrics["peak_signed_excess_mse"], 4.0)
         self.assertEqual(metrics["recovery_time_frames"], 1)
         self.assertAlmostEqual(metrics["recovery_time_s"], 0.1)
-        self.assertAlmostEqual(metrics["excess_auec_mse_seconds"], 0.925)
+        self.assertAlmostEqual(metrics["signed_excess_auec_mse_seconds"], 0.925)
+        self.assertAlmostEqual(metrics["positive_excess_auec_mse_seconds"], 0.925)
+
+    def test_signed_excess_preserves_negative_overcompensation(self):
+        phases = ("baseline", "step_change", "recovery", "recovery")
+        corrupted = (1.0, 2.0, 0.8, 1.0)
+        records = [
+            {
+                "future_phase": phase,
+                "future_raw_frame_index": index,
+                "clean_feature_mse": 1.0,
+                "corrupted_feature_mse": value,
+            }
+            for index, (phase, value) in enumerate(zip(phases, corrupted))
+        ]
+
+        metrics = compute_controlled_recovery_metrics(
+            records,
+            sample_time_s=0.1,
+            recovery_fraction=0.25,
+            recovery_consecutive_frames=1,
+        )
+
+        self.assertAlmostEqual(records[2]["signed_excess_feature_mse"], -0.2)
+        self.assertAlmostEqual(records[2]["positive_excess_feature_mse"], 0.0)
+        self.assertAlmostEqual(metrics["minimum_signed_excess_mse"], -0.2)
+
+
+class HistoryUtilizationDiagnosticTest(unittest.TestCase):
+    def test_reports_state_scale_and_counterfactual_history_contribution(self):
+        model = torch.nn.Module()
+        model.future_feature_history_mode = "temporal_error"
+        model.future_feature_predictor = torch.nn.Sequential(
+            torch.nn.Conv2d(4, 2, kernel_size=1, bias=False)
+        )
+        with torch.no_grad():
+            model.future_feature_predictor[0].weight.zero_()
+            model.future_feature_predictor[0].weight[0, 2, 0, 0] = 1.0
+            model.future_feature_predictor[0].weight[1, 3, 0, 0] = 1.0
+
+        current = torch.ones(1, 2, 2, 2)
+        history = torch.full_like(current, 0.25)
+        predicted_delta = model.future_feature_predictor(
+            torch.cat([current, history], dim=1)
+        )
+        outputs = {
+            "current_top": current,
+            "history_top": history,
+            "predicted_delta_top": predicted_delta,
+            "future_top_target": current + predicted_delta,
+        }
+
+        utilization = compute_history_utilization(model, outputs)
+        weights = summarize_predictor_input_weights(model)
+
+        self.assertTrue(utilization["history_utilization_applicable"])
+        self.assertAlmostEqual(utilization["current_feature_rms"], 1.0)
+        self.assertAlmostEqual(utilization["history_input_rms"], 0.25)
+        self.assertAlmostEqual(utilization["history_contribution_rms"], 0.25)
+        self.assertAlmostEqual(utilization["zero_history_feature_mse"], 0.0625)
+        self.assertAlmostEqual(utilization["history_feature_mse_change"], -0.0625)
+        self.assertGreater(weights["history_input_weight_rms"], 0.0)
+        self.assertEqual(weights["feature_input_weight_rms"], 0.0)
 
 
 class ControlledCheckpointValidationTest(unittest.TestCase):

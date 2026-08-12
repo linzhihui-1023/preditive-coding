@@ -14,8 +14,8 @@ VGG16 backbone, recursive Target Flow, the 1x1 future-feature predictor, seed
 condition used only the previous completed top-layer state:
 
 ```text
-e_(t+1)^5 = F_(t+1)^5 - Fhat_(t+1|t)^5
-E_(t+1)^5 = 0.207 e_(t+1)^5 + 0.793 E_t^5
+e_t^5 = F_t^5 - Fhat_(t|t-1)^5
+E_t^5 = 0.207 e_t^5 + 0.793 E_(t-1)^5
 Fhat_(t+1|t)^5 = F_t^5 + P(F_t^5, E_t^5)
 ```
 
@@ -74,13 +74,19 @@ Date: 2026-08-12
 
 Status: implementation and tests complete; no numerical result recorded.
 
-The new protocol trains clean Copy-current, Current-only, and Temporal Error
-checkpoints on drive 0005 using raw frames 0--91 for training, frames 92--111
-as a 20-frame gap, and frames 112--141 as the contiguous validation region.
+The revised protocol trains clean Copy-current, Current-only, and Temporal
+Error checkpoints on the longer drive 0011 using raw frames 0--138 for
+training, frames 139--158 as a 20-frame gap, and frames 159--204 as the
+contiguous validation region. This gives 45 evaluated transitions rather than
+the old 29-transition drive-0005 draft, but remains a short mechanistic trace.
+
 Corruption is applied only by the independent evaluator after resize/crop and
-before normalization. Paired clean/corrupted streams save per-frame strict
-prediction error, Temporal Error state, feature MSE, Peak Error, Recovery Time,
-AUEC, and excess AUEC.
+before normalization. Step-bias, ramp-bias, and i.i.d.-noise negative-control
+trajectories are run independently with a full reset before every clean and
+corrupted stream. Fixed RGB bias contains no noise, and i.i.d. noise contains
+no bias. Paired streams save per-frame strict prediction error, Temporal Error
+state, feature MSE, signed `delta L`, signed/absolute/positive excess AUEC,
+Recovery Time, and state-scale/utilization diagnostics.
 
 The canonical entry point is:
 

@@ -1419,16 +1419,16 @@ def main():
             "error_time_constant": ERROR_TIME_CONSTANT,
             "error_gain": ERROR_GAIN,
             "dynamic_error_definition": (
-                "e_t=F_t-T_t; epsilon_t=(Ts/tau)*e_t+"
-                "(1-K*Ts/tau)*epsilon_(t-1); no independent d_t"
+                "r_t=F_t-T_t; epsilon_t=(Ts_r/tau_r)*r_t+"
+                "(1-K_r*Ts_r/tau_r)*epsilon_(t-1); no independent d_t"
             ),
             "temporal_error_sample_time": TEMPORAL_ERROR_SAMPLE_TIME,
             "temporal_error_time_constant": TEMPORAL_ERROR_TIME_CONSTANT,
             "temporal_error_gain": TEMPORAL_ERROR_GAIN,
             "temporal_error_definition": (
-                "e_(t+1)=F_(t+1)-Fhat_(t+1|t); "
-                "E_(t+1)=(Ts_e/tau_e)*e_(t+1)+"
-                "(1-K_e*Ts_e/tau_e)*E_t"
+                "e_t=F_t-Fhat_(t|t-1); "
+                "E_t=(Ts_e/tau_e)*e_t+"
+                "(1-K_e*Ts_e/tau_e)*E_(t-1)"
             ),
             "pretrained": USE_PRETRAINED,
             "train_backbone": TRAIN_BACKBONE,

@@ -101,28 +101,29 @@ def run_backward_target_flow(
 
 
 def build_targetflow_instant_error(target_output: torch.Tensor, forward_output: torch.Tensor):
+    """Return the instantaneous Target Flow residual r_t = F_t - T_t."""
     if target_output is None or forward_output is None:
         return None
     return forward_output - target_output
 
 
 def build_dynamic_targetflow_error(
-    instant_error: Optional[torch.Tensor],
+    targetflow_residual: Optional[torch.Tensor],
     previous_error: Optional[torch.Tensor],
     sample_time,
     time_constant,
     error_gain,
 ):
-    """Update epsilon_t = alpha*e_t + (1-K*alpha)*epsilon_(t-1)."""
-    if instant_error is None:
+    """Update epsilon_t = alpha*r_t + (1-K*alpha)*epsilon_(t-1)."""
+    if targetflow_residual is None:
         return None
 
     if previous_error is None:
-        previous_error = torch.zeros_like(instant_error)
+        previous_error = torch.zeros_like(targetflow_residual)
 
-    sample_time_tensor = instant_error.new_tensor(float(sample_time))
-    time_constant_tensor = instant_error.new_tensor(float(time_constant))
-    error_gain_tensor = instant_error.new_tensor(float(error_gain))
+    sample_time_tensor = targetflow_residual.new_tensor(float(sample_time))
+    time_constant_tensor = targetflow_residual.new_tensor(float(time_constant))
+    error_gain_tensor = targetflow_residual.new_tensor(float(error_gain))
 
     if not torch.isfinite(sample_time_tensor) or sample_time_tensor <= 0:
         raise ValueError(f"sample_time must be positive, but got {float(sample_time_tensor.item())}.")
@@ -139,7 +140,7 @@ def build_dynamic_targetflow_error(
             "abs(1 - error_gain * sample_time / time_constant) < 1, but got "
             f"memory_factor={float(memory_factor.item())}."
         )
-    return integration_factor * instant_error + memory_factor * previous_error
+    return integration_factor * targetflow_residual + memory_factor * previous_error
 
 
 def build_temporal_prediction_error_state(
@@ -149,7 +150,7 @@ def build_temporal_prediction_error_state(
     time_constant,
     error_gain,
 ):
-    """Update E_(t+1) = alpha*e_(t+1) + (1-K*alpha)*E_t."""
+    """Update E_t = alpha*e_t + (1-K*alpha)*E_(t-1)."""
     if prediction_error is None:
         return None
 
@@ -199,13 +200,13 @@ def build_targetflow_error(
     mode: Optional[str] = None,
     previous_instant_error: Optional[torch.Tensor] = None,
 ):
-    """Build an instant, recursive-EMA, or two-tap finite error state."""
-    instant_error = build_targetflow_instant_error(target_output, forward_output)
-    if instant_error is None:
+    """Build an instant, recursive-EMA, or two-tap Target Flow residual state."""
+    targetflow_residual = build_targetflow_instant_error(target_output, forward_output)
+    if targetflow_residual is None:
         return None
     resolved_mode = mode or ("ema" if dynamic else "instant")
     if resolved_mode == "instant":
-        return instant_error
+        return targetflow_residual
     if resolved_mode == "ema":
         memory_error = previous_error
     elif resolved_mode in {"lag1", "two_tap"}:
@@ -214,7 +215,7 @@ def build_targetflow_error(
         raise ValueError(f"Unsupported target-flow error state mode: {resolved_mode}")
 
     return build_dynamic_targetflow_error(
-        instant_error,
+        targetflow_residual,
         memory_error,
         sample_time=sample_time,
         time_constant=time_constant,

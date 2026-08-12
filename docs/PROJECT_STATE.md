@@ -71,8 +71,8 @@ next transition.
     independently of the configured local-loss error state.
   - Adds an independent top-layer Temporal Prediction Error state for the
     future-feature task:
-    `e_(t+1)^5 = F_(t+1)^5 - Fhat_(t+1|t)^5` and
-    `E_(t+1)^5 = alpha_e e_(t+1)^5 + (1-K_e alpha_e)E_t^5`.
+    `e_t^5 = F_t^5 - Fhat_(t|t-1)^5` and
+    `E_t^5 = alpha_e e_t^5 + (1-K_e alpha_e)E_(t-1)^5`.
     The predictor can select this state through
     `PREDIFY_FEATURE_HISTORY_MODE=temporal_error`; the older `recursive` mode
     remains Target Flow residual memory.
@@ -145,11 +145,17 @@ next transition.
 - `predify2021/mce_scores/kitti_controlled_corruption.py`
   - Applies deterministic absolute-frame corruption after resize/crop in RGB
     pixel space and before ImageNet normalization.
-  - Defines baseline, step, ramp, persistent-bias, and recovery phases and
-    computes Peak Error, Recovery Time, AUEC, and excess AUEC.
+  - Keeps fixed RGB bias and per-frame i.i.d. Gaussian noise as separate
+    corruption types.
+  - Defines independent step-bias, ramp-bias, and noise-negative-control
+    trajectories and computes signed, absolute, and positive-part excess
+    integrals plus recovery metrics.
 - `predify2021/mce_scores/evaluate_kitti_same_drive_controlled_corruption.py`
-  - Runs paired clean/corrupted streams and saves per-frame `e`, `E`, and `L`
-    traces as JSONL/CSV plus a recovery-curve PNG.
+  - Resets before every paired clean/corrupted trajectory and saves per-frame
+    `e`, `E`, `L`, and signed `delta L` traces as JSONL/CSV plus one recovery
+    PNG per trajectory.
+  - Reports `RMS(F_t)`, `RMS(E_t)`, predictor input-weight scale, and the
+    counterfactual history contribution `P(F_t,E_t)-P(F_t,0)`.
   - Rejects cross-drive or mismatched checkpoints through saved split and
     architecture checks.
 - `scripts/run_kitti_seed0_same_drive_controlled_corruption.sh`
@@ -353,9 +359,9 @@ must be rerun after the causal-context and positive-loss-weight correction.
 1. Run the ready same-drive controlled-corruption protocol only as a
    mechanistic transient-response test, keeping its claims separate from
    cross-drive generalization.
-2. Inspect the saved per-frame `e`, `E`, and `L` traces for step, ramp,
-   persistent-bias, and recovery phases; report Peak Error, Recovery Time,
-   AUEC, and excess AUEC rather than only mean MSE.
+2. Inspect the independent step-bias, ramp-bias, and i.i.d.-noise traces for
+   per-frame `e`, `E`, `L`, and signed `delta L`; prioritize signed/absolute
+   excess integrals and Recovery Time over raw Peak Error or raw AUEC.
 3. Improve cross-drive predictor generalization through broader training data
    or a controlled capacity/regularization study, then require Current-only to
    beat Copy-current before interpreting inherited-state value.
@@ -395,10 +401,13 @@ For the current complete training drive, horizon-1 normalization is based on
 153 samples: forward mean/std `0.466140/0.107030 m`, yaw mean/std
 `-0.001483/0.016870 rad`. Validation data is not used for these statistics.
 
-Dynamic error uses `e_t=F_t-T_t` and
-`epsilon_t=(Ts/tau)e_t+(1-K*Ts/tau)epsilon_(t-1)`. There is no independent
-`d_t` term. Configurations must satisfy
-`abs(1-K*Ts/tau)<1`; the current `Ts=0.1035, tau=0.5, K=1` gives 0.793.
+Target Flow uses residual `r_t=F_t-T_t` and
+`epsilon_t=(Ts_r/tau_r)r_t+(1-K_r*Ts_r/tau_r)epsilon_(t-1)`. Temporal
+Prediction Error is separate: `e_t=F_t-Fhat_(t|t-1)` and
+`E_t=(Ts_e/tau_e)e_t+(1-K_e*Ts_e/tau_e)E_(t-1)`. There is no independent
+`d_t` term. Each recurrence must satisfy its own stability condition; the
+current `Ts=0.1035, tau=0.5, K=1` gives memory coefficient 0.793 for both, but
+their parameter families and physical meanings remain independent.
 
 ## Repository policy
 
