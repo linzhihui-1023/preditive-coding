@@ -19,6 +19,7 @@ from .kitti_pairs import (
     KITTIEgoMotionMultiHorizonDataset,
     KITTIMultiHorizonFrameDataset,
     ShuffledFuturePairDataset,
+    build_same_drive_train_val_subsets,
     build_kitti_ego_motion_multi_horizon_dataset,
     build_kitti_multi_horizon_dataset,
     collect_time_filter_stats,
@@ -31,6 +32,10 @@ KITTI_DRIVE = os.environ.get("PREDIFY_KITTI_DRIVE", "2011_09_26/2011_09_26_drive
 TRAIN_DRIVES_ENV = os.environ.get("PREDIFY_TRAIN_DRIVES", "")
 VAL_DRIVES_ENV = os.environ.get("PREDIFY_VAL_DRIVES", "")
 FORMAL_SPLIT = os.environ.get("PREDIFY_FORMAL_SPLIT", "0") == "1"
+SAME_DRIVE_SPLIT = os.environ.get("PREDIFY_SAME_DRIVE_SPLIT", "0") == "1"
+SAME_DRIVE_GAP_FRAMES = int(
+    os.environ.get("PREDIFY_SAME_DRIVE_GAP_FRAMES", "20")
+)
 KITTI_CAMERA = os.environ.get("PREDIFY_KITTI_CAMERA", "image_02")
 MAX_PAIRS = int(os.environ.get("PREDIFY_MAX_PAIRS", "0"))
 MAX_TRAIN_PAIRS = int(os.environ.get("PREDIFY_MAX_TRAIN_PAIRS", str(MAX_PAIRS)))
@@ -42,6 +47,7 @@ LEARNING_RATE = float(os.environ.get("PREDIFY_LR", "1e-4"))
 WEIGHT_DECAY = float(os.environ.get("PREDIFY_WEIGHT_DECAY", "0.0"))
 EMA_DECAY = float(os.environ.get("PREDIFY_EMA_DECAY", "0.99"))
 TRAIN_FRACTION = float(os.environ.get("PREDIFY_TRAIN_FRACTION", "0.8"))
+VAL_FRACTION = float(os.environ.get("PREDIFY_VAL_FRACTION", "0.2"))
 TARGET_FLOW_MODE = os.environ.get("PREDIFY_TARGET_FLOW_MODE", "recursive")
 TOP_TARGET_SOURCE = os.environ.get("PREDIFY_TOP_TARGET_SOURCE", "ema_teacher")
 TEMPORAL_TARGET_MODE = os.environ.get("PREDIFY_TEMPORAL_TARGET_MODE", "next_top")
@@ -72,6 +78,15 @@ LOCAL_LOSS_ERROR_SOURCE = os.environ.get(
 ERROR_TS_RAW = os.environ.get("PREDIFY_ERROR_TS", "").strip()
 ERROR_TAU_RAW = os.environ.get("PREDIFY_ERROR_TAU", "1.0").strip()
 ERROR_GAIN_RAW = os.environ.get("PREDIFY_ERROR_GAIN", "1.0").strip()
+TEMPORAL_ERROR_TS_RAW = os.environ.get("PREDIFY_TEMPORAL_ERROR_TS", "").strip()
+TEMPORAL_ERROR_TAU_RAW = os.environ.get(
+    "PREDIFY_TEMPORAL_ERROR_TAU",
+    "0.5",
+).strip()
+TEMPORAL_ERROR_GAIN_RAW = os.environ.get(
+    "PREDIFY_TEMPORAL_ERROR_GAIN",
+    "1.0",
+).strip()
 TEMPORAL_HORIZONS = tuple(
     int(value)
     for value in os.environ.get("PREDIFY_TEMPORAL_HORIZONS", "1").split(",")
@@ -146,6 +161,11 @@ if ERROR_SAMPLE_TIME is None:
     ERROR_SAMPLE_TIME = FIXED_TS_S if FIXED_TS_S is not None else 1.0
 ERROR_TIME_CONSTANT = parse_float_or_float_list(ERROR_TAU_RAW)
 ERROR_GAIN = parse_float_or_float_list(ERROR_GAIN_RAW)
+TEMPORAL_ERROR_SAMPLE_TIME = parse_optional_float(TEMPORAL_ERROR_TS_RAW)
+if TEMPORAL_ERROR_SAMPLE_TIME is None:
+    TEMPORAL_ERROR_SAMPLE_TIME = FIXED_TS_S if FIXED_TS_S is not None else 1.0
+TEMPORAL_ERROR_TIME_CONSTANT = float(TEMPORAL_ERROR_TAU_RAW)
+TEMPORAL_ERROR_GAIN = float(TEMPORAL_ERROR_GAIN_RAW)
 
 
 def parse_drive_list(raw_value, default_drive):
@@ -173,6 +193,38 @@ def validate_formal_drive_split(formal_split, train_drives_raw, val_drives_raw):
             "Formal train and validation drives must be disjoint, but both contain: "
             f"{overlap}."
         )
+
+
+def validate_same_drive_configuration(
+    same_drive_split,
+    formal_split,
+    train_drives_raw,
+    val_drives_raw,
+    train_fraction,
+    val_fraction,
+    gap_frames,
+    stream_mode,
+):
+    if not same_drive_split:
+        return
+    if formal_split:
+        raise ValueError(
+            "PREDIFY_SAME_DRIVE_SPLIT=1 cannot be combined with the cross-drive "
+            "PREDIFY_FORMAL_SPLIT=1 contract."
+        )
+    if train_drives_raw.strip() or val_drives_raw.strip():
+        raise ValueError(
+            "Same-drive splitting uses PREDIFY_KITTI_DRIVE; leave "
+            "PREDIFY_TRAIN_DRIVES and PREDIFY_VAL_DRIVES empty."
+        )
+    if not math.isclose(train_fraction, 0.6):
+        raise ValueError("Controlled same-drive training requires train_fraction=0.6.")
+    if not math.isclose(val_fraction, 0.2):
+        raise ValueError("Controlled same-drive training requires val_fraction=0.2.")
+    if gap_frames != 20:
+        raise ValueError("Controlled same-drive training requires exactly 20 gap frames.")
+    if not stream_mode:
+        raise ValueError("Controlled same-drive training requires stream_mode=1.")
 
 
 def validate_variance_configuration(train_backbone, variance_weight):
@@ -275,6 +327,31 @@ def _make_stream_sequence_records(role, drive, max_pairs):
             _make_sequence_record(
                 f"{role}:{drive}:segment_{segment_index:04d}",
                 Subset(dataset, selected_indices),
+            )
+        )
+        remaining -= len(selected_indices)
+    return records
+
+
+def _make_subset_stream_sequence_records(role, drive, dataset, max_pairs):
+    if not isinstance(dataset, Subset):
+        raise TypeError("Expected a same-drive Subset for stream construction.")
+    base_dataset = dataset.dataset
+    selected = set(int(index) for index in dataset.indices)
+    remaining = max_pairs if max_pairs > 0 else len(selected)
+    records = []
+    for segment_index, sample_indices in enumerate(base_dataset.valid_sample_segments):
+        if remaining <= 0:
+            break
+        selected_indices = [index for index in sample_indices if index in selected][
+            :remaining
+        ]
+        if not selected_indices:
+            continue
+        records.append(
+            _make_sequence_record(
+                f"{role}:{drive}:segment_{segment_index:04d}",
+                Subset(base_dataset, selected_indices),
             )
         )
         remaining -= len(selected_indices)
@@ -417,6 +494,9 @@ def build_student_model():
         error_sample_time=ERROR_SAMPLE_TIME,
         error_time_constant=ERROR_TIME_CONSTANT,
         error_gain=ERROR_GAIN,
+        temporal_error_sample_time=TEMPORAL_ERROR_SAMPLE_TIME,
+        temporal_error_time_constant=TEMPORAL_ERROR_TIME_CONSTANT,
+        temporal_error_gain=TEMPORAL_ERROR_GAIN,
         task=PREDICTION_TASK,
         future_feature_history_mode=FEATURE_HISTORY_MODE,
         future_feature_predictor_kernel_size=(
@@ -454,6 +534,24 @@ def build_teacher_model(student):
 def build_train_val_loaders():
     train_drives = parse_drive_list(TRAIN_DRIVES_ENV, KITTI_DRIVE)
     val_drives = parse_drive_list(VAL_DRIVES_ENV, "") if VAL_DRIVES_ENV.strip() else []
+    same_drive_split_metadata = None
+
+    same_drive_train_dataset = None
+    same_drive_val_dataset = None
+    if SAME_DRIVE_SPLIT:
+        same_drive_dataset = _make_stream_dataset(KITTI_DRIVE)
+        (
+            same_drive_train_dataset,
+            same_drive_val_dataset,
+            same_drive_split_metadata,
+        ) = build_same_drive_train_val_subsets(
+            same_drive_dataset,
+            train_fraction=TRAIN_FRACTION,
+            val_fraction=VAL_FRACTION,
+            gap_frames=SAME_DRIVE_GAP_FRAMES,
+        )
+        train_drives = [KITTI_DRIVE]
+        val_drives = [KITTI_DRIVE]
 
     if STREAM_MODE:
         if BATCH_SIZE != 1:
@@ -466,7 +564,20 @@ def build_train_val_loaders():
                 "PREDIFY_STREAM_MODE=1 keeps true video order; shuffled-pair controls are disabled."
             )
 
-        if val_drives:
+        if SAME_DRIVE_SPLIT:
+            train_sequences = _make_subset_stream_sequence_records(
+                "train",
+                KITTI_DRIVE,
+                same_drive_train_dataset,
+                MAX_TRAIN_PAIRS,
+            )
+            val_sequences = _make_subset_stream_sequence_records(
+                "val",
+                KITTI_DRIVE,
+                same_drive_val_dataset,
+                MAX_VAL_PAIRS,
+            )
+        elif val_drives:
             train_sequences = [
                 sequence
                 for drive in train_drives
@@ -496,9 +607,22 @@ def build_train_val_loaders():
                 KITTI_DRIVE,
             )
 
-        return train_sequences, val_sequences, train_drives, val_drives
+        return (
+            train_sequences,
+            val_sequences,
+            train_drives,
+            val_drives,
+            same_drive_split_metadata,
+        )
 
-    if val_drives:
+    if SAME_DRIVE_SPLIT:
+        train_dataset = same_drive_train_dataset
+        val_dataset = same_drive_val_dataset
+        if MAX_TRAIN_PAIRS > 0 and MAX_TRAIN_PAIRS < len(train_dataset):
+            train_dataset = Subset(train_dataset, list(range(MAX_TRAIN_PAIRS)))
+        if MAX_VAL_PAIRS > 0 and MAX_VAL_PAIRS < len(val_dataset):
+            val_dataset = Subset(val_dataset, list(range(MAX_VAL_PAIRS)))
+    elif val_drives:
         if TASK_ALIGNED_TARGET == "ego_motion":
             train_dataset = build_kitti_ego_motion_multi_horizon_dataset(
                 KITTI_ROOT,
@@ -589,7 +713,13 @@ def build_train_val_loaders():
             generator=_loader_generator(),
         )
 
-    return train_loader, val_loader, train_drives, val_drives
+    return (
+        train_loader,
+        val_loader,
+        train_drives,
+        val_drives,
+        same_drive_split_metadata,
+    )
 
 
 def build_optimizer(student):
@@ -1041,6 +1171,16 @@ def main():
     seed_everything(RANDOM_SEED)
     git_revision = resolve_git_revision()
     validate_formal_drive_split(FORMAL_SPLIT, TRAIN_DRIVES_ENV, VAL_DRIVES_ENV)
+    validate_same_drive_configuration(
+        SAME_DRIVE_SPLIT,
+        FORMAL_SPLIT,
+        TRAIN_DRIVES_ENV,
+        VAL_DRIVES_ENV,
+        TRAIN_FRACTION,
+        VAL_FRACTION,
+        SAME_DRIVE_GAP_FRAMES,
+        STREAM_MODE,
+    )
     validate_variance_configuration(TRAIN_BACKBONE, TOP_VARIANCE_WEIGHT)
 
     if len(LAYER_LOSS_WEIGHTS) != 5:
@@ -1060,11 +1200,12 @@ def main():
         "latest",
         "two_tap",
         "recursive",
+        "temporal_error",
         "copy_current",
     }:
         raise ValueError(
             "PREDIFY_FEATURE_HISTORY_MODE must be none, latest, two_tap, "
-            "recursive, or copy_current."
+            "recursive, temporal_error, or copy_current."
         )
     if FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE not in {1, 3}:
         raise ValueError(
@@ -1130,7 +1271,13 @@ def main():
             "when temporal variance regularization is enabled."
         )
 
-    train_loader, val_loader, train_drives, val_drives = build_train_val_loaders()
+    (
+        train_loader,
+        val_loader,
+        train_drives,
+        val_drives,
+        same_drive_split_metadata,
+    ) = build_train_val_loaders()
     motion_target_stats = (
         compute_motion_target_stats(train_loader)
         if TASK_ALIGNED_TARGET == "ego_motion"
@@ -1157,7 +1304,9 @@ def main():
         f"future_feature_predictor_kernel_size={FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE}, "
         f"fixed_ts_s={FIXED_TS_S}, fixed_ts_tol_s={FIXED_TS_TOL_S}, "
         f"stream_mode={STREAM_MODE}, reset_each_frame={RESET_EACH_FRAME}, "
-        f"formal_split={FORMAL_SPLIT}, seed={RANDOM_SEED}, git_revision={git_revision}, "
+        f"formal_split={FORMAL_SPLIT}, same_drive_split={SAME_DRIVE_SPLIT}, "
+        f"same_drive_gap_frames={SAME_DRIVE_GAP_FRAMES}, val_fraction={VAL_FRACTION}, "
+        f"seed={RANDOM_SEED}, git_revision={git_revision}, "
         f"current_top_duplicate={CURRENT_TOP_DUPLICATE}, "
         f"shuffle_train_pairs={SHUFFLE_TRAIN_PAIRS}, shuffle_val_pairs={SHUFFLE_VAL_PAIRS}, "
         f"shuffle_seed={SHUFFLE_SEED}",
@@ -1190,7 +1339,10 @@ def main():
         f"error_state_mode={ERROR_STATE_MODE}, local_loss_error_source={LOCAL_LOSS_ERROR_SOURCE}, "
         f"temporal_credit_assignment=stateful_forward_one_step_gradient, "
         f"error_sample_time={ERROR_SAMPLE_TIME}, "
-        f"error_time_constant={ERROR_TIME_CONSTANT}, error_gain={ERROR_GAIN}",
+        f"error_time_constant={ERROR_TIME_CONSTANT}, error_gain={ERROR_GAIN}, "
+        f"temporal_error_sample_time={TEMPORAL_ERROR_SAMPLE_TIME}, "
+        f"temporal_error_time_constant={TEMPORAL_ERROR_TIME_CONSTANT}, "
+        f"temporal_error_gain={TEMPORAL_ERROR_GAIN}",
         flush=True,
     )
 
@@ -1213,6 +1365,12 @@ def main():
             "stream_mode": STREAM_MODE,
             "reset_each_frame": RESET_EACH_FRAME,
             "formal_split": FORMAL_SPLIT,
+            "same_drive_split": SAME_DRIVE_SPLIT,
+            "same_drive_drive": KITTI_DRIVE if SAME_DRIVE_SPLIT else None,
+            "same_drive_gap_frames": (
+                SAME_DRIVE_GAP_FRAMES if SAME_DRIVE_SPLIT else None
+            ),
+            "same_drive_split_metadata": same_drive_split_metadata,
             "current_top_duplicate": CURRENT_TOP_DUPLICATE,
             "current_top_duplicate_source": "student_top_detached",
             "temporal_credit_assignment": "stateful_forward_one_step_gradient",
@@ -1245,6 +1403,7 @@ def main():
             "top_target_source": TOP_TARGET_SOURCE,
             "feedback_decoder_trainable": True,
             "train_fraction": TRAIN_FRACTION,
+            "val_fraction": VAL_FRACTION,
             "target_flow_mode": TARGET_FLOW_MODE,
             "temporal_target_mode": TEMPORAL_TARGET_MODE,
             "temporal_horizons": TEMPORAL_HORIZONS,
@@ -1262,6 +1421,14 @@ def main():
             "dynamic_error_definition": (
                 "e_t=F_t-T_t; epsilon_t=(Ts/tau)*e_t+"
                 "(1-K*Ts/tau)*epsilon_(t-1); no independent d_t"
+            ),
+            "temporal_error_sample_time": TEMPORAL_ERROR_SAMPLE_TIME,
+            "temporal_error_time_constant": TEMPORAL_ERROR_TIME_CONSTANT,
+            "temporal_error_gain": TEMPORAL_ERROR_GAIN,
+            "temporal_error_definition": (
+                "e_(t+1)=F_(t+1)-Fhat_(t+1|t); "
+                "E_(t+1)=(Ts_e/tau_e)*e_(t+1)+"
+                "(1-K_e*Ts_e/tau_e)*E_t"
             ),
             "pretrained": USE_PRETRAINED,
             "train_backbone": TRAIN_BACKBONE,

@@ -67,6 +67,13 @@ next transition.
     history for the following transition.
   - Maintains causal top-layer latest, two-tap, and recursive history snapshots
     independently of the configured local-loss error state.
+  - Adds an independent top-layer Temporal Prediction Error state for the
+    future-feature task:
+    `e_(t+1)^5 = F_(t+1)^5 - Fhat_(t+1|t)^5` and
+    `E_(t+1)^5 = alpha_e e_(t+1)^5 + (1-K_e alpha_e)E_t^5`.
+    The predictor can select this state through
+    `PREDIFY_FEATURE_HISTORY_MODE=temporal_error`; the older `recursive` mode
+    remains Target Flow residual memory.
 - `predify2021/model_factory/targetflow/core.py`
   - Defines target-flow state, dynamic-error integration, local losses, and
     gradient diagnostics.
@@ -75,6 +82,9 @@ next transition.
     targets `[forward displacement m, yaw change rad]`.
   - Splits fixed-dt-valid sample indices into contiguous segments whenever a
     raw timestamp transition is rejected.
+  - Provides an explicit same-drive raw-frame split: first 60% train, 20-frame
+    gap, then a contiguous 20% validation range. It verifies that the complete
+    train and validation raw-frame sets are disjoint.
 - `predify2021/mce_scores/train_kitti_targetflow_adjacent_pairs.py`
   - Defaults to stream mode.
   - Resets once per drive or sequence, then calls `step_frame` once per frame.
@@ -90,6 +100,11 @@ next transition.
   - Freezes pretrained VGG forward stages by default. Feedback decoders and the
     task-selected predictor train; `PREDIFY_TRAIN_BACKBONE=1` is an explicit
     adaptation ablation.
+  - Records separate Target Flow error parameters and Temporal Prediction Error
+    parameters so future `tau_e` changes do not alter Target Flow dynamics.
+  - Supports clean same-drive checkpoint training through
+    `PREDIFY_SAME_DRIVE_SPLIT=1`; controlled corruption remains outside this
+    training loop.
   - Selects motion checkpoints by validation temporal loss and future-feature
     checkpoints by validation feature MSE.
   - Reports feature MSE, cosine, normalized feature error, the equivalent delta
@@ -112,8 +127,9 @@ next transition.
     variable, forces the legacy current-teacher variable to zero, and records
     the exact Git revision in each result.
 - `scripts/run_kitti_seed0_future_feature_matrix.sh`
-  - Runs copy-current, current-only, latest-residual, two-tap, and
-    recursive-history conditions in isolated environments.
+  - Runs the first formal three-group matrix: Copy-current, Current-only, and
+    top-layer Temporal Error. It rejects Latest, Two-tap, and Target-Flow
+    Recursive groups for this matrix.
   - Stores outputs under `/tmp/predify-storage` by default and retains only the
     best validation checkpoint per group.
 - `predify2021/mce_scores/diagnose_kitti_future_feature_delta.py`
@@ -124,6 +140,19 @@ next transition.
   - Runs a Current-only seed-0 predictor with an explicitly selected 1x1 or
     3x3 first convolution while keeping all history and dynamic-error controls
     fixed.
+- `predify2021/mce_scores/kitti_controlled_corruption.py`
+  - Applies deterministic absolute-frame corruption after resize/crop in RGB
+    pixel space and before ImageNet normalization.
+  - Defines baseline, step, ramp, persistent-bias, and recovery phases and
+    computes Peak Error, Recovery Time, AUEC, and excess AUEC.
+- `predify2021/mce_scores/evaluate_kitti_same_drive_controlled_corruption.py`
+  - Runs paired clean/corrupted streams and saves per-frame `e`, `E`, and `L`
+    traces as JSONL/CSV plus a recovery-curve PNG.
+  - Rejects cross-drive or mismatched checkpoints through saved split and
+    architecture checks.
+- `scripts/run_kitti_seed0_same_drive_controlled_corruption.sh`
+  - Trains the same three clean groups on the same-drive split, then invokes
+    the independent controlled-corruption evaluator.
 - `.github/workflows/tests.yml`
   - Runs the unit tests on pushes to `targetflow-arch` and pull requests.
   - Pins the public base `predify` dependency by commit and uses CPU PyTorch.
@@ -168,6 +197,11 @@ and predictor regularization/capacity, not `tau`. The current data do not
 separate spatial architecture effects from parameter count or conservative
 near-zero prediction. Noise, blur, online adaptation, and broader state inputs
 remain downstream experiments.
+
+The same-drive controlled-corruption implementation is ready but no formal GPU
+run is recorded yet. It is a mechanistic transient-response experiment and
+does not replace the failed cross-drive predictor gate or justify a broad
+robustness claim.
 
 ## Available data
 

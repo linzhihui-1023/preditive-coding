@@ -10,6 +10,7 @@ from predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs import (
     configure_student_trainability,
     reset_stream_state,
     validate_formal_drive_split,
+    validate_same_drive_configuration,
     validate_variance_configuration,
 )
 
@@ -131,6 +132,23 @@ class FormalExperimentConfigurationTest(unittest.TestCase):
 
         validate_formal_drive_split(True, "drive_train", "drive_val")
         validate_formal_drive_split(False, "", "")
+
+    def test_same_drive_control_requires_fixed_split_and_gap(self):
+        valid_arguments = (True, False, "", "", 0.6, 0.2, 20, True)
+        validate_same_drive_configuration(*valid_arguments)
+
+        with self.assertRaisesRegex(ValueError, "cannot be combined"):
+            validate_same_drive_configuration(
+                True, True, "", "", 0.6, 0.2, 20, True
+            )
+        with self.assertRaisesRegex(ValueError, "train_fraction=0.6"):
+            validate_same_drive_configuration(
+                True, False, "", "", 0.8, 0.2, 20, True
+            )
+        with self.assertRaisesRegex(ValueError, "exactly 20"):
+            validate_same_drive_configuration(
+                True, False, "", "", 0.6, 0.2, 19, True
+            )
 
     def test_positive_variance_weight_requires_trainable_backbone(self):
         with self.assertRaisesRegex(ValueError, "frozen top feature"):

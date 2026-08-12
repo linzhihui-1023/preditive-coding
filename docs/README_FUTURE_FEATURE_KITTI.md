@@ -34,23 +34,30 @@ BPTT.
 
 ## Seed-0 Matrix
 
-All learned conditions use one shared predictor architecture. Only the history
-input changes.
+The first formal Temporal Error matrix contains exactly three groups:
 
 | Group | `PREDIFY_FEATURE_HISTORY_MODE` | History input |
 | --- | --- | --- |
 | Copy-current | `copy_current` | Predictor bypassed; `Fhat=F_t` |
 | Current-only | `none` | Zeros |
-| Latest | `latest` | `e_(t-1)` from the previous transition |
-| Two-tap | `two_tap` | `alpha e_(t-1) + (1-K alpha)e_(t-2)` |
-| Recursive | `recursive` | Previous completed recursive state |
+| Temporal error | `temporal_error` | Previous completed top-layer Temporal Prediction Error state |
 
-With the matrix parameters, `alpha=0.1035/0.5=0.207`. Thus two-tap history is
-`0.207e_(t-1)+0.793e_(t-2)`, while recursive history is
-`0.207e_(t-1)+0.793epsilon_(t-2)`. The legacy names `instant` and `lag1` are
-accepted as aliases, but new result tables use Latest and Two-tap.
+Current-only and Temporal Error use the same predictor architecture and
+parameter count; only the history tensor changes. Latest, two-tap, and
+Target-Flow recursive modes remain implemented for historical reproducibility
+but are excluded from this first formal matrix and from the runner's accepted
+groups.
 
-Run all five conditions:
+Temporal error is a separate top-layer state. It uses the strict future-feature
+prediction error
+`e_(t+1)^5 = F_(t+1)^5 - Fhat_(t+1|t)^5`, then stores
+`E_(t+1)^5 = alpha_e e_(t+1)^5 + (1-K_e alpha_e)E_t^5` for the next
+transition. In the first version `alpha_e=0.207`, controlled by
+`PREDIFY_TEMPORAL_ERROR_TS=0.1035`, `PREDIFY_TEMPORAL_ERROR_TAU=0.5`, and
+`PREDIFY_TEMPORAL_ERROR_GAIN=1.0`. This is not the Target Flow residual and
+does not change the meaning of `recursive`.
+
+Run the three formal conditions:
 
 ```bash
 conda activate predifyproject
@@ -58,10 +65,10 @@ cd /home/lin/predify2021_targetflow
 scripts/run_kitti_seed0_future_feature_matrix.sh
 ```
 
-Run selected conditions:
+The runner also accepts a selected subset of those three conditions:
 
 ```bash
-scripts/run_kitti_seed0_future_feature_matrix.sh current_only recursive
+scripts/run_kitti_seed0_future_feature_matrix.sh copy_current current_only temporal_error
 ```
 
 Run the Current-only spatial-predictor sufficiency diagnostic:
@@ -126,16 +133,68 @@ MSE is sign invariant, but this stored tensor must retain the documented sign.
 
 Best checkpoints are selected by validation feature MSE.
 
+## Same-Drive Controlled Corruption
+
+Controlled corruption is a separate experiment and is not injected into the
+training loop. The canonical runner first trains Copy-current, Current-only,
+and Temporal Error checkpoints on clean frames from one drive, then invokes
+the independent evaluation module:
+
+```bash
+scripts/run_kitti_seed0_same_drive_controlled_corruption.sh
+```
+
+The split is defined in raw-frame space:
+
+```text
+train: first 60% of raw frames
+gap:   next 20 raw frames
+val:   next contiguous 20% of raw frames
+```
+
+Every pair is admitted only when all raw frames it reads lie inside its split.
+The implementation collects every raw frame index used by train and validation
+and fails unless the sets are disjoint. For drive 0005 this produces raw train
+frames 0--91, gap frames 92--111, and raw validation frames 112--141; the
+remaining tail is unused.
+
+Corruption is applied after the existing resize and center crop in the
+unnormalized `[0,1]` RGB pixel domain, then ImageNet normalization is applied.
+Its deterministic key is `(seed, drive, camera, absolute frame name)`. Thus an
+absolute frame used first as `future` and then as the next sample's `current`
+is exactly the same corrupted tensor. The script never calls
+`torch.randn_like(image)` without an absolute-frame seed.
+
+The validation trajectory contains baseline, step change, ramp change,
+persistent bias, and recovery phases. Evaluation runs paired clean and
+corrupted counterfactual streams and saves one JSONL row per frame, a recovery
+curve CSV, and a PNG with:
+
+- strict Temporal Prediction Error magnitude `e_(t+1)`;
+- accumulated Temporal Error state magnitude `E_(t+1)`;
+- prediction loss `L_t` as stage-5 feature MSE;
+- Peak Error, Recovery Time, AUEC, and clean-adjusted excess AUEC.
+
+Recovery Time is measured after corruption returns to zero: excess MSE must
+remain below baseline plus 10% of the peak excursion for three consecutive
+frames. Unrecovered streams are marked censored rather than assigned a fake
+finite recovery time. AUEC integrates the full disturbance-and-recovery curve
+using the fixed sample interval.
+
+The evaluator accepts only checkpoints that record the matching same-drive
+split. Existing cross-drive checkpoints are intentionally rejected: this
+experiment tests controlled transient response within a drive, not cross-drive
+generalization.
+
 ## Interpretation Order
 
 1. `Current-only < Copy-current`: the predictor learned useful future change.
-2. `Recursive < Current-only`: history adds information beyond `F_t`.
-3. Compare Recursive with Latest and Two-tap to test whether recursive memory is
-   better than simpler causal history.
+2. `Temporal Error < Current-only`: strict prediction-error state adds useful
+   information beyond `F_t`.
 
-Do not interpret history comparisons until Current-only passes step 1 on the
-held-out drive. A predictor that only fits the training drive cannot establish
-whether history contains useful generalizable information.
+Do not interpret the Temporal Error comparison until Current-only passes step
+1 on the held-out drive. A predictor that only fits the training drive cannot
+establish whether history contains useful generalizable information.
 
 The current two-drive split is suitable for this initial mechanism check, not
 for a broad KITTI generalization claim. More drives are required after the

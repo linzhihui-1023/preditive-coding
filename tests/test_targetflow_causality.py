@@ -4,6 +4,9 @@ import torch
 from torchvision.models import vgg16
 
 from predify2021.model_factory.pvgg16_targetflow import PVGG16TargetFlow
+from predify2021.model_factory.targetflow import (
+    build_temporal_prediction_error_state,
+)
 
 
 class TargetFlowCausalityTest(unittest.TestCase):
@@ -221,7 +224,7 @@ class TargetFlowCausalityTest(unittest.TestCase):
             parameter.numel()
             for parameter in self.model.future_feature_predictor.parameters()
         )
-        for mode in ("none", "latest", "two_tap", "recursive"):
+        for mode in ("none", "latest", "two_tap", "recursive", "temporal_error"):
             self.model.future_feature_history_mode = mode
             self.assertEqual(id(self.model.future_feature_predictor), predictor_id)
             self.assertEqual(
@@ -335,6 +338,69 @@ class TargetFlowCausalityTest(unittest.TestCase):
             outputs["future_top_target"] - outputs["predicted_future_top"]
         )
         self.assertTrue(torch.equal(outputs["prediction_error_top"], expected_error))
+
+    def test_temporal_prediction_error_state_formula(self):
+        prediction_error = torch.tensor([[[[2.0, -4.0]]]])
+        previous_state = torch.tensor([[[[10.0, 20.0]]]])
+
+        state = build_temporal_prediction_error_state(
+            prediction_error,
+            previous_state,
+            sample_time=0.1035,
+            time_constant=0.5,
+            error_gain=1.0,
+        )
+
+        expected = 0.207 * prediction_error + 0.793 * previous_state
+        self.assertTrue(torch.allclose(state, expected))
+
+    def test_temporal_error_history_cannot_see_current_future_error(self):
+        self.model.reset()
+        prediction_a = self._future_feature_step(
+            self.current,
+            self.future_a,
+            history_mode="temporal_error",
+        )["predicted_future_top"]
+
+        self.model.reset()
+        prediction_b = self._future_feature_step(
+            self.current,
+            self.future_b,
+            history_mode="temporal_error",
+        )["predicted_future_top"]
+
+        self.assertTrue(torch.equal(prediction_a, prediction_b))
+
+    def test_temporal_error_history_uses_previous_completed_prediction_error(self):
+        self.model.reset()
+        self._future_feature_step(
+            self.current,
+            self.future_a,
+            history_mode="temporal_error",
+        )
+        previous_temporal_state = self.model.temporal_error_state_memory.clone()
+        second = self._future_feature_step(
+            self.future_a,
+            self.future_b,
+            history_mode="temporal_error",
+        )
+
+        self.assertTrue(torch.equal(second["history_top"], previous_temporal_state))
+
+    def test_temporal_error_memories_are_detached_between_frames(self):
+        self.model.task = "future_feature"
+        self.model.future_feature_history_mode = "temporal_error"
+        self.model.reset()
+        future_top = self.model.extract_top_forward_feature(self.future_a)
+        self.model.step_frame(self.current, top_target=future_top)
+
+        memories = (
+            self.model.temporal_prediction_error_memory,
+            self.model.temporal_error_state_memory,
+        )
+        self.assertTrue(all(memory is not None for memory in memories))
+        self.assertTrue(all(not memory.requires_grad for memory in memories))
+        self.assertTrue(all(memory.grad_fn is None for memory in memories))
 
     def test_future_and_delta_mse_are_equivalent(self):
         self.model.reset()

@@ -1,5 +1,28 @@
 # Experiment Log
 
+## Same-drive controlled corruption protocol (not yet run)
+
+Date: 2026-08-12
+
+Status: implementation and tests complete; no numerical result recorded.
+
+The new protocol trains clean Copy-current, Current-only, and Temporal Error
+checkpoints on drive 0005 using raw frames 0--91 for training, frames 92--111
+as a 20-frame gap, and frames 112--141 as the contiguous validation region.
+Corruption is applied only by the independent evaluator after resize/crop and
+before normalization. Paired clean/corrupted streams save per-frame strict
+prediction error, Temporal Error state, feature MSE, Peak Error, Recovery Time,
+AUEC, and excess AUEC.
+
+The canonical entry point is:
+
+```text
+scripts/run_kitti_seed0_same_drive_controlled_corruption.sh
+```
+
+No controlled-corruption number belongs in this log until the code is
+committed and the runner records that exact clean revision.
+
 ## Current-only delta and spatial-predictor diagnostic, seed 0
 
 Date: 2026-08-12

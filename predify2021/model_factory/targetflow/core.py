@@ -13,6 +13,13 @@ class TargetFlowDynamicErrorConfig:
     enabled: bool = True
 
 
+@dataclass
+class TemporalPredictionErrorConfig:
+    sample_time: float
+    time_constant: float
+    error_gain: float
+
+
 class TargetFlowFeedbackModule(nn.Module):
     def __init__(self, projector: nn.Module, activation: Optional[nn.Module] = None):
         super().__init__()
@@ -133,6 +140,51 @@ def build_dynamic_targetflow_error(
             f"memory_factor={float(memory_factor.item())}."
         )
     return integration_factor * instant_error + memory_factor * previous_error
+
+
+def build_temporal_prediction_error_state(
+    prediction_error: Optional[torch.Tensor],
+    previous_state: Optional[torch.Tensor],
+    sample_time,
+    time_constant,
+    error_gain,
+):
+    """Update E_(t+1) = alpha*e_(t+1) + (1-K*alpha)*E_t."""
+    if prediction_error is None:
+        return None
+
+    if previous_state is None:
+        previous_state = torch.zeros_like(prediction_error)
+
+    sample_time_tensor = prediction_error.new_tensor(float(sample_time))
+    time_constant_tensor = prediction_error.new_tensor(float(time_constant))
+    error_gain_tensor = prediction_error.new_tensor(float(error_gain))
+
+    if not torch.isfinite(sample_time_tensor) or sample_time_tensor <= 0:
+        raise ValueError(
+            "temporal_error_sample_time must be positive, but got "
+            f"{float(sample_time_tensor.item())}."
+        )
+    if not torch.isfinite(time_constant_tensor) or time_constant_tensor <= 0:
+        raise ValueError(
+            "temporal_error_time_constant must be positive, but got "
+            f"{float(time_constant_tensor.item())}."
+        )
+    if not torch.isfinite(error_gain_tensor):
+        raise ValueError(
+            "temporal_error_gain must be finite, but got "
+            f"{float(error_gain_tensor.item())}."
+        )
+
+    integration_factor = sample_time_tensor / time_constant_tensor
+    memory_factor = 1.0 - error_gain_tensor * integration_factor
+    if torch.abs(memory_factor) >= 1.0:
+        raise ValueError(
+            "Unstable temporal prediction error dynamics: require "
+            "abs(1 - error_gain * sample_time / time_constant) < 1, but got "
+            f"memory_factor={float(memory_factor.item())}."
+        )
+    return integration_factor * prediction_error + memory_factor * previous_state
 
 
 def build_targetflow_error(

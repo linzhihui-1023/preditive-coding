@@ -8,8 +8,10 @@ from .targetflow import (
     TargetFlowDynamicErrorConfig,
     TargetFlowFeedbackModule,
     TargetFlowLayerState,
+    TemporalPredictionErrorConfig,
     build_targetflow_error,
     build_targetflow_instant_error,
+    build_temporal_prediction_error_state,
     build_targetflow_learn_signal_from_error,
     build_targetflow_local_loss_from_error,
     compute_module_grad_stats,
@@ -96,6 +98,9 @@ class PVGG16TargetFlow(nn.Module):
         error_sample_time: float = 1.0,
         error_time_constant=1.0,
         error_gain=1.0,
+        temporal_error_sample_time: float = 1.0,
+        temporal_error_time_constant: float = 1.0,
+        temporal_error_gain: float = 1.0,
         task: str = "motion",
         future_feature_history_mode: str = "none",
         future_feature_predictor_kernel_size: int = 1,
@@ -163,6 +168,19 @@ class PVGG16TargetFlow(nn.Module):
             "error_gains",
             torch.tensor(expanded_error_gains, dtype=torch.float32),
         )
+        self.temporal_error_config = TemporalPredictionErrorConfig(
+            sample_time=float(temporal_error_sample_time),
+            time_constant=float(temporal_error_time_constant),
+            error_gain=float(temporal_error_gain),
+        )
+        self.register_buffer(
+            "temporal_error_time_constant",
+            torch.tensor(float(temporal_error_time_constant), dtype=torch.float32),
+        )
+        self.register_buffer(
+            "temporal_error_gain",
+            torch.tensor(float(temporal_error_gain), dtype=torch.float32),
+        )
         if temporal_target_mode not in {"next_top", "delta_top", "ego_motion"}:
             raise ValueError(f"Unsupported temporal_target_mode: {temporal_target_mode}")
         temporal_horizons = tuple(int(horizon) for horizon in temporal_horizons)
@@ -185,6 +203,7 @@ class PVGG16TargetFlow(nn.Module):
             "latest",
             "two_tap",
             "recursive",
+            "temporal_error",
             "copy_current",
         }:
             raise ValueError(
@@ -223,6 +242,8 @@ class PVGG16TargetFlow(nn.Module):
         self.instant_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.recursive_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.two_tap_error_state_memory = [None for _ in range(self.number_of_layers)]
+        self.temporal_prediction_error_memory = None
+        self.temporal_error_state_memory = None
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
@@ -235,6 +256,8 @@ class PVGG16TargetFlow(nn.Module):
         self.instant_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.recursive_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.two_tap_error_state_memory = [None for _ in range(self.number_of_layers)]
+        self.temporal_prediction_error_memory = None
+        self.temporal_error_state_memory = None
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
@@ -270,6 +293,9 @@ class PVGG16TargetFlow(nn.Module):
         mode = self.future_feature_history_mode
         if mode in {"none", "copy_current"}:
             return torch.zeros_like(current_top)
+        if mode == "temporal_error":
+            history = self._resolve_memory(self.temporal_error_state_memory, current_top)
+            return torch.zeros_like(current_top) if history is None else history.detach()
         memory_by_mode = {
             "latest": self.instant_error_state_memory,
             "two_tap": self.two_tap_error_state_memory,
@@ -458,6 +484,24 @@ class PVGG16TargetFlow(nn.Module):
                     "prediction_error_top": future_top_target - predicted_future,
                 }
             )
+            previous_temporal_error_state = self._resolve_memory(
+                self.temporal_error_state_memory,
+                predicted_future,
+            )
+            temporal_prediction_error = self.future_prediction_outputs[
+                "prediction_error_top"
+            ]
+            temporal_error_state = build_temporal_prediction_error_state(
+                temporal_prediction_error,
+                previous_temporal_error_state,
+                sample_time=self.temporal_error_config.sample_time,
+                time_constant=float(self.temporal_error_time_constant.item()),
+                error_gain=float(self.temporal_error_gain.item()),
+            )
+            self.temporal_prediction_error_memory = (
+                temporal_prediction_error.detach()
+            )
+            self.temporal_error_state_memory = temporal_error_state.detach()
         run_backward_target_flow(
             self.layer_states,
             self.feedback_modules,

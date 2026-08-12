@@ -1,5 +1,27 @@
 # Research Decisions
 
+## 2026-08-12: Add top-layer Temporal Prediction Error state
+
+Status: accepted
+
+Future-feature history now gets a separate top-layer Temporal Prediction Error
+state. It is not the Target Flow residual. The strict prediction error is
+`e_(t+1)^5 = F_(t+1)^5 - Fhat_(t+1|t)^5`, computed only after the current
+prediction is made and the next-frame top feature is observed. The carried
+state is `E_(t+1)^5 = alpha_e e_(t+1)^5 + (1 - K_e alpha_e) E_t^5`.
+
+The first implementation tests only the top layer because the active task is
+`F_t^5 -> F_(t+1)^5`. It adds a distinct `temporal_error` history mode for the
+future-feature predictor and leaves `recursive` with its historical meaning:
+recursive Target Flow residual memory. Reports must not merge these two
+mechanisms.
+
+Temporal-error parameters are separate from Target Flow parameters:
+`PREDIFY_TEMPORAL_ERROR_TS`, `PREDIFY_TEMPORAL_ERROR_TAU`, and
+`PREDIFY_TEMPORAL_ERROR_GAIN`. The first version uses the same numerical values
+as the formal Target Flow runs, `Ts=0.1035`, `tau=0.5`, and `K=1`, but tuning
+one family must not silently change the other.
+
 ## 2026-08-12: Require predictor sufficiency before judging state
 
 Status: accepted
@@ -363,3 +385,44 @@ Seeds 1 and 2, corruption robustness, and online-adaptation experiments remain
 paused. The next work returns to mechanism diagnosis: inspect next-feature
 delta scale and predictor behavior, then revise the residual/history design as
 planned. Additional seeds are not used to rescue a failed primary comparison.
+
+## 2026-08-12: Isolate same-drive controlled corruption from training
+
+Status: accepted
+
+Controlled step, ramp, persistent-bias, and recovery phases live in a separate
+evaluation module. Training remains clean and unchanged except for an explicit
+same-drive split option. The split is defined over raw frame positions: the
+first 60% is training data, the next 20 raw frames form a gap, and the next
+contiguous 20% is validation. Samples are included only if every raw frame they
+read lies inside one region, and train/validation raw-frame sets must be
+disjoint.
+
+Corruption is applied after resize and center crop in unnormalized `[0,1]` RGB
+space, before ImageNet normalization. Any stochastic component is keyed by
+experiment seed, drive, camera, and absolute frame name. Re-reading an
+absolute frame as a future image and then as the next current image must return
+the identical corrupted tensor.
+
+Evaluation runs clean and corrupted counterfactual streams in frame order and
+saves each frame's strict prediction error `e`, accumulated Temporal Error
+state `E`, and feature MSE `L`. Primary transient metrics are Peak Error,
+Recovery Time, AUEC, and clean-adjusted excess AUEC. Recovery is censored when
+the curve does not remain within its configured threshold for the required
+consecutive frames. These results test controlled within-drive response only;
+they are not evidence of cross-drive generalization.
+
+## 2026-08-12: Limit the first Temporal Error matrix to three groups
+
+Status: accepted
+
+The first formal matrix contains only Copy-current, Current-only, and
+top-layer Temporal Error. Its two gates are:
+
+1. Current-only validation MSE must beat Copy-current.
+2. Temporal Error validation MSE must beat Current-only.
+
+Latest, two-tap, and Target-Flow recursive residual histories remain available
+for historical checkpoint compatibility, but are not accepted by the formal
+future-feature matrix runner and are not part of this first controlled-
+corruption comparison.

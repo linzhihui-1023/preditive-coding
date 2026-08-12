@@ -19,6 +19,133 @@ def split_contiguous_indices(indices):
     return tuple(tuple(segment) for segment in segments)
 
 
+def get_sample_raw_frame_indices(dataset, index):
+    """Return the raw frame positions read by one temporal sample."""
+    if isinstance(dataset, Subset):
+        return get_sample_raw_frame_indices(dataset.dataset, dataset.indices[index])
+
+    if isinstance(dataset, ConcatDataset):
+        dataset_index = bisect_right(dataset.cumulative_sizes, index)
+        previous_size = (
+            dataset.cumulative_sizes[dataset_index - 1] if dataset_index > 0 else 0
+        )
+        return get_sample_raw_frame_indices(
+            dataset.datasets[dataset_index],
+            index - previous_size,
+        )
+
+    if isinstance(dataset, ShuffledFuturePairDataset):
+        return get_sample_raw_frame_indices(
+            dataset.dataset,
+            dataset.reference_indices[index],
+        )
+
+    valid_start_indices = getattr(dataset, "valid_start_indices", None)
+    if valid_start_indices is None:
+        raise TypeError(
+            f"Dataset {type(dataset).__name__} does not expose valid_start_indices."
+        )
+    start_index = int(valid_start_indices[index])
+    horizons = tuple(int(value) for value in getattr(dataset, "horizons", (1,)))
+    return frozenset((start_index, *(start_index + horizon for horizon in horizons)))
+
+
+def collect_raw_frame_indices(dataset):
+    """Collect every raw frame position read by a dataset or subset."""
+    return frozenset(
+        raw_index
+        for sample_index in range(len(dataset))
+        for raw_index in get_sample_raw_frame_indices(dataset, sample_index)
+    )
+
+
+def build_same_drive_train_val_subsets(
+    dataset,
+    train_fraction=0.6,
+    val_fraction=0.2,
+    gap_frames=20,
+):
+    """Split one drive in raw-frame space with an explicit temporal gap."""
+    if isinstance(dataset, (Subset, ConcatDataset)):
+        raise TypeError("Same-drive splitting requires one unsliced drive dataset.")
+    if not 0.0 < train_fraction < 1.0:
+        raise ValueError(f"train_fraction must be in (0, 1), got {train_fraction}.")
+    if not 0.0 < val_fraction < 1.0:
+        raise ValueError(f"val_fraction must be in (0, 1), got {val_fraction}.")
+    if train_fraction + val_fraction >= 1.0:
+        raise ValueError("train_fraction + val_fraction must be less than 1.")
+    if gap_frames < 0:
+        raise ValueError(f"gap_frames must be non-negative, got {gap_frames}.")
+
+    frame_paths = getattr(dataset, "frame_paths", None)
+    if frame_paths is None:
+        raise TypeError(
+            f"Dataset {type(dataset).__name__} does not expose frame_paths."
+        )
+    raw_frame_count = len(frame_paths)
+    train_stop = int(math.floor(raw_frame_count * train_fraction))
+    val_frame_count = int(math.floor(raw_frame_count * val_fraction))
+    val_start = train_stop + gap_frames
+    val_stop = val_start + val_frame_count
+    if val_stop > raw_frame_count:
+        raise ValueError(
+            "The requested same-drive split does not fit in the drive: "
+            f"train_stop={train_stop}, gap_frames={gap_frames}, "
+            f"val_frame_count={val_frame_count}, raw_frame_count={raw_frame_count}."
+        )
+
+    train_sample_indices = []
+    val_sample_indices = []
+    excluded_sample_indices = []
+    for sample_index in range(len(dataset)):
+        raw_indices = get_sample_raw_frame_indices(dataset, sample_index)
+        if max(raw_indices) < train_stop:
+            train_sample_indices.append(sample_index)
+        elif min(raw_indices) >= val_start and max(raw_indices) < val_stop:
+            val_sample_indices.append(sample_index)
+        else:
+            excluded_sample_indices.append(sample_index)
+
+    if not train_sample_indices or not val_sample_indices:
+        raise ValueError(
+            "Same-drive split produced an empty train or validation subset: "
+            f"train_samples={len(train_sample_indices)}, "
+            f"val_samples={len(val_sample_indices)}."
+        )
+
+    train_dataset = Subset(dataset, train_sample_indices)
+    val_dataset = Subset(dataset, val_sample_indices)
+    train_raw_frames = collect_raw_frame_indices(train_dataset)
+    val_raw_frames = collect_raw_frame_indices(val_dataset)
+    shared_raw_frames = train_raw_frames & val_raw_frames
+    if shared_raw_frames:
+        raise RuntimeError(
+            "Same-drive train/validation split shares raw frames: "
+            f"{sorted(shared_raw_frames)}."
+        )
+
+    metadata = {
+        "raw_frame_count": raw_frame_count,
+        "train_fraction": float(train_fraction),
+        "val_fraction": float(val_fraction),
+        "minimum_gap_frames": int(gap_frames),
+        "actual_gap_frames": int(gap_frames),
+        "train_raw_frame_range": (0, train_stop - 1),
+        "gap_raw_frame_range": (train_stop, val_start - 1),
+        "val_raw_frame_range": (val_start, val_stop - 1),
+        "unused_tail_raw_frame_range": (
+            (val_stop, raw_frame_count - 1) if val_stop < raw_frame_count else None
+        ),
+        "train_sample_indices": tuple(train_sample_indices),
+        "val_sample_indices": tuple(val_sample_indices),
+        "excluded_sample_count": len(excluded_sample_indices),
+        "train_raw_frame_count": len(train_raw_frames),
+        "val_raw_frame_count": len(val_raw_frames),
+        "shared_raw_frame_count": 0,
+    }
+    return train_dataset, val_dataset, metadata
+
+
 class KITTINextFramePairDataset(Dataset):
     """
     Build adjacent-frame pairs from a single KITTI Raw drive.
