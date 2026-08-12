@@ -65,6 +65,23 @@ degradation AUROC were near null, while yaw usually improved under both blur
 organizations. Results are under
 `results/gate3_persistence_task_degradation_80c4aee/`.
 
+The next-frame feature study now includes an explicitly causal two-frame
+fusion condition at VGG stage 5. It stores the previous top feature as a
+detached drive-local memory and computes
+`Z_t = F_t + T([F_(t-1), F_t])` before the existing future predictor. The first
+frame of each drive uses `Z_t = F_t`; the pretrained VGG and Target Flow
+feedback decoders remain frozen, while only the fusion module and future
+predictor are optimized. The formal matrix is limited to Copy-current,
+Current-only, and Temporal Fusion and is launched with:
+
+```bash
+scripts/run_kitti_seed0_temporal_fusion_matrix.sh
+```
+
+The runner trains on drive 0005, evaluates on held-out drive 0011, and writes
+both `summary.json` and a per-frame CSV with feature MSE, cosine similarity,
+normalized feature error, and fusion-state diagnostics.
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

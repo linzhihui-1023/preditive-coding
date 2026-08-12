@@ -105,6 +105,7 @@ class PVGG16TargetFlow(nn.Module):
         temporal_error_gain: float = 1.0,
         task: str = "motion",
         future_feature_history_mode: str = "none",
+        future_feature_temporal_fusion_mode: str = "none",
         future_feature_predictor_kernel_size: int = 1,
         future_feature_prediction_form: str = "current_residual",
         future_motion_radius: int = 1,
@@ -217,6 +218,25 @@ class PVGG16TargetFlow(nn.Module):
             )
         self.task = task
         self.future_feature_history_mode = future_feature_history_mode
+        if future_feature_temporal_fusion_mode not in {
+            "none",
+            "two_frame_residual",
+        }:
+            raise ValueError(
+                "Unsupported future_feature_temporal_fusion_mode: "
+                f"{future_feature_temporal_fusion_mode}"
+            )
+        if (
+            future_feature_temporal_fusion_mode != "none"
+            and future_feature_history_mode != "none"
+        ):
+            raise ValueError(
+                "Two-frame temporal fusion cannot be combined with another "
+                "future-feature history mode."
+            )
+        self.future_feature_temporal_fusion_mode = (
+            future_feature_temporal_fusion_mode
+        )
         if future_feature_predictor_kernel_size not in {1, 3}:
             raise ValueError(
                 "future_feature_predictor_kernel_size must be 1 or 3, got "
@@ -242,6 +262,13 @@ class PVGG16TargetFlow(nn.Module):
         ):
             raise ValueError("future_motion_patch_size must be a positive odd integer.")
         self.future_feature_prediction_form = future_feature_prediction_form
+        if (
+            self.future_feature_temporal_fusion_mode != "none"
+            and self.future_feature_prediction_form != "current_residual"
+        ):
+            raise ValueError(
+                "Two-frame temporal fusion requires current_residual prediction."
+            )
         self.future_motion_radius = int(future_motion_radius)
         self.future_motion_patch_size = int(future_motion_patch_size)
         self.temporal_target_dim = 2 if self.temporal_target_mode == "ego_motion" else self.stage_channels[-1]
@@ -261,6 +288,15 @@ class PVGG16TargetFlow(nn.Module):
             nn.ReLU(inplace=False),
             nn.Conv2d(1024, self.stage_channels[-1], kernel_size=1),
         )
+        self.temporal_fusion_module = None
+        if self.future_feature_temporal_fusion_mode == "two_frame_residual":
+            self.temporal_fusion_module = nn.Sequential(
+                nn.Conv2d(2 * self.stage_channels[-1], self.stage_channels[-1], 1),
+                nn.ReLU(inplace=False),
+                nn.Conv2d(self.stage_channels[-1], self.stage_channels[-1], 1),
+            )
+            nn.init.zeros_(self.temporal_fusion_module[-1].weight)
+            nn.init.zeros_(self.temporal_fusion_module[-1].bias)
         self.layer_states = []
         self.error_state_memory = [None for _ in range(self.number_of_layers)]
         self.instant_error_state_memory = [None for _ in range(self.number_of_layers)]
@@ -357,8 +393,24 @@ class PVGG16TargetFlow(nn.Module):
             splat,
         )
 
+    def _build_temporal_fusion_base(self, current_top: torch.Tensor):
+        previous_top = self._resolve_memory(
+            self.future_feature_previous_top_memory,
+            current_top,
+        )
+        if previous_top is None:
+            return current_top, None, torch.zeros_like(current_top), False
+        previous_top = previous_top.detach()
+        fusion_residual = self.temporal_fusion_module(
+            torch.cat([previous_top, current_top], dim=1)
+        )
+        return current_top + fusion_residual, previous_top, fusion_residual, True
+
     def _predict_future_top_feature(self, current_top: torch.Tensor):
         history_top = self._resolve_future_feature_history(current_top)
+        fusion_previous_top = None
+        fusion_residual = torch.zeros_like(current_top)
+        temporal_fusion_applied = False
         if self.future_feature_history_mode == "copy_current":
             prediction_base = current_top
             predicted_residual = torch.zeros_like(current_top)
@@ -367,7 +419,17 @@ class PVGG16TargetFlow(nn.Module):
             warp_diagnostics = None
         else:
             form = self.future_feature_prediction_form
-            if form == "current_residual":
+            if self.future_feature_temporal_fusion_mode == "two_frame_residual":
+                (
+                    prediction_base,
+                    fusion_previous_top,
+                    fusion_residual,
+                    temporal_fusion_applied,
+                ) = self._build_temporal_fusion_base(current_top)
+                motion_dy = None
+                motion_dx = None
+                warp_diagnostics = None
+            elif form == "current_residual":
                 prediction_base = current_top
                 motion_dy = None
                 motion_dx = None
@@ -389,6 +451,10 @@ class PVGG16TargetFlow(nn.Module):
         self.future_prediction_outputs = {
             "current_top": current_top,
             "history_top": history_top,
+            "fusion_previous_top": fusion_previous_top,
+            "fusion_residual_top": fusion_residual,
+            "fused_top": prediction_base,
+            "temporal_fusion_applied": temporal_fusion_applied,
             "prediction_base_top": prediction_base,
             "predicted_residual_top": predicted_residual,
             "predicted_delta_top": predicted_delta,

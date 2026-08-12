@@ -61,6 +61,10 @@ FEATURE_HISTORY_MODE = {
     "instant": "latest",
     "lag1": "two_tap",
 }.get(FEATURE_HISTORY_MODE, FEATURE_HISTORY_MODE)
+TEMPORAL_FUSION_MODE = os.environ.get(
+    "PREDIFY_TEMPORAL_FUSION_MODE",
+    "none",
+).strip().lower()
 FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE = int(
     os.environ.get("PREDIFY_FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE", "1")
 )
@@ -102,6 +106,9 @@ TEMPORAL_HORIZONS = tuple(
 )
 USE_PRETRAINED = os.environ.get("PREDIFY_PRETRAINED", "1") == "1"
 TRAIN_BACKBONE = os.environ.get("PREDIFY_TRAIN_BACKBONE", "0") == "1"
+TRAIN_FEEDBACK_DECODERS = (
+    os.environ.get("PREDIFY_TRAIN_FEEDBACK_DECODERS", "1") == "1"
+)
 CURRENT_TOP_DUPLICATE_ENV = os.environ.get("PREDIFY_CURRENT_TOP_DUPLICATE", "").strip()
 LEGACY_CURRENT_TEACHER_CONTEXT_ENV = os.environ.get(
     "PREDIFY_CURRENT_TEACHER_CONTEXT",
@@ -507,6 +514,7 @@ def build_student_model():
         temporal_error_gain=TEMPORAL_ERROR_GAIN,
         task=PREDICTION_TASK,
         future_feature_history_mode=FEATURE_HISTORY_MODE,
+        future_feature_temporal_fusion_mode=TEMPORAL_FUSION_MODE,
         future_feature_predictor_kernel_size=(
             FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE
         ),
@@ -524,14 +532,21 @@ def configure_student_trainability(student):
     for parameter in student.forward_stages.parameters():
         parameter.requires_grad_(TRAIN_BACKBONE)
     for parameter in student.feedback_modules.parameters():
-        parameter.requires_grad_(True)
+        parameter.requires_grad_(TRAIN_FEEDBACK_DECODERS)
     prediction_module = (
         student.temporal_predictor
         if PREDICTION_TASK == "motion"
         else student.future_feature_predictor
     )
+    predictor_trainable = not (
+        PREDICTION_TASK == "future_feature"
+        and FEATURE_HISTORY_MODE == "copy_current"
+    )
     for parameter in prediction_module.parameters():
-        parameter.requires_grad_(True)
+        parameter.requires_grad_(predictor_trainable)
+    if getattr(student, "temporal_fusion_module", None) is not None:
+        for parameter in student.temporal_fusion_module.parameters():
+            parameter.requires_grad_(True)
 
 
 def build_teacher_model(student):
@@ -737,10 +752,18 @@ def build_optimizer(student):
     trainable_parameters = [
         parameter for parameter in student.parameters() if parameter.requires_grad
     ]
+    if not trainable_parameters:
+        return None
     return torch.optim.Adam(
         trainable_parameters,
         lr=LEARNING_RATE,
         weight_decay=WEIGHT_DECAY,
+    )
+
+
+def trainable_parameter_names(student):
+    return tuple(
+        name for name, parameter in student.named_parameters() if parameter.requires_grad
     )
 
 
@@ -1230,6 +1253,14 @@ def main():
             "PREDIFY_FEATURE_HISTORY_MODE must be none, latest, two_tap, "
             "recursive, temporal_error, or copy_current."
         )
+    if TEMPORAL_FUSION_MODE not in {"none", "two_frame_residual"}:
+        raise ValueError(
+            "PREDIFY_TEMPORAL_FUSION_MODE must be none or two_frame_residual."
+        )
+    if TEMPORAL_FUSION_MODE != "none" and FEATURE_HISTORY_MODE != "none":
+        raise ValueError(
+            "Temporal fusion requires PREDIFY_FEATURE_HISTORY_MODE=none."
+        )
     if FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE not in {1, 3}:
         raise ValueError(
             "PREDIFY_FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE must be 1 or 3."
@@ -1242,6 +1273,14 @@ def main():
         raise ValueError(
             "PREDIFY_FUTURE_FEATURE_PREDICTION_FORM must be current_residual, "
             "historical_warp, or historical_warp_residual."
+        )
+    if (
+        TEMPORAL_FUSION_MODE != "none"
+        and FUTURE_FEATURE_PREDICTION_FORM != "current_residual"
+    ):
+        raise ValueError(
+            "Temporal fusion requires PREDIFY_FUTURE_FEATURE_PREDICTION_FORM="
+            "current_residual."
         )
     if FUTURE_MOTION_RADIUS <= 0:
         raise ValueError("PREDIFY_FUTURE_MOTION_RADIUS must be positive.")
@@ -1339,6 +1378,7 @@ def main():
         f"train_pairs={train_pairs}, val_pairs={val_pairs}, temporal_horizons={TEMPORAL_HORIZONS}, "
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
         f"prediction_task={PREDICTION_TASK}, feature_history_mode={FEATURE_HISTORY_MODE}, "
+        f"temporal_fusion_mode={TEMPORAL_FUSION_MODE}, "
         f"future_feature_predictor_kernel_size={FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE}, "
         f"future_feature_prediction_form={FUTURE_FEATURE_PREDICTION_FORM}, "
         f"future_motion_radius={FUTURE_MOTION_RADIUS}, "
@@ -1367,7 +1407,8 @@ def main():
         f"Starting target-flow training with pretrained={USE_PRETRAINED}, "
         f"target_flow_mode={TARGET_FLOW_MODE}, epochs={EPOCHS}, batchsize={BATCH_SIZE}, "
         f"lr={LEARNING_RATE}, ema_decay={EMA_DECAY}, top_target_source={TOP_TARGET_SOURCE}, device={device}, "
-        f"train_backbone={TRAIN_BACKBONE}, feedback_decoder_trainable=True, "
+        f"train_backbone={TRAIN_BACKBONE}, "
+        f"feedback_decoder_trainable={TRAIN_FEEDBACK_DECODERS}, "
         f"layer_loss_weights={LAYER_LOSS_WEIGHTS}, top_variance_weight={TOP_VARIANCE_WEIGHT}, "
         f"top_variance_target={TOP_VARIANCE_TARGET}, top_variance_eps={TOP_VARIANCE_EPS}, "
         f"top_variance_window={TOP_VARIANCE_WINDOW}, "
@@ -1390,6 +1431,12 @@ def main():
     student = build_student_model()
     teacher = build_teacher_model(student)
     optimizer = build_optimizer(student)
+    optimized_parameter_names = trainable_parameter_names(student)
+    print(
+        "Trainable parameter tensors: "
+        + (", ".join(optimized_parameter_names) if optimized_parameter_names else "none"),
+        flush=True,
+    )
 
     history = {
         "config": {
@@ -1418,6 +1465,8 @@ def main():
             "state_memory_detached": True,
             "prediction_task": PREDICTION_TASK,
             "future_feature_history_mode": FEATURE_HISTORY_MODE,
+            "future_feature_temporal_fusion_mode": TEMPORAL_FUSION_MODE,
+            "future_feature_previous_top_memory_detached": True,
             "future_feature_predictor_kernel_size": (
                 FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE
             ),
@@ -1425,17 +1474,27 @@ def main():
                 f"concat_1024_to_1024_k{FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE}"
                 "_then_512_k1"
             ),
+            "future_feature_temporal_fusion_architecture": (
+                "concat_F_previous_F_current_to_512_k1_relu_512_k1_residual"
+                if TEMPORAL_FUSION_MODE == "two_frame_residual"
+                else "none"
+            ),
             "future_feature_prediction_space": "full_stage5_feature_map",
             "future_feature_prediction_form": FUTURE_FEATURE_PREDICTION_FORM,
             "future_motion_radius": FUTURE_MOTION_RADIUS,
             "future_motion_patch_size": FUTURE_MOTION_PATCH_SIZE,
             "future_feature_prediction_equation": (
-                "Fhat_next=F_current+residual_hat"
-                if FUTURE_FEATURE_PREDICTION_FORM == "current_residual"
+                "Z_current=F_current+T([F_previous,F_current]);"
+                "Fhat_next=Z_current+P([Z_current,0])"
+                if TEMPORAL_FUSION_MODE == "two_frame_residual"
                 else (
-                    "Fhat_next=warp(F_current,M(F_previous,F_current))"
-                    if FUTURE_FEATURE_PREDICTION_FORM == "historical_warp"
-                    else "Fhat_next=warp(F_current,M(F_previous,F_current))+residual_hat"
+                    "Fhat_next=F_current+residual_hat"
+                    if FUTURE_FEATURE_PREDICTION_FORM == "current_residual"
+                    else (
+                        "Fhat_next=warp(F_current,M(F_previous,F_current))"
+                        if FUTURE_FEATURE_PREDICTION_FORM == "historical_warp"
+                        else "Fhat_next=warp(F_current,M(F_previous,F_current))+residual_hat"
+                    )
                 )
             ),
             "future_feature_causal_order": (
@@ -1453,7 +1512,9 @@ def main():
             "weight_decay": WEIGHT_DECAY,
             "ema_decay": EMA_DECAY,
             "top_target_source": TOP_TARGET_SOURCE,
-            "feedback_decoder_trainable": True,
+            "feedback_decoder_trainable": TRAIN_FEEDBACK_DECODERS,
+            "optimizer_created": optimizer is not None,
+            "optimized_parameter_names": optimized_parameter_names,
             "train_fraction": TRAIN_FRACTION,
             "val_fraction": VAL_FRACTION,
             "target_flow_mode": TARGET_FLOW_MODE,

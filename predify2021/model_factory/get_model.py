@@ -159,6 +159,7 @@ def get_model(
     temporal_error_gain=1.0,
     task="motion",
     future_feature_history_mode="none",
+    future_feature_temporal_fusion_mode="none",
     future_feature_predictor_kernel_size=1,
     future_feature_prediction_form="current_residual",
     future_motion_radius=1,
@@ -216,6 +217,9 @@ def get_model(
             temporal_error_gain=temporal_error_gain,
             task=task,
             future_feature_history_mode=future_feature_history_mode,
+            future_feature_temporal_fusion_mode=(
+                future_feature_temporal_fusion_mode
+            ),
             future_feature_predictor_kernel_size=(
                 future_feature_predictor_kernel_size
             ),

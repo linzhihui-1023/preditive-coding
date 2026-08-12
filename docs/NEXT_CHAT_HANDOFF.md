@@ -585,6 +585,12 @@ Run the formal causal warp-residual matrix and per-frame replay:
 scripts/run_kitti_seed0_warp_residual_matrix.sh
 ```
 
+Run the strict three-condition stage-5 temporal-fusion matrix:
+
+```bash
+scripts/run_kitti_seed0_temporal_fusion_matrix.sh
+```
+
 Run the three-condition 1x1 Temporal Error matrix:
 
 ```bash
@@ -622,7 +628,7 @@ not rely on inherited shell variables, especially legacy compatibility flags.
 ## Automatic GitHub Publication
 
 After a code change is complete and verified, commit it and push
-`targetflow-arch` to `myprivate` automatically. After a formal training run is
+`predify-selective-adaptation-v2` to `myprivate` automatically. After a formal training run is
 complete, audit the histories, checkpoints, logs, and manifest; update the
 tracked result documents; commit those records; and push again automatically.
 Do not wait for a separate push request. Checkpoint files and other large

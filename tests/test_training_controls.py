@@ -23,6 +23,13 @@ class _SmallTargetFlowStudent(nn.Module):
         self.temporal_predictor = nn.Linear(2, 2)
 
 
+class _SmallFutureFeatureStudent(_SmallTargetFlowStudent):
+    def __init__(self, with_fusion):
+        super().__init__()
+        self.future_feature_predictor = nn.Linear(2, 2)
+        self.temporal_fusion_module = nn.Linear(2, 2) if with_fusion else None
+
+
 class FeedbackOptimizerTest(unittest.TestCase):
     def test_feedback_parameters_are_updated_and_cleared_by_optimizer(self):
         student = _SmallTargetFlowStudent()
@@ -73,6 +80,104 @@ class FeedbackOptimizerTest(unittest.TestCase):
         }
         self.assertTrue(forward_parameter.requires_grad)
         self.assertIn(id(forward_parameter), optimizer_parameter_ids)
+
+    def test_current_only_trains_only_future_predictor(self):
+        student = _SmallFutureFeatureStudent(with_fusion=False)
+        with (
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.PREDICTION_TASK",
+                "future_feature",
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.FEATURE_HISTORY_MODE",
+                "none",
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.TRAIN_BACKBONE",
+                False,
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.TRAIN_FEEDBACK_DECODERS",
+                False,
+            ),
+        ):
+            configure_student_trainability(student)
+            optimizer = build_optimizer(student)
+
+        trainable = {
+            name for name, parameter in student.named_parameters() if parameter.requires_grad
+        }
+        self.assertEqual(
+            trainable,
+            {"future_feature_predictor.weight", "future_feature_predictor.bias"},
+        )
+        self.assertIsNotNone(optimizer)
+
+    def test_temporal_fusion_trains_fusion_and_future_predictor_only(self):
+        student = _SmallFutureFeatureStudent(with_fusion=True)
+        with (
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.PREDICTION_TASK",
+                "future_feature",
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.FEATURE_HISTORY_MODE",
+                "none",
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.TRAIN_BACKBONE",
+                False,
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.TRAIN_FEEDBACK_DECODERS",
+                False,
+            ),
+        ):
+            configure_student_trainability(student)
+            optimizer = build_optimizer(student)
+
+        trainable = {
+            name for name, parameter in student.named_parameters() if parameter.requires_grad
+        }
+        self.assertEqual(
+            trainable,
+            {
+                "future_feature_predictor.weight",
+                "future_feature_predictor.bias",
+                "temporal_fusion_module.weight",
+                "temporal_fusion_module.bias",
+            },
+        )
+        self.assertIsNotNone(optimizer)
+
+    def test_copy_current_has_no_optimizer_when_all_model_parts_are_frozen(self):
+        student = _SmallFutureFeatureStudent(with_fusion=False)
+        with (
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.PREDICTION_TASK",
+                "future_feature",
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.FEATURE_HISTORY_MODE",
+                "copy_current",
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.TRAIN_BACKBONE",
+                False,
+            ),
+            patch(
+                "predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs.TRAIN_FEEDBACK_DECODERS",
+                False,
+            ),
+        ):
+            configure_student_trainability(student)
+            optimizer = build_optimizer(student)
+
+        self.assertEqual(
+            [name for name, parameter in student.named_parameters() if parameter.requires_grad],
+            [],
+        )
+        self.assertIsNone(optimizer)
 
 
 class TemporalVarianceWindowTest(unittest.TestCase):
