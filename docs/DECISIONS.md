@@ -11,10 +11,13 @@ on both train and validation data. A training-only gain with a validation
 reversal is treated as cross-drive overfitting, not evidence that history is
 useless.
 
-The first 3x3 spatial-predictor diagnostic improves fitting but still fails the
-held-out Copy-current gate. Therefore `tau` tuning, history reruns, seeds 1 and
-2, and robustness experiments remain paused. This null result applies only to
-the tested top residual history; it is not a conclusion about prediction-state
+The first 3x3 spatial-predictor diagnostic increases late-epoch training
+capacity but still fails the held-out Copy-current gate. Its best validation
+checkpoint predicts a smaller delta and has worse delta cosine than 1x1, so
+its MSE being closer to Copy-current must not be described as improved spatial
+motion prediction. Therefore `tau` tuning, history reruns, seeds 1 and 2, and
+robustness experiments remain paused. This null result applies only to the
+tested top residual history; it is not a conclusion about prediction-state
 memory or lower-layer feedback-decoder state.
 
 ## 2026-08-11: Make next-frame feature prediction the primary task

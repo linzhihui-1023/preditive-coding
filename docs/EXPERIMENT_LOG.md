@@ -39,20 +39,28 @@ The 3x3 sufficiency run changed only the first future-predictor convolution
 from 1x1 to 3x3 with padding 1; the output convolution stayed 1x1. Its train
 MSE fell monotonically to 0.093191 by epoch 10, 32.93% below the fixed train
 Copy-current value 0.138955, while validation MSE rose to 0.095457. The best
-validation checkpoint remained epoch 1. This confirms that a spatial
-predictor can fit substantially more of the training-drive feature dynamics,
-but it generalizes poorly to the held-out drive.
+validation checkpoint remained epoch 1. This confirms only that this spatial,
+much larger predictor can fit substantially more of the training-drive target
+by late epochs; it does not show that spatial transport was learned more
+accurately on the held-out drive.
 
 Interpretation:
 
 - The 1x1 predictor is not collapsing exactly to Copy-current, but its
   predicted feature change is much too small and weakly aligned with the true
   change. Validation direction is especially poor.
-- Adding spatial neighborhood access improves best validation MSE from
-  0.061798 to 0.060632, but still does not beat Copy-current.
+- The 3x3 best validation MSE is numerically closer to Copy-current than the
+  1x1 result, but this is not evidence of better spatial-motion prediction. Its
+  validation predicted-delta RMS is smaller (0.0307 versus 0.0612), its norm
+  ratio is smaller (0.1789 versus 0.3562), and its delta cosine is worse
+  (0.0269 versus 0.0683). The most direct interpretation is that its best
+  checkpoint stays closer to zero correction and therefore closer to the
+  Copy-current predictor.
 - The stronger 3x3 predictor rapidly fits drive 0005 and rapidly overfits drive
-  0011. The present result therefore cannot evaluate whether inherited state
-  is useful; Current-only has not passed the cross-drive Copy-current gate.
+  0011 at later epochs. This demonstrates additional train fitting capacity,
+  not improved held-out spatial prediction. The present result therefore
+  cannot evaluate whether inherited state is useful; Current-only has not
+  passed the cross-drive Copy-current gate.
 - The 3x3-first predictor has 9,963,008 parameters versus 1,574,400 for 1x1.
   This is a predictor-sufficiency diagnostic, not a parameter-matched
   architecture ablation.
@@ -64,6 +72,11 @@ Decision: do not tune `tau`, rerun history groups, or start seeds 1 and 2 yet.
 The next experiment should address cross-drive generalization with more
 training sequences or a deliberately train-only predictor-capacity study,
 then require Current-only to beat Copy-current before testing history again.
+
+The checkpoint diagnostic rejects non-future-feature and non-Current-only
+checkpoints. It also verifies the configured kernel against the first
+predictor weight. Legacy checkpoints without a kernel field are accepted only
+when that weight is explicitly verified as 1x1.
 
 Server artifacts, not tracked by Git:
 

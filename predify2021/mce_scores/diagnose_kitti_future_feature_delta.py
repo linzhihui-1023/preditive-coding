@@ -45,8 +45,72 @@ def _distribution(values):
     }
 
 
-def _build_model(checkpoint):
-    config = checkpoint.get("config", {})
+def validate_current_only_checkpoint(checkpoint):
+    config = checkpoint.get("config")
+    if not isinstance(config, dict):
+        raise ValueError("Checkpoint must contain a config dictionary.")
+    if config.get("prediction_task") != "future_feature":
+        raise ValueError(
+            "Delta diagnostics require config.prediction_task='future_feature', "
+            f"got {config.get('prediction_task')!r}."
+        )
+    if config.get("future_feature_history_mode") != "none":
+        raise ValueError(
+            "Delta diagnostics require a Current-only checkpoint with "
+            "config.future_feature_history_mode='none', got "
+            f"{config.get('future_feature_history_mode')!r}."
+        )
+
+    state_dict = checkpoint.get("state_dict")
+    if not isinstance(state_dict, dict):
+        raise ValueError("Checkpoint must contain a state_dict dictionary.")
+    weight_name = "future_feature_predictor.0.weight"
+    first_weight = state_dict.get(weight_name)
+    if not torch.is_tensor(first_weight) or first_weight.ndim != 4:
+        raise ValueError(
+            f"Checkpoint must contain a 4D tensor at {weight_name!r}."
+        )
+    kernel_height, kernel_width = first_weight.shape[-2:]
+    if kernel_height != kernel_width or kernel_height not in {1, 3}:
+        raise ValueError(
+            "Unsupported future predictor kernel shape in checkpoint: "
+            f"{tuple(first_weight.shape[-2:])}."
+        )
+
+    configured_kernel = config.get("future_feature_predictor_kernel_size")
+    if configured_kernel is None:
+        if kernel_height != 1:
+            raise ValueError(
+                "Checkpoint config is missing future_feature_predictor_kernel_size; "
+                "legacy inference is allowed only for a verified 1x1 weight."
+            )
+        kernel_source = "legacy_inferred_from_1x1_weight"
+        configured_kernel = 1
+    else:
+        configured_kernel = int(configured_kernel)
+        if configured_kernel != kernel_height:
+            raise ValueError(
+                "Checkpoint kernel mismatch: config records "
+                f"{configured_kernel}, but {weight_name} has shape "
+                f"{tuple(first_weight.shape[-2:])}."
+            )
+        kernel_source = "config_verified_against_weight"
+
+    return {
+        "prediction_task": "future_feature",
+        "future_feature_history_mode": "none",
+        "future_feature_predictor_kernel_size": configured_kernel,
+        "kernel_validation": kernel_source,
+    }
+
+
+def _build_model(checkpoint, checkpoint_validation=None):
+    config = checkpoint["config"]
+    checkpoint_validation = (
+        checkpoint_validation
+        if checkpoint_validation is not None
+        else validate_current_only_checkpoint(checkpoint)
+    )
     model = get_model(
         "pvgg_tf",
         pretrained=False,
@@ -59,12 +123,13 @@ def _build_model(checkpoint):
         error_sample_time=config.get("error_sample_time", 0.1035),
         error_time_constant=config.get("error_time_constant", 0.5),
         error_gain=config.get("error_gain", 1.0),
-        task="future_feature",
-        future_feature_history_mode="none",
-        future_feature_predictor_kernel_size=config.get(
-            "future_feature_predictor_kernel_size",
-            1,
-        ),
+        task=checkpoint_validation["prediction_task"],
+        future_feature_history_mode=checkpoint_validation[
+            "future_feature_history_mode"
+        ],
+        future_feature_predictor_kernel_size=checkpoint_validation[
+            "future_feature_predictor_kernel_size"
+        ],
     )
     model.load_state_dict(checkpoint["state_dict"], strict=True)
     model.eval()
@@ -193,7 +258,8 @@ def main():
         map_location="cpu",
         weights_only=False,
     )
-    model = _build_model(checkpoint)
+    checkpoint_validation = validate_current_only_checkpoint(checkpoint)
+    model = _build_model(checkpoint, checkpoint_validation)
     root = os.environ.get("PREDIFY_KITTI_ROOT", "/home/lin/predify/kitti_raw")
     camera = os.environ.get("PREDIFY_KITTI_CAMERA", "image_02")
     fixed_dt = float(os.environ.get("PREDIFY_FIXED_TS_S", "0.1035"))
@@ -222,6 +288,7 @@ def main():
         "checkpoint": str(checkpoint_path),
         "checkpoint_kind": checkpoint.get("checkpoint_kind"),
         "checkpoint_config": checkpoint.get("config", {}),
+        "checkpoint_validation": checkpoint_validation,
         "selected_epoch": selected_epoch,
         "device": str(DEVICE),
         "diagnostic_definition": {

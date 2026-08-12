@@ -154,14 +154,20 @@ cosine is 0.195 on train and 0.068 on validation. It improves train MSE by
 A 3x3-first Current-only sufficiency run completed at revision `1ae6b27`. Its
 best epoch-1 validation MSE is 0.060632, still 0.917% worse than Copy-current,
 while its online train MSE reaches 0.093191 by epoch 10 and validation degrades
-to 0.095457. Spatial capacity helps fit drive 0005 but exposes severe
-cross-drive overfitting. The 3x3-first model is not parameter matched: it has
-9.96M predictor parameters versus 1.57M for the 1x1 model.
+to 0.095457. The best 3x3 checkpoint predicts a smaller correction than 1x1
+and has worse validation delta cosine (0.027 versus 0.068); its MSE being closer
+to Copy-current is therefore not evidence that it learned spatial motion more
+accurately. The late-epoch train gain shows additional fitting capacity while
+the validation trajectory shows severe cross-drive overfitting. The 3x3-first
+model is not parameter matched: it has 9.96M predictor parameters versus 1.57M
+for the 1x1 model.
 
 Seeds 1 and 2 and all history reruns remain paused. Current-only must first
 beat Copy-current on held-out video. The next decision is about data coverage
-and predictor regularization/capacity, not `tau`. Noise, blur, online
-adaptation, and broader state inputs remain downstream experiments.
+and predictor regularization/capacity, not `tau`. The current data do not
+separate spatial architecture effects from parameter count or conservative
+near-zero prediction. Noise, blur, online adaptation, and broader state inputs
+remain downstream experiments.
 
 ## Available data
 

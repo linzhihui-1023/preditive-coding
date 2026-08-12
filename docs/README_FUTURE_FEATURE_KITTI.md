@@ -83,6 +83,13 @@ PREDIFY_VAL_DRIVES=2011_09_26/2011_09_26_drive_0011_sync \
 python -m predify2021.mce_scores.diagnose_kitti_future_feature_delta
 ```
 
+The diagnostic accepts only checkpoints whose saved config identifies
+`prediction_task=future_feature` and `future_feature_history_mode=none`. It
+verifies the recorded kernel against the first predictor weight. A legacy
+checkpoint without a kernel field is accepted only when its weight is verified
+to be 1x1, preventing silent evaluation of a Recursive model with history
+forcibly removed.
+
 Outputs default to
 `/tmp/predify-storage/experiments/seed0_future_feature_matrix_<git-sha>`.
 Set `PREDIFY_MATRIX_OUTPUT_ROOT` to override that location. The runner starts
