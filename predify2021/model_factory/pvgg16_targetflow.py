@@ -15,6 +15,8 @@ from .targetflow import (
     build_targetflow_learn_signal_from_error,
     build_targetflow_local_loss_from_error,
     compute_module_grad_stats,
+    estimate_local_displacement,
+    forward_splat_discrete,
     run_backward_target_flow,
 )
 
@@ -104,6 +106,9 @@ class PVGG16TargetFlow(nn.Module):
         task: str = "motion",
         future_feature_history_mode: str = "none",
         future_feature_predictor_kernel_size: int = 1,
+        future_feature_prediction_form: str = "current_residual",
+        future_motion_radius: int = 1,
+        future_motion_patch_size: int = 3,
     ):
         super().__init__()
         self.backbone = copy.deepcopy(backbone)
@@ -220,6 +225,25 @@ class PVGG16TargetFlow(nn.Module):
         self.future_feature_predictor_kernel_size = (
             future_feature_predictor_kernel_size
         )
+        if future_feature_prediction_form not in {
+            "current_residual",
+            "historical_warp",
+            "historical_warp_residual",
+        }:
+            raise ValueError(
+                "Unsupported future_feature_prediction_form: "
+                f"{future_feature_prediction_form}"
+            )
+        if int(future_motion_radius) <= 0:
+            raise ValueError("future_motion_radius must be positive.")
+        if (
+            int(future_motion_patch_size) <= 0
+            or int(future_motion_patch_size) % 2 == 0
+        ):
+            raise ValueError("future_motion_patch_size must be a positive odd integer.")
+        self.future_feature_prediction_form = future_feature_prediction_form
+        self.future_motion_radius = int(future_motion_radius)
+        self.future_motion_patch_size = int(future_motion_patch_size)
         self.temporal_target_dim = 2 if self.temporal_target_mode == "ego_motion" else self.stage_channels[-1]
         temporal_context_dim = self.stage_channels[-1] + 2 * sum(self.stage_channels)
         self.temporal_predictor = nn.Sequential(
@@ -244,6 +268,7 @@ class PVGG16TargetFlow(nn.Module):
         self.two_tap_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_prediction_error_memory = None
         self.temporal_error_state_memory = None
+        self.future_feature_previous_top_memory = None
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
@@ -258,6 +283,7 @@ class PVGG16TargetFlow(nn.Module):
         self.two_tap_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_prediction_error_memory = None
         self.temporal_error_state_memory = None
+        self.future_feature_previous_top_memory = None
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
@@ -304,21 +330,84 @@ class PVGG16TargetFlow(nn.Module):
         history = self._resolve_memory(memory_by_mode[mode][-1], current_top)
         return torch.zeros_like(current_top) if history is None else history.detach()
 
+    def _build_historical_warp_base(self, current_top: torch.Tensor):
+        previous_top = self._resolve_memory(
+            self.future_feature_previous_top_memory,
+            current_top,
+        )
+        if previous_top is None:
+            return current_top, None, None, None
+        with torch.no_grad():
+            motion = estimate_local_displacement(
+                previous_top.detach(),
+                current_top.detach(),
+                radius=self.future_motion_radius,
+                patch_size=self.future_motion_patch_size,
+            )
+        splat = forward_splat_discrete(
+            current_top,
+            motion["dy"],
+            motion["dx"],
+            radius=self.future_motion_radius,
+        )
+        return (
+            splat["warped"],
+            motion["dy"].detach(),
+            motion["dx"].detach(),
+            splat,
+        )
+
     def _predict_future_top_feature(self, current_top: torch.Tensor):
         history_top = self._resolve_future_feature_history(current_top)
         if self.future_feature_history_mode == "copy_current":
-            predicted_delta = torch.zeros_like(current_top)
+            prediction_base = current_top
+            predicted_residual = torch.zeros_like(current_top)
+            motion_dy = None
+            motion_dx = None
+            warp_diagnostics = None
         else:
-            predictor_input = torch.cat([current_top, history_top], dim=1)
-            predicted_delta = self.future_feature_predictor(predictor_input)
-        predicted_future = current_top + predicted_delta
+            form = self.future_feature_prediction_form
+            if form == "current_residual":
+                prediction_base = current_top
+                motion_dy = None
+                motion_dx = None
+                warp_diagnostics = None
+            else:
+                (
+                    prediction_base,
+                    motion_dy,
+                    motion_dx,
+                    warp_diagnostics,
+                ) = self._build_historical_warp_base(current_top)
+            if form == "historical_warp":
+                predicted_residual = torch.zeros_like(current_top)
+            else:
+                predictor_input = torch.cat([prediction_base, history_top], dim=1)
+                predicted_residual = self.future_feature_predictor(predictor_input)
+        predicted_future = prediction_base + predicted_residual
+        predicted_delta = predicted_future - current_top
         self.future_prediction_outputs = {
             "current_top": current_top,
             "history_top": history_top,
+            "prediction_base_top": prediction_base,
+            "predicted_residual_top": predicted_residual,
             "predicted_delta_top": predicted_delta,
             "predicted_future_top": predicted_future,
+            "motion_dy": motion_dy,
+            "motion_dx": motion_dx,
+            "warp_coverage_fraction": (
+                None
+                if warp_diagnostics is None
+                else warp_diagnostics["coverage_fraction"].detach()
+            ),
+            "warp_collision_fraction": (
+                None
+                if warp_diagnostics is None
+                else warp_diagnostics["collision_fraction"].detach()
+            ),
             "future_top_target": None,
             "target_delta_top": None,
+            "target_residual_top": None,
             "prediction_error_top": None,
         }
 
@@ -476,11 +565,14 @@ class PVGG16TargetFlow(nn.Module):
         if self.task == "future_feature":
             future_top_target = resolved_top_target.detach()
             current_top = self.future_prediction_outputs["current_top"]
+            prediction_base = self.future_prediction_outputs["prediction_base_top"]
             predicted_future = self.future_prediction_outputs["predicted_future_top"]
             self.future_prediction_outputs.update(
                 {
                     "future_top_target": future_top_target,
                     "target_delta_top": future_top_target - current_top.detach(),
+                    "target_residual_top": future_top_target
+                    - prediction_base.detach(),
                     "prediction_error_top": future_top_target - predicted_future,
                 }
             )
@@ -562,6 +654,9 @@ class PVGG16TargetFlow(nn.Module):
             self.prediction_state_memory[zero_based_idx] = state.target_output.detach()
 
         if self.task == "future_feature":
+            self.future_feature_previous_top_memory = forward_outputs[-1].detach()
+
+        if self.task == "future_feature":
             self.temporal_target = None
         elif temporal_target_override is not None:
             resolved_temporal_targets = temporal_target_override
@@ -628,12 +723,16 @@ class PVGG16TargetFlow(nn.Module):
             return None
         future_target = outputs["future_top_target"].detach()
         target_delta = outputs["target_delta_top"].detach()
+        target_residual = outputs["target_residual_top"].detach()
         return {
             "future_mse": torch.mean(
                 (outputs["predicted_future_top"] - future_target) ** 2
             ),
             "delta_mse": torch.mean(
                 (outputs["predicted_delta_top"] - target_delta) ** 2
+            ),
+            "residual_mse": torch.mean(
+                (outputs["predicted_residual_top"] - target_residual) ** 2
             ),
         }
 

@@ -60,6 +60,14 @@ def validate_current_only_checkpoint(checkpoint):
             "config.future_feature_history_mode='none', got "
             f"{config.get('future_feature_history_mode')!r}."
         )
+    prediction_form = config.get("future_feature_prediction_form", "current_residual")
+    if prediction_form == "residual_Fhat_next=F_current+delta_hat":
+        prediction_form = "current_residual"
+    if prediction_form != "current_residual":
+        raise ValueError(
+            "Delta diagnostics require current_residual prediction form, got "
+            f"{prediction_form!r}."
+        )
 
     state_dict = checkpoint.get("state_dict")
     if not isinstance(state_dict, dict):
@@ -99,6 +107,7 @@ def validate_current_only_checkpoint(checkpoint):
     return {
         "prediction_task": "future_feature",
         "future_feature_history_mode": "none",
+        "future_feature_prediction_form": "current_residual",
         "future_feature_predictor_kernel_size": configured_kernel,
         "kernel_validation": kernel_source,
     }

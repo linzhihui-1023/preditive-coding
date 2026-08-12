@@ -7,10 +7,17 @@ from predify2021.mce_scores.diagnose_kitti_future_feature_delta import (
 )
 
 
-def _checkpoint(task="future_feature", history="none", kernel=1, record_kernel=True):
+def _checkpoint(
+    task="future_feature",
+    history="none",
+    kernel=1,
+    record_kernel=True,
+    prediction_form="current_residual",
+):
     config = {
         "prediction_task": task,
         "future_feature_history_mode": history,
+        "future_feature_prediction_form": prediction_form,
     }
     if record_kernel:
         config["future_feature_predictor_kernel_size"] = kernel
@@ -41,6 +48,10 @@ class FutureFeatureDiagnosticCheckpointTest(unittest.TestCase):
             validate_current_only_checkpoint(_checkpoint(task="motion"))
         with self.assertRaisesRegex(ValueError, "Current-only"):
             validate_current_only_checkpoint(_checkpoint(history="recursive"))
+        with self.assertRaisesRegex(ValueError, "current_residual"):
+            validate_current_only_checkpoint(
+                _checkpoint(prediction_form="historical_warp_residual")
+            )
 
     def test_rejects_kernel_config_weight_mismatch(self):
         checkpoint = _checkpoint(kernel=3)

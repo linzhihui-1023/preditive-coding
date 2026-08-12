@@ -64,6 +64,14 @@ FEATURE_HISTORY_MODE = {
 FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE = int(
     os.environ.get("PREDIFY_FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE", "1")
 )
+FUTURE_FEATURE_PREDICTION_FORM = os.environ.get(
+    "PREDIFY_FUTURE_FEATURE_PREDICTION_FORM",
+    "current_residual",
+).strip().lower()
+FUTURE_MOTION_RADIUS = int(os.environ.get("PREDIFY_FUTURE_MOTION_RADIUS", "1"))
+FUTURE_MOTION_PATCH_SIZE = int(
+    os.environ.get("PREDIFY_FUTURE_MOTION_PATCH_SIZE", "3")
+)
 USE_DYNAMIC_ERROR = os.environ.get("PREDIFY_DYNAMIC_ERROR", "1") == "1"
 ERROR_STATE_MODE = os.environ.get("PREDIFY_ERROR_STATE_MODE", "").strip().lower()
 if not ERROR_STATE_MODE:
@@ -502,6 +510,9 @@ def build_student_model():
         future_feature_predictor_kernel_size=(
             FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE
         ),
+        future_feature_prediction_form=FUTURE_FEATURE_PREDICTION_FORM,
+        future_motion_radius=FUTURE_MOTION_RADIUS,
+        future_motion_patch_size=FUTURE_MOTION_PATCH_SIZE,
     )
     configure_student_trainability(student)
     return student.to(device)
@@ -860,6 +871,7 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
     feature_cosine_history = []
     normalized_feature_error_history = []
     copy_current_feature_mse_history = []
+    prediction_base_feature_mse_history = []
     copy_current_feature_cosine_history = []
     copy_current_normalized_feature_error_history = []
     feature_loss_equivalence_error_history = []
@@ -973,6 +985,7 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
                 predicted_future = outputs["predicted_future_top"].detach().float()
                 future_target = outputs["future_top_target"].detach().float()
                 current_top = outputs["current_top"].detach().float()
+                prediction_base_top = outputs["prediction_base_top"].detach().float()
                 predicted_flat = predicted_future.flatten(1)
                 target_flat = future_target.flatten(1)
                 current_flat = current_top.flatten(1)
@@ -989,6 +1002,9 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
                     )
                 ).mean()
                 copy_current_feature_mse = torch.mean((current_top - future_target) ** 2)
+                prediction_base_feature_mse = torch.mean(
+                    (prediction_base_top - future_target) ** 2
+                )
                 copy_current_feature_cosine = F.cosine_similarity(
                     current_flat,
                     target_flat,
@@ -1082,6 +1098,9 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
                 copy_current_feature_mse_history.append(
                     float(copy_current_feature_mse.cpu().item())
                 )
+                prediction_base_feature_mse_history.append(
+                    float(prediction_base_feature_mse.cpu().item())
+                )
                 copy_current_feature_cosine_history.append(
                     float(copy_current_feature_cosine.cpu().item())
                 )
@@ -1119,6 +1138,9 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
         "mean_feature_cosine": _mean(feature_cosine_history),
         "mean_normalized_feature_error": _mean(normalized_feature_error_history),
         "mean_copy_current_feature_mse": _mean(copy_current_feature_mse_history),
+        "mean_prediction_base_feature_mse": _mean(
+            prediction_base_feature_mse_history
+        ),
         "mean_copy_current_feature_cosine": _mean(
             copy_current_feature_cosine_history
         ),
@@ -1160,6 +1182,7 @@ def print_feature_metrics(epoch, split, metrics):
         f"{split}_feature_cosine={metrics['mean_feature_cosine']:.6f} | "
         f"{split}_feature_nfe={metrics['mean_normalized_feature_error']:.6f} | "
         f"{split}_copy_mse={metrics['mean_copy_current_feature_mse']:.6f} | "
+        f"{split}_base_mse={metrics['mean_prediction_base_feature_mse']:.6f} | "
         f"{split}_copy_cosine={metrics['mean_copy_current_feature_cosine']:.6f} | "
         f"{split}_copy_nfe={metrics['mean_copy_current_normalized_feature_error']:.6f} | "
         f"{split}_delta_equiv_max={metrics['max_feature_loss_equivalence_error']:.3e}",
@@ -1210,6 +1233,21 @@ def main():
     if FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE not in {1, 3}:
         raise ValueError(
             "PREDIFY_FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE must be 1 or 3."
+        )
+    if FUTURE_FEATURE_PREDICTION_FORM not in {
+        "current_residual",
+        "historical_warp",
+        "historical_warp_residual",
+    }:
+        raise ValueError(
+            "PREDIFY_FUTURE_FEATURE_PREDICTION_FORM must be current_residual, "
+            "historical_warp, or historical_warp_residual."
+        )
+    if FUTURE_MOTION_RADIUS <= 0:
+        raise ValueError("PREDIFY_FUTURE_MOTION_RADIUS must be positive.")
+    if FUTURE_MOTION_PATCH_SIZE <= 0 or FUTURE_MOTION_PATCH_SIZE % 2 == 0:
+        raise ValueError(
+            "PREDIFY_FUTURE_MOTION_PATCH_SIZE must be a positive odd integer."
         )
     if PREDICTION_TASK == "future_feature" and TASK_ALIGNED_TARGET:
         raise ValueError(
@@ -1302,6 +1340,9 @@ def main():
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
         f"prediction_task={PREDICTION_TASK}, feature_history_mode={FEATURE_HISTORY_MODE}, "
         f"future_feature_predictor_kernel_size={FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE}, "
+        f"future_feature_prediction_form={FUTURE_FEATURE_PREDICTION_FORM}, "
+        f"future_motion_radius={FUTURE_MOTION_RADIUS}, "
+        f"future_motion_patch_size={FUTURE_MOTION_PATCH_SIZE}, "
         f"fixed_ts_s={FIXED_TS_S}, fixed_ts_tol_s={FIXED_TS_TOL_S}, "
         f"stream_mode={STREAM_MODE}, reset_each_frame={RESET_EACH_FRAME}, "
         f"formal_split={FORMAL_SPLIT}, same_drive_split={SAME_DRIVE_SPLIT}, "
@@ -1385,7 +1426,18 @@ def main():
                 "_then_512_k1"
             ),
             "future_feature_prediction_space": "full_stage5_feature_map",
-            "future_feature_prediction_form": "residual_Fhat_next=F_current+delta_hat",
+            "future_feature_prediction_form": FUTURE_FEATURE_PREDICTION_FORM,
+            "future_motion_radius": FUTURE_MOTION_RADIUS,
+            "future_motion_patch_size": FUTURE_MOTION_PATCH_SIZE,
+            "future_feature_prediction_equation": (
+                "Fhat_next=F_current+residual_hat"
+                if FUTURE_FEATURE_PREDICTION_FORM == "current_residual"
+                else (
+                    "Fhat_next=warp(F_current,M(F_previous,F_current))"
+                    if FUTURE_FEATURE_PREDICTION_FORM == "historical_warp"
+                    else "Fhat_next=warp(F_current,M(F_previous,F_current))+residual_hat"
+                )
+            ),
             "future_feature_causal_order": (
                 "snapshot_history,predict,observe_future_target,update_error_state"
             ),

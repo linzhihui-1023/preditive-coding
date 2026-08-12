@@ -145,9 +145,21 @@ def validate_controlled_checkpoint(checkpoint, drive, split_metadata):
         raise ValueError(
             f"Checkpoint kernel config={configured_kernel} disagrees with weight={kernel_shape}."
         )
+    prediction_form = config.get("future_feature_prediction_form", "current_residual")
+    if prediction_form == "residual_Fhat_next=F_current+delta_hat":
+        prediction_form = "current_residual"
+    if prediction_form not in {
+        "current_residual",
+        "historical_warp",
+        "historical_warp_residual",
+    }:
+        raise ValueError(f"Unsupported future feature prediction form: {prediction_form!r}.")
     return {
         "history_mode": history_mode,
         "predictor_kernel_size": configured_kernel,
+        "prediction_form": prediction_form,
+        "future_motion_radius": int(config.get("future_motion_radius", 1)),
+        "future_motion_patch_size": int(config.get("future_motion_patch_size", 3)),
         "checkpoint_kind": checkpoint.get("checkpoint_kind"),
         "checkpoint_git_revision": config.get("git_revision", "unknown"),
         "selected_epoch": checkpoint.get("selected_epoch"),
@@ -174,6 +186,9 @@ def _build_model(checkpoint, validation):
         task="future_feature",
         future_feature_history_mode=validation["history_mode"],
         future_feature_predictor_kernel_size=validation["predictor_kernel_size"],
+        future_feature_prediction_form=validation["prediction_form"],
+        future_motion_radius=validation["future_motion_radius"],
+        future_motion_patch_size=validation["future_motion_patch_size"],
     )
     model.load_state_dict(checkpoint["state_dict"], strict=True)
     model.eval()

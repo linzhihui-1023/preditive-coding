@@ -29,6 +29,7 @@ class TargetFlowCausalityTest(unittest.TestCase):
     def setUp(self):
         self.model.task = "motion"
         self.model.future_feature_history_mode = "none"
+        self.model.future_feature_prediction_form = "current_residual"
         self.model.reset()
 
     def _future_feature_step(self, current, future, history_mode="none"):
@@ -407,6 +408,79 @@ class TargetFlowCausalityTest(unittest.TestCase):
         self._future_feature_step(self.current, self.future_a)
         losses = self.model.collect_future_feature_prediction_losses()
         self.assertTrue(torch.allclose(losses["future_mse"], losses["delta_mse"]))
+        self.assertTrue(torch.allclose(losses["future_mse"], losses["residual_mse"]))
+
+    def test_historical_warp_residual_bootstraps_then_uses_detached_previous_top(self):
+        self.model.task = "future_feature"
+        self.model.future_feature_history_mode = "none"
+        self.model.future_feature_prediction_form = "historical_warp_residual"
+        self.model.reset()
+
+        first = self._future_feature_step(self.current, self.future_a)
+        self.assertTrue(torch.equal(first["prediction_base_top"], first["current_top"]))
+        self.assertIsNone(first["motion_dy"])
+        self.assertIsNotNone(self.model.future_feature_previous_top_memory)
+        self.assertFalse(self.model.future_feature_previous_top_memory.requires_grad)
+
+        second = self._future_feature_step(self.future_a, self.future_b)
+        self.assertIsNotNone(second["motion_dy"])
+        self.assertIsNotNone(second["motion_dx"])
+        self.assertTrue(
+            torch.allclose(
+                second["predicted_future_top"],
+                second["prediction_base_top"] + second["predicted_residual_top"],
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                second["predicted_delta_top"],
+                second["predicted_future_top"] - second["current_top"],
+            )
+        )
+
+    def test_historical_warp_base_cannot_use_current_future_target(self):
+        def predict_second(current_pair_target):
+            self.model.future_feature_prediction_form = "historical_warp_residual"
+            self.model.reset()
+            self._future_feature_step(self.current, self.future_a)
+            return self._future_feature_step(
+                self.future_a,
+                current_pair_target,
+            )
+
+        prediction_a = predict_second(self.future_a)
+        prediction_b = predict_second(self.future_b)
+        self.assertTrue(
+            torch.equal(
+                prediction_a["prediction_base_top"],
+                prediction_b["prediction_base_top"],
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                prediction_a["predicted_future_top"],
+                prediction_b["predicted_future_top"],
+            )
+        )
+
+    def test_historical_warp_form_bypasses_residual_predictor(self):
+        self.model.future_feature_prediction_form = "historical_warp"
+        predictor_calls = []
+        hook = self.model.future_feature_predictor.register_forward_hook(
+            lambda *_: predictor_calls.append(True)
+        )
+        try:
+            self.model.reset()
+            self._future_feature_step(self.current, self.future_a)
+            outputs = self._future_feature_step(self.future_a, self.future_b)
+        finally:
+            hook.remove()
+
+        self.assertEqual(predictor_calls, [])
+        self.assertTrue(
+            torch.equal(outputs["predicted_future_top"], outputs["prediction_base_top"])
+        )
+        self.assertEqual(torch.count_nonzero(outputs["predicted_residual_top"]).item(), 0)
 
     def test_copy_current_bypasses_predictor(self):
         predictor_calls = []

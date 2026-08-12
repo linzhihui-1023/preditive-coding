@@ -160,6 +160,9 @@ def get_model(
     task="motion",
     future_feature_history_mode="none",
     future_feature_predictor_kernel_size=1,
+    future_feature_prediction_form="current_residual",
+    future_motion_radius=1,
+    future_motion_patch_size=3,
 ):
     canonical_name = canonicalize_model_name(name)
 
@@ -216,6 +219,9 @@ def get_model(
             future_feature_predictor_kernel_size=(
                 future_feature_predictor_kernel_size
             ),
+            future_feature_prediction_form=future_feature_prediction_form,
+            future_motion_radius=future_motion_radius,
+            future_motion_patch_size=future_motion_patch_size,
         )
 
     elif canonical_name == "peffb0":

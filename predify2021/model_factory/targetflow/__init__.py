@@ -14,3 +14,10 @@ from .core import (
     compute_module_grad_stats,
     run_backward_target_flow,
 )
+from .spatial_motion import (
+    candidate_shifts,
+    estimate_local_displacement,
+    forward_splat_discrete,
+    patch_descriptors,
+    translate_feature,
+)
