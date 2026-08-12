@@ -1,5 +1,70 @@
 # Experiment Log
 
+## Stage-5 causal warp-residual matrix
+
+Date: 2026-08-12
+
+Git revision: `79de55494d24f4e01083851f8331e6c96b2d87f1`
+
+This formal seed-0 matrix followed the local-motion gate without changing its
+order. It used drive 0005 for 153 ordered training transitions and drive 0011
+for 232 ordered validation transitions. All groups used the frozen pretrained
+VGG, recursive Target Flow, a student-self future target, batch size 1, ten
+epochs, and best-checkpoint selection by validation feature MSE.
+
+The three conditions were:
+
+| Condition | Prediction |
+| --- | --- |
+| Copy-current | `Fhat_(t+1)=F_t` |
+| Historical warp | `Fhat_(t+1)=W(F_t,M(F_(t-1),F_t))` |
+| Warp residual | `Fhat_(t+1)=W(F_t,M(F_(t-1),F_t))+Rhat_(t+1)` |
+
+Motion used radius 1 and 3x3 feature descriptors. The local argmin consumed
+only `F_(t-1)` and `F_t`; the future target was resolved after prediction.
+Discrete forward splatting averaged collisions and filled holes with the
+unwarped current feature. Stored previous features were detached.
+
+Best-checkpoint replay on the complete ordered drives:
+
+| Condition | Best epoch | Train MSE | Versus Copy | Val MSE | Versus Copy |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Copy-current | 1 | 0.138954983 | 0.000% | 0.060080099 | 0.000% |
+| Historical warp | 1 | 0.129720510 | +6.646% | 0.059948462 | +0.219% |
+| Warp residual | 3 | 0.124021935 | +10.747% | 0.061526919 | -2.408% |
+
+Warp residual improved over warp-only by 4.393% on train and degraded it by
+2.633% on validation. Its final epoch reached train MSE `0.112814438` while
+validation rose to `0.067354957`, so the selected checkpoint and full learning
+curve show a cross-drive generalization failure in this configuration.
+
+The deterministic warp reproduces the earlier causal gate: it helps strongly
+on drive 0005 and only marginally on held-out drive 0011. This is causal
+evidence that historical feature-space motion has predictive value on both
+tested drives under the literal MSE gate, but the 0.219% held-out margin is too
+small for a broad transport claim. The learned post-warp residual did not pass
+the held-out Copy or warp-only gates. This does not show that residuals are
+unlearnable; the experiment uses one seed, one training drive, and one small
+predictor.
+
+The audit checked the exact revision, all 1,155 unique condition/split/frame
+keys, finite metrics, checkpoint forms and selected epochs, and exact
+CSV-to-summary means. Warp coverage excluding the one bootstrap frame averaged
+0.9252 on train and 0.9711 on validation. No traceback, OOM, NaN, or timestamp
+drop was found.
+
+Versioned artifacts:
+
+```text
+results/seed0_warp_residual_matrix_79de554/
+```
+
+Server-only checkpoints and logs:
+
+```text
+/tmp/predify-storage/experiments/seed0_warp_residual_matrix_79de554/
+```
+
 ## Local matching and causal historical warp
 
 Date: 2026-08-12
@@ -55,12 +120,11 @@ Causal historical warp at `h=1`:
 | 4 | 2 | 3x3 | 2.177706 | 1.256662 | 42.294% | 0.744313 | 0.569650 | 23.466% |
 
 The predeclared gate required one fixed radius/patch configuration to beat
-stage-5 Copy-current on both drives. The 3x3 configurations pass, so the next
-implementation may use historical warp as a base and predict only the
-post-warp residual. The held-out stage-5 gain is only 0.221% for `r=1` and
-0.062% for `r=2`; gate passage is therefore literal but weak. Stage-4 causal
-transport is much stronger and must not be substituted for the formal
-stage-5 result.
+stage-5 Copy-current on both drives. The 3x3 configurations passed and thereby
+permitted the subsequent historical-warp-base residual experiment recorded
+above. The held-out stage-5 gain is only 0.221% for `r=1` and 0.062% for
+`r=2`; gate passage is therefore literal but weak. Stage-4 causal transport is
+much stronger and must not be substituted for the formal stage-5 result.
 
 The audit verified exact revision, 9,096 unique rows, frame horizons, finite
 metrics, per-row arithmetic, all 48 CSV-to-summary aggregates, and the causal

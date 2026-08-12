@@ -1,5 +1,28 @@
 # Research Decisions
 
+## 2026-08-12: Keep warp transport, pause residual generalization claims
+
+Status: accepted
+
+The formal stage-5 matrix at revision `79de554` confirmed that causal
+historical warp beats Copy-current on both tested drives, but very unevenly:
+6.646% on training drive 0005 and only 0.219% on held-out drive 0011. This
+retains causal spatial transport as a useful model component while keeping the
+held-out evidence explicitly weak.
+
+The learned post-warp residual improved train MSE by 10.747% relative to Copy,
+but its best validation checkpoint was 2.408% worse than Copy and 2.633% worse
+than warp-only. Training continued to improve while validation degraded. The
+tested residual head therefore fails the current cross-drive generalization
+gate. This is not a claim that motion-compensated residuals are intrinsically
+unlearnable.
+
+Do not add Temporal Error to the warp-residual predictor or tune either error
+time constant yet. The next change must target held-out residual
+generalization, preferably by increasing training-drive coverage or by a
+predeclared capacity/regularization diagnostic. Keep the deterministic causal
+warp as a separate baseline in every follow-up.
+
 ## 2026-08-12: Treat same-drive corruption as a mechanistic null
 
 Status: accepted

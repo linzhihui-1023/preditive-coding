@@ -15,7 +15,7 @@ Branch and private remote:
 ```text
 branch: targetflow-arch
 remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
-latest local-motion diagnostic implementation and experiment revision: 06ec8e7
+latest warp-residual implementation/training revision: 79de554
 ```
 
 At handoff time the Git worktree was clean. Use this environment:
@@ -58,12 +58,25 @@ diagnostic work and must not be presented as the primary result.
 
 ## Current Causal Feature Task
 
-The existing motion head is preserved. The active independent head is:
+The existing motion head is preserved. The original independent head remains:
 
 ```text
 delta_hat = future_feature_predictor(F_t^5, H_t^5)
 Fhat_(t+1|t)^5 = F_t^5 + delta_hat
 ```
+
+After the ordered local-motion gate, the active tested form is:
+
+```text
+M_t = local_match(F_(t-1)^5, F_t^5)
+B_(t+1)^5 = W(F_t^5, M_t)
+Rhat_(t+1)^5 = future_feature_predictor(B_(t+1)^5, H_t^5)
+Fhat_(t+1|t)^5 = B_(t+1)^5 + Rhat_(t+1)^5
+```
+
+`M_t` uses only detached historical/current features. The deterministic
+`historical_warp` form returns `B` directly; `historical_warp_residual` learns
+only the post-warp residual. `copy_current` still bypasses both paths.
 
 Strict causal order for transition `t -> t+1`:
 
@@ -335,6 +348,12 @@ Actions unit test run was previously reported successful; CI status for
 The feature-learnability diagnostic at `1605f29` passed the expanded full
 local suite: 57 tests. Its exact GitHub Actions status was not checked here.
 
+The causal warp-residual implementation at `79de554` passed the full local
+suite: 69 tests plus 3 subtests. A real `cuda:0` smoke verified historical
+motion on the second stream step, exact equality of future/delta/residual MSE,
+and nonzero residual-predictor gradients. CI status for this revision was not
+checked locally.
+
 ## Current Decision And Next Step
 
 The ordered local-motion diagnostic at `06ec8e7` completed without training.
@@ -343,11 +362,8 @@ Future-selected local matching reduced stage-5 Copy MSE on both drives by
 smaller but positive reductions. Stage-4 reductions were larger.
 
 The causal historical 3x3 warp technically passed the stage-5 Copy gate on
-both drives. At `r=1`, gain was 6.837% on 0005 and only 0.221% on 0011; at
-`r=2`, it was 6.652% and 0.062%. Stage-4 causal gains were 21--42%. The next
-step is therefore allowed to implement
-`historical motion -> warp(F_t) -> predicted residual`, but reports must retain
-that the formal stage-5 held-out margin is weak.
+both drives. At `r=1`, diagnostic gain was 6.837% on 0005 and only 0.221% on
+0011; at `r=2`, it was 6.652% and 0.062%. Stage-4 causal gains were 21--42%.
 
 Versioned audit artifacts:
 
@@ -378,6 +394,26 @@ results/vgg_feature_learnability_1605f29/
 They contain the exact `summary.json`, all 4,500 per-frame CSV rows,
 provenance, and SHA-256 hashes.
 
+The permitted next step was implemented and formally run at revision
+`79de554` as Copy-current, deterministic causal warp, and learned post-warp
+residual. Best-checkpoint replay gave:
+
+| Condition | Train MSE | Val MSE | Val versus Copy |
+| --- | ---: | ---: | ---: |
+| Copy-current | 0.138954983 | 0.060080099 | 0.000% |
+| Historical warp | 0.129720510 | 0.059948462 | +0.219% |
+| Warp residual, epoch 3 | 0.124021935 | 0.061526919 | -2.408% |
+
+Warp residual improved over warp-only by 4.393% on train but degraded it by
+2.633% on validation. At epoch 10, train MSE reached `0.112814438` while val
+rose to `0.067354957`. Keep deterministic warp as a causal baseline, but do
+not claim that this residual predictor generalizes across drives. The complete
+audit copy is:
+
+```text
+results/seed0_warp_residual_matrix_79de554/
+```
+
 Paused:
 
 - Do not tune Target Flow `tau` or Temporal Error `tau_e`.
@@ -390,6 +426,7 @@ Failed gates at seed 0:
 ```text
 Current-only validation MSE < Copy-current validation MSE       FAILED
 Temporal Error validation MSE < Current-only validation MSE     FAILED
+Warp-residual validation MSE < historical-warp validation MSE   FAILED
 ```
 
 The completed same-drive controlled-corruption run used drive 0011 with raw
@@ -423,22 +460,28 @@ traces, provenance, and hashes. Use it to re-audit reported AUEC, phase curves,
 recovery, `e -> E` timing, and state utilization. Checkpoints remain
 server-only.
 
-For the research path, the next discussion should choose a clean
-way to address predictor generalization. Leading options are:
+For the research path, the next discussion should choose a clean way to
+address post-warp residual generalization. Leading options are:
 
 1. Download more training drives while keeping genuinely unseen drives for
    validation.
-2. Design a capacity/regularization diagnostic that separates spatial context
-   from the 6.3x parameter increase and from near-zero prediction.
-3. Only after Current-only clears Copy-current, rerun the matched history
-   matrix and then consider broader Predify state inputs.
+2. Predeclare a capacity/regularization diagnostic for the residual head while
+   retaining warp-only as a separate checkpoint-free baseline.
+3. Only after warp-residual clears warp-only on held-out video, add Temporal
+   Error or broader Predify state inputs to that predictor.
 
 Do not change or tune either error recurrence based on this matrix. The strict
 Temporal Error implementation is now present and causally tested; the limiting
-factor remains a next-feature predictor that does not generalize past
-Copy-current on the held-out drive.
+factor remains a learned correction that does not generalize past the causal
+warp or Copy-current on the held-out drive.
 
 ## Reproduction Commands
+
+Run the formal causal warp-residual matrix and per-frame replay:
+
+```bash
+scripts/run_kitti_seed0_warp_residual_matrix.sh
+```
 
 Run the three-condition 1x1 Temporal Error matrix:
 

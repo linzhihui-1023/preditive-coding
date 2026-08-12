@@ -23,7 +23,7 @@ The active model operates on a real video-frame stream:
 The earlier route that repeatedly ran multiple timesteps on the same image is
 cancelled and is not part of the active experiment design.
 
-The active experiment order is:
+The completed experiment order is:
 
 1. Keep the existing Target Flow residual and dynamic recurrence.
 2. Use next-frame feature prediction as the primary task.
@@ -34,6 +34,11 @@ The active experiment order is:
 5. Use same-drive controlled corruption only as a mechanistic transient test;
    broader robustness and online-adaptation claims require a viable held-out
    predictor first.
+6. Diagnose local future matching, then causal motion estimated from
+   `F_(t-1),F_t`; only after the causal warp passed Copy-current, use it as the
+   predictor base.
+7. Predict only the post-warp residual and keep deterministic warp as an
+   independent baseline.
 
 For transition `t -> t+1`, prediction must use `F_t` and history completed at
 `t-1`, such as `epsilon_(t-1)`. The current residual `r_t` and dynamic state
@@ -55,6 +60,10 @@ next transition.
     `PREDIFY_TASK`.
   - Predicts a residual feature map with
     `Fhat_(t+1|t) = F_t + P(F_t, H_t)`.
+  - Also supports causal historical warp
+    `W(F_t,M(F_(t-1),F_t))` and a warp-residual form that predicts only the
+    remaining feature residual. Motion estimation uses detached prior/current
+    features and prediction still precedes future-target resolution.
   - Supports an explicit first-layer spatial kernel of 1 or 3 for the future
     predictor. The default and formal history matrix remain 1x1.
   - Uses the same future predictor for `none`, `latest`, `two_tap`, and
@@ -79,6 +88,9 @@ next transition.
 - `predify2021/model_factory/targetflow/core.py`
   - Defines target-flow state, dynamic-error integration, local losses, and
     gradient diagnostics.
+- `predify2021/model_factory/targetflow/spatial_motion.py`
+  - Implements shared local patch matching, integer feature translation, and
+    discrete forward splatting with collision averaging and Copy-filled holes.
 - `predify2021/mce_scores/kitti_pairs.py`
   - Loads adjacent KITTI frames, timestamps, and 2-DoF longitudinal-yaw
     targets `[forward displacement m, yaw change rad]`.
@@ -110,7 +122,7 @@ next transition.
   - Selects motion checkpoints by validation temporal loss and future-feature
     checkpoints by validation feature MSE.
   - Reports feature MSE, cosine, normalized feature error, the equivalent delta
-    MSE, and matched copy-current metrics.
+    and residual MSE, prediction-base MSE, and matched copy-current metrics.
   - Computes optional collapse prevention across a sequence-local temporal
     window of pooled top features instead of across the batch dimension.
   - Disables that window completely when its weight is zero and clears it on
@@ -134,6 +146,13 @@ next transition.
     Recursive groups for this matrix.
   - Stores outputs under `/tmp/predify-storage` by default and retains only the
     best validation checkpoint per group.
+- `scripts/run_kitti_seed0_warp_residual_matrix.sh`
+  - Runs Copy-current, causal historical warp, and learned post-warp residual
+    from one clean revision, then replays every best checkpoint into a common
+    per-frame evaluator.
+- `predify2021/mce_scores/evaluate_kitti_warp_residual_matrix.py`
+  - Rejects mismatched checkpoint forms or revisions and records Copy/base/final
+    MSE, residual scale, frame provenance, warp coverage, and collisions.
 - `predify2021/mce_scores/diagnose_kitti_future_feature_delta.py`
   - Re-evaluates a Current-only best checkpoint on ordered train and validation
     pairs and reports true/predicted delta scale, L2/RMS quantiles, norm ratio,
@@ -195,6 +214,17 @@ stage-5 Copy gate on both drives, but the held-out gain was only 0.221% for
 This permits a warp-plus-residual predictor implementation while requiring the
 weak stage-5 margin to remain explicit. Exact summary and per-frame outputs
 are versioned under `results/vgg_local_motion_06ec8e7/`.
+
+The resulting stage-5 formal matrix completed at revision `79de554`.
+Deterministic causal warp improved MSE relative to Copy-current by 6.646% on
+drive 0005 and 0.219% on held-out drive 0011. The learned post-warp residual
+improved train MSE by 10.747% relative to Copy, but its best epoch-3 validation
+MSE was `0.061526919`: 2.408% worse than Copy and 2.633% worse than warp-only.
+Its final train/validation MSE diverged to `0.112814438/0.067354957`. Thus
+historical transport remains a causal but weak held-out baseline, while this
+residual head fails the cross-drive generalization gate. Exact summary, all
+1,155 per-frame rows, and the complete 60-row training curve are versioned
+under `results/seed0_warp_residual_matrix_79de554/`.
 
 The seed-0 five-condition feature matrix completed at revision `94059be`.
 Copy-current achieved validation feature MSE `0.060080099`. Current-only was
@@ -395,14 +425,16 @@ must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Preserve the completed same-drive corruption result as a mechanistic null:
+1. Preserve deterministic causal warp as the required baseline; its held-out
+   advantage is positive but only 0.219%.
+2. Improve post-warp residual generalization through broader training-drive
+   coverage or a predeclared capacity/regularization diagnostic. Require it to
+   beat warp-only on held-out ordered video before adding recurrent error state.
+3. Preserve the completed same-drive corruption result as a mechanistic null:
    the state is used but does not improve systematic-bias response.
-2. Improve cross-drive predictor generalization through broader training data
-   or a controlled capacity/regularization study, then require Current-only to
-   beat Copy-current before interpreting inherited-state value.
-3. Keep seeds 1 and 2 and both Target Flow and Temporal Error `tau` sweeps
-   paused while the primary gate fails.
-4. Treat the existing 2-DoF matrix as a proxy-task diagnostic only. Additional
+4. Keep seeds 1 and 2 and both Target Flow and Temporal Error `tau` sweeps
+   paused while the predictor generalization gate fails.
+5. Treat the existing 2-DoF matrix as a proxy-task diagnostic only. Additional
    motion seeds remain paused unless motion is later reintroduced as a
    secondary evaluation.
 
