@@ -68,34 +68,94 @@ Server artifacts, not tracked by Git:
 size: about 4.0 GB
 ```
 
-## Same-drive controlled corruption protocol (not yet run)
+## Same-drive controlled corruption, seed 0
 
 Date: 2026-08-12
 
-Status: implementation and tests complete; no numerical result recorded.
+Code and experiment revision:
+`ae90a9f74f1560f5b3d6d72905cfe1b16a5b34c4`
 
-The revised protocol trains clean Copy-current, Current-only, and Temporal
-Error checkpoints on the longer drive 0011 using raw frames 0--138 for
-training, frames 139--158 as a 20-frame gap, and frames 159--204 as the
-contiguous validation region. This gives 45 evaluated transitions rather than
-the old 29-transition drive-0005 draft, but remains a short mechanistic trace.
+The formal runner trained clean Copy-current, Current-only, and Temporal Error
+checkpoints on drive 0011. Raw frames 0--138 supplied 138 training pairs,
+frames 139--158 formed a 20-frame gap, and frames 159--204 supplied 45 ordered
+validation transitions. The train and validation samples share no raw frame.
+All best checkpoints and the evaluator report the exact revision above.
 
 Corruption is applied only by the independent evaluator after resize/crop and
 before normalization. Step-bias, ramp-bias, and i.i.d.-noise negative-control
 trajectories are run independently with a full reset before every clean and
 corrupted stream. Fixed RGB bias contains no noise, and i.i.d. noise contains
-no bias. Paired streams save per-frame strict prediction error, Temporal Error
-state, feature MSE, signed `delta L`, signed/absolute/positive excess AUEC,
-Recovery Time, and state-scale/utilization diagnostics.
+no bias. Absolute-frame deterministic corruption preserves the identity of a
+frame when it is read first as a future image and then as the next current
+image.
 
-The canonical entry point is:
+Clean best-checkpoint results:
+
+| Condition | Best epoch | Feature MSE | Feature cosine | Normalized feature error |
+| --- | ---: | ---: | ---: | ---: |
+| Copy-current | 1 | **0.071884151** | **0.941850869** | **0.335404187** |
+| Current-only | 3 | 0.074492955 | 0.938545369 | 0.341990503 |
+| Temporal Error | 3 | 0.074685545 | 0.938351866 | 0.342506164 |
+
+Current-only was 3.62918% worse than Copy-current. Temporal Error was 0.25853%
+worse than Current-only and 3.89709% worse than Copy-current. The same-drive
+training therefore also failed both prerequisite gates.
+
+Primary paired-corruption result, signed excess
+`delta L_t=L_t(corrupted)-L_t(clean)` integrated with `dt=0.1035 s`:
+
+| Trajectory | Copy-current signed AUEC | Current-only signed AUEC | Temporal Error signed AUEC | Temporal versus Current-only |
+| --- | ---: | ---: | ---: | ---: |
+| Step bias | 0.053056728 | 0.053893020 | 0.054012604 | +0.22189% |
+| Ramp bias | 0.042441423 | 0.043303211 | 0.043401632 | +0.22728% |
+| I.i.d. noise | 0.040481845 | 0.034820756 | 0.034471407 | -1.00328% |
+
+All nine recovery measurements reached the signed-excess threshold after one
+recovery frame and were not censored. This coarse result is identical across
+conditions and should not be interpreted as a Temporal Error benefit. Temporal
+Error has mixed, very small AUEC differences: it is slightly worse for both
+systematic-bias trajectories and slightly better for the unpredictable-noise
+negative control. It does not show the predicted selective adaptation to
+persistent systematic bias.
+
+State-scale and utilization diagnostics reject the explanation that the state
+was simply too small or ignored. For the Temporal Error checkpoint, the first
+predictor layer's history-input weight RMS is `0.0182370` versus `0.0179760`
+for feature input, a ratio of `1.01452`. Across phases, `RMS(E_t)/RMS(F_t)` is
+approximately 0.104--0.143, and
+`RMS(P(F_t,E_t)-P(F_t,0))/RMS(delta_hat)` is approximately 0.166--0.227.
+However, the same-checkpoint history ablation
+`MSE(P(F_t,E_t))-MSE(P(F_t,0))` is positive in every phase mean, from about
+`7.7e-5` to `3.5e-4`. The predictor materially uses `E_t`, but that use hurts
+prediction on this validation trace.
+
+The abrupt step also confirms the intended causal ordering in the saved
+per-frame trace. At future raw frame 169, prediction-error RMS rises to
+`0.466116` and the completed state rises from the input `0.111943` to
+`0.123362`; only frame 170 receives that newly completed state as its history
+input. Feature MSE at the step is `0.217264`, and the later state use does not
+produce a consistent loss reduction.
+
+Interpretation is deliberately narrow. This is one seed on one 45-transition
+same-drive validation segment. Natural scene changes can still dominate raw
+Peak Error, so signed paired excess is primary; signed negatives are retained.
+The run is a mechanistic transient diagnostic, not cross-drive generalization,
+broad robustness, or online-adaptation evidence. It does not justify a
+Temporal Error time-constant sweep while Current-only still loses to
+Copy-current.
+
+All three checkpoints were selected by best validation feature MSE. Histories,
+checkpoint metadata, manifest, and evaluator summary agree on revision,
+history mode, split, and selected epoch. The runner exited successfully; its
+logs contain no traceback, runtime error, CUDA OOM, or NaN. The full 53-test
+suite had passed on the experiment revision before this run.
+
+Server artifacts, not tracked by Git:
 
 ```text
-scripts/run_kitti_seed0_same_drive_controlled_corruption.sh
+/tmp/predify-storage/experiments/seed0_same_drive_controlled_corruption_ae90a9f/
+size: about 4.0 GB
 ```
-
-No controlled-corruption number belongs in this log until the code is
-committed and the runner records that exact clean revision.
 
 ## Current-only delta and spatial-predictor diagnostic, seed 0
 

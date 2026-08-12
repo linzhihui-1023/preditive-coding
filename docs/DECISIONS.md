@@ -1,5 +1,31 @@
 # Research Decisions
 
+## 2026-08-12: Treat same-drive corruption as a mechanistic null
+
+Status: accepted
+
+The independent same-drive controlled-corruption experiment completed at
+revision `ae90a9f`. On the clean 45-transition validation segment,
+Current-only remained 3.62918% worse than Copy-current and Temporal Error was
+0.25853% worse than Current-only. Temporal Error changed signed excess AUEC
+relative to Current-only by +0.22189% for step bias, +0.22728% for ramp bias,
+and -1.00328% for i.i.d. noise. This mixed pattern does not show selective
+adaptation to persistent systematic disturbance.
+
+State diagnostics show a normally scaled, actively used state rather than an
+ignored input. `RMS(E)/RMS(F)` is approximately 0.104--0.143, the first-layer
+history/feature weight RMS ratio is 1.01452, and history contributes roughly
+0.166--0.227 of predicted-delta RMS. However, zeroing history in the same
+Temporal Error checkpoint improves phase-mean feature MSE for every trajectory
+phase. The current failure is therefore not explained by vanishing state
+scale; on this trace, the learned use of `E` is harmful.
+
+This one-seed, short same-drive result is retained as a mechanistic null. It
+does not establish broad robustness or cross-drive generalization and does not
+justify tuning `tau_e`. Work returns to predictor sufficiency and
+generalization; Temporal Error seeds and time-constant sweeps remain paused
+until Current-only beats Copy-current.
+
 ## 2026-08-12: Keep Temporal Error tuning behind the failed predictor gate
 
 Status: accepted

@@ -15,7 +15,7 @@ Branch and private remote:
 ```text
 branch: targetflow-arch
 remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
-implementation and formal matrix revision: 3ffbff0
+latest implementation and experiment revision: ae90a9f
 ```
 
 At handoff time the Git worktree was clean. Use this environment:
@@ -325,12 +325,12 @@ Legacy checkpoints without a kernel config field pass only when the first
 weight is verified as 1x1. A Recursive checkpoint is rejected before model
 construction, preventing silent evaluation with history forcibly removed.
 
-The Temporal Error and controlled-corruption implementation at `3ffbff0`
-passed the full local suite: 49 tests. This includes formula, no-current-future-
+The Temporal Error and controlled-corruption implementation at `ae90a9f`
+passed the full local suite: 53 tests. This includes formula, no-current-future-
 error leakage, next-frame state use, detach, deterministic absolute-frame
 corruption, and disjoint raw-frame split tests. The exact `1ae6b27` GitHub
 Actions unit test run was previously reported successful; CI status for
-`3ffbff0` was not checked during this handoff.
+`ae90a9f` was not checked during this handoff.
 
 ## Current Decision And Next Step
 
@@ -348,7 +348,7 @@ Current-only validation MSE < Copy-current validation MSE       FAILED
 Temporal Error validation MSE < Current-only validation MSE     FAILED
 ```
 
-The ready same-drive controlled-corruption runner uses drive 0011 with raw
+The completed same-drive controlled-corruption run used drive 0011 with raw
 train frames 0--138, gap 139--158, and validation 159--204. It runs independent
 step-bias, ramp-bias, and i.i.d.-noise trajectories, resetting before every
 clean and corrupted stream. Bias and noise are never mixed. Primary outputs
@@ -358,7 +358,22 @@ and `P(F_t,E_t)-P(F_t,0)`. Raw Peak Error and raw AUEC are secondary. This is a
 short mechanistic trace, not a substitute for the failed cross-drive gate or
 broad robustness evidence.
 
-For the cross-drive research path, the next discussion should choose a clean
+Clean best-checkpoint MSE was `0.071884151` for Copy-current, `0.074492955`
+for Current-only, and `0.074685545` for Temporal Error. Current-only was
+3.62918% worse than Copy-current and Temporal Error was 0.25853% worse than
+Current-only. Temporal Error versus Current-only signed excess AUEC changed by
++0.22189% for step bias, +0.22728% for ramp bias, and -1.00328% for i.i.d.
+noise. The state was materially present and used, but zeroing its history
+improved every phase-mean MSE. This does not motivate `tau_e` tuning.
+
+Artifacts:
+
+```text
+/tmp/predify-storage/experiments/seed0_same_drive_controlled_corruption_ae90a9f/
+size: about 4.0 GB
+```
+
+For the research path, the next discussion should choose a clean
 way to address predictor generalization. Leading options are:
 
 1. Download more training drives while keeping genuinely unseen drives for

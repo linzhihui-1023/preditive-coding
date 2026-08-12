@@ -217,10 +217,22 @@ not separate spatial architecture effects from parameter count or
 conservative near-zero prediction. Broad noise, blur, online adaptation, and
 broader state claims remain downstream experiments.
 
-The same-drive controlled-corruption implementation is ready but no formal GPU
-run is recorded yet. It is a mechanistic transient-response experiment and
-does not replace the failed cross-drive predictor gate or justify a broad
-robustness claim.
+The same-drive controlled-corruption run completed at revision `ae90a9f` on
+drive 0011, with raw frames 0--138 for training, a 20-frame raw gap, and 45
+ordered validation transitions from frames 159--204. Copy-current reached
+`0.071884151`, Current-only `0.074492955`, and Temporal Error `0.074685545`.
+Thus Current-only was 3.62918% worse than Copy-current and Temporal Error was
+0.25853% worse than Current-only; both gates failed again.
+
+Temporal Error versus Current-only signed excess AUEC changed by +0.22189% for
+step bias, +0.22728% for ramp bias, and -1.00328% for the i.i.d.-noise negative
+control. These small mixed differences do not support selective adaptation to
+systematic bias. The state was not ignored: `RMS(E)/RMS(F)` was about
+0.104--0.143, history and feature input-weight RMS were comparable, and the
+history contribution was about 0.166--0.227 of predicted-delta RMS. Yet the
+same-checkpoint zero-history ablation improved phase-mean MSE everywhere. This
+is a one-seed, short same-drive mechanism diagnostic, not robustness or
+generalization evidence.
 
 ## Available data
 
@@ -356,18 +368,14 @@ must be rerun after the causal-context and positive-loss-weight correction.
 
 ## Required next experiments
 
-1. Run the ready same-drive controlled-corruption protocol only as a
-   mechanistic transient-response test, keeping its claims separate from
-   cross-drive generalization.
-2. Inspect the independent step-bias, ramp-bias, and i.i.d.-noise traces for
-   per-frame `e`, `E`, `L`, and signed `delta L`; prioritize signed/absolute
-   excess integrals and Recovery Time over raw Peak Error or raw AUEC.
-3. Improve cross-drive predictor generalization through broader training data
+1. Preserve the completed same-drive corruption result as a mechanistic null:
+   the state is used but does not improve systematic-bias response.
+2. Improve cross-drive predictor generalization through broader training data
    or a controlled capacity/regularization study, then require Current-only to
    beat Copy-current before interpreting inherited-state value.
-4. Keep seeds 1 and 2 and both Target Flow and Temporal Error `tau` sweeps
+3. Keep seeds 1 and 2 and both Target Flow and Temporal Error `tau` sweeps
    paused while the primary gate fails.
-5. Treat the existing 2-DoF matrix as a proxy-task diagnostic only. Additional
+4. Treat the existing 2-DoF matrix as a proxy-task diagnostic only. Additional
    motion seeds remain paused unless motion is later reintroduced as a
    secondary evaluation.
 
