@@ -103,6 +103,26 @@ class ControlledCorruptionDatasetTest(unittest.TestCase):
 
             self.assertTrue(torch.equal(first_future[0], second_current))
 
+    def test_blurred_absolute_frame_is_identical_as_future_then_current(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            drive = _make_synthetic_drive(root, frame_count=5, pixel_value=128)
+            dataset = ControlledCorruptionKITTIDataset(
+                root,
+                drive,
+                schedule=self._schedule(),
+                corruption_config=ControlledCorruptionConfig(
+                    corruption_type="gaussian_blur",
+                    blur_kernel_size=11,
+                    blur_sigma=3.0,
+                ),
+            )
+
+            _, first_future, _, _ = dataset[0]
+            second_current, _, _, _ = dataset[1]
+
+            self.assertTrue(torch.equal(first_future[0], second_current))
+
     def test_corruption_is_applied_before_imagenet_normalization(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -189,6 +209,26 @@ class ControlledCorruptionDatasetTest(unittest.TestCase):
         self.assertTrue(torch.allclose(biased[0], torch.full((8, 8), 0.6)))
         self.assertTrue(torch.equal(biased[1:], image[1:]))
         self.assertFalse(torch.equal(noisy, biased))
+
+    def test_gaussian_blur_is_deterministic_and_not_identity(self):
+        image = torch.zeros(3, 17, 17)
+        image[:, 8, 8] = 1.0
+        config = ControlledCorruptionConfig(
+            corruption_type="gaussian_blur",
+            blur_kernel_size=11,
+            blur_sigma=3.0,
+        )
+
+        first = apply_controlled_corruption(
+            image, 1.0, config, "drive", "image_02", "000.png"
+        )
+        second = apply_controlled_corruption(
+            image, 1.0, config, "drive", "image_02", "000.png"
+        )
+
+        self.assertTrue(torch.equal(first, second))
+        self.assertFalse(torch.equal(first, image))
+        self.assertGreater(first[:, 8, 7].mean().item(), 0.0)
 
     def test_independent_trajectory_specs_each_fill_validation_segment(self):
         specs = build_independent_trajectory_specs(

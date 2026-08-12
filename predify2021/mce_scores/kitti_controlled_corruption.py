@@ -104,12 +104,14 @@ class ControlledCorruptionConfig:
     corruption_type: str = "bias"
     bias_rgb: tuple = (0.15, -0.08, 0.05)
     noise_std: float = 0.03
+    blur_kernel_size: int = 11
+    blur_sigma: float = 3.0
     seed: int = 0
 
     def __post_init__(self):
-        if self.corruption_type not in {"bias", "iid_gaussian"}:
+        if self.corruption_type not in {"bias", "iid_gaussian", "gaussian_blur"}:
             raise ValueError(
-                "corruption_type must be 'bias' or 'iid_gaussian', got "
+                "corruption_type must be bias, iid_gaussian, or gaussian_blur, got "
                 f"{self.corruption_type!r}."
             )
         if len(self.bias_rgb) != 3:
@@ -120,6 +122,10 @@ class ControlledCorruptionConfig:
             raise ValueError(f"noise_std must be finite and non-negative, got {self.noise_std}.")
         if self.corruption_type == "iid_gaussian" and self.noise_std <= 0:
             raise ValueError("iid_gaussian corruption requires noise_std > 0.")
+        if self.blur_kernel_size <= 0 or self.blur_kernel_size % 2 == 0:
+            raise ValueError("blur_kernel_size must be a positive odd integer.")
+        if not math.isfinite(self.blur_sigma) or self.blur_sigma <= 0:
+            raise ValueError("blur_sigma must be finite and positive.")
 
     def to_dict(self):
         return asdict(self)
@@ -162,6 +168,12 @@ def apply_controlled_corruption(
             device="cpu",
         ).to(image_tensor.dtype)
         corrupted = corrupted + severity * config.noise_std * noise
+    elif config.corruption_type == "gaussian_blur":
+        corrupted = TF.gaussian_blur(
+            image_tensor,
+            kernel_size=[config.blur_kernel_size, config.blur_kernel_size],
+            sigma=[severity * config.blur_sigma, severity * config.blur_sigma],
+        )
     return corrupted.clamp(0.0, 1.0)
 
 
