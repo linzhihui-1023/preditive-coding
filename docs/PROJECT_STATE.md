@@ -234,6 +234,12 @@ same-checkpoint zero-history ablation improved phase-mean MSE everywhere. This
 is a one-seed, short same-drive mechanism diagnostic, not robustness or
 generalization evidence.
 
+The original evaluator `summary.json` and all nine 45-row per-frame CSV traces
+are versioned under
+`results/seed0_same_drive_controlled_corruption_ae90a9f/`, together with
+provenance and SHA-256 hashes. The approximately 4 GB checkpoints remain only
+on the experiment server.
+
 ## Available data
 
 - Training drive: `2011_09_26_drive_0005_sync`, 153 accepted adjacent pairs.

@@ -157,6 +157,17 @@ Server artifacts, not tracked by Git:
 size: about 4.0 GB
 ```
 
+Versioned audit artifacts:
+
+```text
+results/seed0_same_drive_controlled_corruption_ae90a9f/
+```
+
+The tracked copy contains the original `summary.json`, all nine 45-row
+per-checkpoint/per-trajectory CSV traces, provenance notes, and SHA-256 hashes.
+It is sufficient to re-audit AUEC, phase curves, recovery metrics, causal
+`e -> E` traces, and history-utilization measurements without a checkpoint.
+
 ## Current-only delta and spatial-predictor diagnostic, seed 0
 
 Date: 2026-08-12

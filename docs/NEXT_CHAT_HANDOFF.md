@@ -371,7 +371,13 @@ Artifacts:
 ```text
 /tmp/predify-storage/experiments/seed0_same_drive_controlled_corruption_ae90a9f/
 size: about 4.0 GB
+versioned audit copy: results/seed0_same_drive_controlled_corruption_ae90a9f/
 ```
+
+The versioned audit copy includes `summary.json`, all nine per-frame CSV
+traces, provenance, and hashes. Use it to re-audit reported AUEC, phase curves,
+recovery, `e -> E` timing, and state utilization. Checkpoints remain
+server-only.
 
 For the research path, the next discussion should choose a clean
 way to address predictor generalization. Leading options are:
