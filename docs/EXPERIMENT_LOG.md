@@ -1,5 +1,56 @@
 # Experiment Log
 
+## Real-frame observation plus accumulated error-memory recurrence
+
+Date: 2026-08-14
+
+Code revision: `268e92698019344b9d091f50177819154ba9e87f`
+
+Evaluation revision: `1178f7bc042c4c36d76cd902669723ddaa05a76c`
+
+This run reorganized the learned real-frame PC recurrence into the constrained
+form:
+
+```text
+e_t = F_t - Fhat_t
+epsilon_t = 0.207 e_t + 0.793 epsilon_(t-1)
+h_t = T(h_(t-1), F_t, E(error_input), feedback)
+```
+
+The observation feature, previous recurrent state, and top-down feedback are
+kept in all formal conditions. VGG, original Predify modules, and feedback
+decoders are frozen. Only the ConvGRU recurrent transition and lightweight
+signed-error encoder train. Training used clean ordered streams from
+0005/0013/0014/0036, selected by Val next-frame prediction MSE on 0011/0039,
+and did not read Frozen Test drives 0051/0056.
+
+The three matched-capacity conditions differ only in the error input:
+`temporal_only` zeros it, `instant_error` encodes instantaneous `e_t`, and
+`error_memory` encodes accumulated `epsilon_t`. Validation used only Val drives
+0011/0039 with the paired 40 clean / 80 corruption / 40 recovery protocol and
+two fixed corruptions: Gaussian blur and brightness overexposure.
+
+| Corruption | Condition | Next-frame MSE | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Gaussian blur | temporal_only | 2.334490107 | 0.517564676 | 0.351396176 | 0.049391711 |
+| Gaussian blur | instant_error | 1.907473086 | 0.618940690 | 0.455200213 | 0.128084182 |
+| Gaussian blur | error_memory | 2.025569703 | 0.579650802 | 0.411636176 | 0.093996459 |
+| Brightness overexposure | temporal_only | 3.242816785 | 0.184214546 | 0.127207593 | 0.021436488 |
+| Brightness overexposure | instant_error | 2.767941671 | 0.218418550 | 0.159805887 | 0.048202725 |
+| Brightness overexposure | error_memory | 2.956473686 | 0.199469868 | 0.143912379 | 0.048761494 |
+
+`error_memory` improved over `instant_error` on the main representation
+deviation metric by `6.347925%` for blur and `8.675399%` for brightness. It
+was nevertheless worse than `temporal_only` by `11.995820%` and `8.281280%`,
+respectively, with the same direction on both Val drives.
+
+Decision: `benefit_mainly_from_temporal_recurrence`. The accumulated
+prediction-error memory helps relative to instantaneous error but does not beat
+the no-error temporal recurrent baseline, so it does not support an independent
+anti-corruption value claim under this protocol. Auditable small artifacts are
+under `results/real_frame_error_memory_1178f7b/`; checkpoints remain under
+`/tmp/predify-storage/experiments/real_frame_error_memory_train_268e926/`.
+
 ## Stage-4 Dynamic Prediction Error state: phase 1
 
 Date: 2026-08-13

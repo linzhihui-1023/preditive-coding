@@ -1,0 +1,735 @@
+{
+  "conditions": {
+    "error_memory": {
+      "best_epoch": 5,
+      "best_val_prediction_mse": 3.006943346407169,
+      "bptt": false,
+      "checkpoint": "/tmp/predify-storage/experiments/real_frame_error_memory_train_268e926/best_error_memory.pt",
+      "condition": "error_memory",
+      "cross_frame_state_detached": true,
+      "current_feedforward_transition_input": false,
+      "dedicated_error_encoder": true,
+      "device": "cuda:0",
+      "epochs": 5,
+      "experiment": "real_frame_error_memory_training",
+      "frozen_test_drives_read": false,
+      "git_revision": "268e92698019344b9d091f50177819154ba9e87f",
+      "gpu_name": "NVIDIA GeForce RTX 5090",
+      "history": [
+        {
+          "condition": "error_memory",
+          "epoch": 1,
+          "train": {
+            "mean_prediction_mse": 3.4931414217159267,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 4.522182299902565,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.855806412831159,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.5871016891338887,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 3.5864894296346086,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 3.8222960667350354,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 2.737420584216262,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 4.4599709686735505,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "error_memory",
+          "epoch": 2,
+          "train": {
+            "mean_prediction_mse": 2.765394254110346,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.852450213934246,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.2892324722988504,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.4652446691806498,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 2.5831584708669806,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 3.1108592811685343,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 2.514356501174696,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 3.461475419027508,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "error_memory",
+          "epoch": 3,
+          "train": {
+            "mean_prediction_mse": 2.6124978434048227,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.667595032014345,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.1864547645541985,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.2634027883028374,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 2.4465065846282443,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 4.3329152434300156,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 2.7511841218708915,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 5.262635062972401,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "error_memory",
+          "epoch": 4,
+          "train": {
+            "mean_prediction_mse": 2.5670598469139754,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.573406401433443,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.1281034039779447,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.239063847523469,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 2.404390546564157,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 7.574506338972312,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 4.392461625012484,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 9.444868499086104,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "error_memory",
+          "epoch": 5,
+          "train": {
+            "mean_prediction_mse": 2.567779325642481,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.511124855593631,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.0859728934059683,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.356763469103055,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 2.3790963544381247,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 3.006943346407169,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 2.448599997536961,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 3.335129894979734,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        }
+      ],
+      "learning_rate": 0.0001,
+      "objective": "mean next-frame per-layer PCoder prediction MSE",
+      "recurrent_input": "memory",
+      "seed": 0,
+      "temporal_predictor_trained": false,
+      "train_drives": [
+        "2011_09_26/2011_09_26_drive_0005_sync",
+        "2011_09_26/2011_09_26_drive_0013_sync",
+        "2011_09_26/2011_09_26_drive_0014_sync",
+        "2011_09_26/2011_09_26_drive_0036_sync"
+      ],
+      "trainable_parameter_count": 8198272,
+      "transition": "ConvGRU(previous_state,observation,memory,feedback)",
+      "val_drives": [
+        "2011_09_26/2011_09_26_drive_0011_sync",
+        "2011_09_26/2011_09_26_drive_0039_sync"
+      ],
+      "weight_decay": 0.0
+    },
+    "instant_error": {
+      "best_epoch": 5,
+      "best_val_prediction_mse": 2.80165569541546,
+      "bptt": false,
+      "checkpoint": "/tmp/predify-storage/experiments/real_frame_error_memory_train_268e926/best_instant_error.pt",
+      "condition": "instant_error",
+      "cross_frame_state_detached": true,
+      "current_feedforward_transition_input": false,
+      "dedicated_error_encoder": true,
+      "device": "cuda:0",
+      "epochs": 5,
+      "experiment": "real_frame_instant_error_training",
+      "frozen_test_drives_read": false,
+      "git_revision": "268e92698019344b9d091f50177819154ba9e87f",
+      "gpu_name": "NVIDIA GeForce RTX 5090",
+      "history": [
+        {
+          "condition": "instant_error",
+          "epoch": 1,
+          "train": {
+            "mean_prediction_mse": 5.998245550794811,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 4.461033632880763,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.6619384540638453,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.4211543515706673,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 8.097451884648327,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 8.763442551478361,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 4.329497337341309,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 11.369654623910064,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "instant_error",
+          "epoch": 2,
+          "train": {
+            "mean_prediction_mse": 2.5943665963669744,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.7522188534862115,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.175928198115926,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.2468732583981295,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 2.40690421299095,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 3.434989380530822,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 2.477967286006713,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 3.9975138177701837,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "instant_error",
+          "epoch": 3,
+          "train": {
+            "mean_prediction_mse": 2.5337385300973163,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.5772263156740287,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.0716494405773322,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.187541182988729,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 2.375211788027474,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 3.2167727022598953,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 2.589348823993237,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 3.58556383681358,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "instant_error",
+          "epoch": 4,
+          "train": {
+            "mean_prediction_mse": 2.47552971765346,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.4766515344381332,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.013792009420798,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.151009446535355,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 2.316536662730385,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 8.146625637243956,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 4.145453446871274,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 10.498459672806524,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "instant_error",
+          "epoch": 5,
+          "train": {
+            "mean_prediction_mse": 2.446145346169787,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.4073494766887866,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 2.974306088098338,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.1291746076865072,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 2.2935773277104126,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 2.80165569541546,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 2.309438528436603,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 3.090974182876315,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        }
+      ],
+      "learning_rate": 0.0001,
+      "objective": "mean next-frame per-layer PCoder prediction MSE",
+      "recurrent_input": "instant",
+      "seed": 0,
+      "temporal_predictor_trained": false,
+      "train_drives": [
+        "2011_09_26/2011_09_26_drive_0005_sync",
+        "2011_09_26/2011_09_26_drive_0013_sync",
+        "2011_09_26/2011_09_26_drive_0014_sync",
+        "2011_09_26/2011_09_26_drive_0036_sync"
+      ],
+      "trainable_parameter_count": 8198272,
+      "transition": "ConvGRU(previous_state,observation,instant,feedback)",
+      "val_drives": [
+        "2011_09_26/2011_09_26_drive_0011_sync",
+        "2011_09_26/2011_09_26_drive_0039_sync"
+      ],
+      "weight_decay": 0.0
+    },
+    "temporal_only": {
+      "best_epoch": 5,
+      "best_val_prediction_mse": 3.2967219857069163,
+      "bptt": false,
+      "checkpoint": "/tmp/predify-storage/experiments/real_frame_error_memory_train_268e926/best_temporal_only.pt",
+      "condition": "temporal_only",
+      "cross_frame_state_detached": true,
+      "current_feedforward_transition_input": false,
+      "dedicated_error_encoder": true,
+      "device": "cuda:0",
+      "epochs": 5,
+      "experiment": "real_frame_temporal_only_training",
+      "frozen_test_drives_read": false,
+      "git_revision": "268e92698019344b9d091f50177819154ba9e87f",
+      "gpu_name": "NVIDIA GeForce RTX 5090",
+      "history": [
+        {
+          "condition": "temporal_only",
+          "epoch": 1,
+          "train": {
+            "mean_prediction_mse": 3.2565855036073317,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 4.773552558924022,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 4.124812000234362,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.755779259479963,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 3.009874384054977,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 3.487706551567102,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 3.102898488313089,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 3.713891443708774,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "temporal_only",
+          "epoch": 2,
+          "train": {
+            "mean_prediction_mse": 7.0400507860176935,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.86853206471393,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.4771485563734887,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.663066620245958,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 9.978405370247945,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 5.439989432310447,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 3.9957934891506706,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 6.28886796378604,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "temporal_only",
+          "epoch": 3,
+          "train": {
+            "mean_prediction_mse": 2.8070506522565677,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.779259458968514,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.398584271820498,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.4614029136987834,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 2.652329780635762,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 3.341737770499327,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 2.950970692035956,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 3.5714252899014616,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "temporal_only",
+          "epoch": 4,
+          "train": {
+            "mean_prediction_mse": 2.7424455891285877,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.658539764190975,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.3248261498733305,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.3678012108191466,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 2.611290397864305,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 4.315897777676582,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 5.667349246673254,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 3.521533173762508,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        },
+        {
+          "condition": "temporal_only",
+          "epoch": 5,
+          "train": {
+            "mean_prediction_mse": 2.7046597036979856,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0005_sync": {
+                "mean_prediction_mse": 3.6026786597151506,
+                "transition_frames": 152
+              },
+              "2011_09_26/2011_09_26_drive_0013_sync": {
+                "mean_prediction_mse": 3.2823869577595883,
+                "transition_frames": 142
+              },
+              "2011_09_26/2011_09_26_drive_0014_sync": {
+                "mean_prediction_mse": 2.3611178390490704,
+                "transition_frames": 312
+              },
+              "2011_09_26/2011_09_26_drive_0036_sync": {
+                "mean_prediction_mse": 2.565644610538316,
+                "transition_frames": 801
+              }
+            },
+            "transition_frames": 1407
+          },
+          "val": {
+            "mean_prediction_mse": 3.2967219857069163,
+            "per_drive": {
+              "2011_09_26/2011_09_26_drive_0011_sync": {
+                "mean_prediction_mse": 2.9325614883786155,
+                "transition_frames": 231
+              },
+              "2011_09_26/2011_09_26_drive_0039_sync": {
+                "mean_prediction_mse": 3.510770522304467,
+                "transition_frames": 393
+              }
+            },
+            "transition_frames": 624
+          }
+        }
+      ],
+      "learning_rate": 0.0001,
+      "objective": "mean next-frame per-layer PCoder prediction MSE",
+      "recurrent_input": "temporal_only",
+      "seed": 0,
+      "temporal_predictor_trained": false,
+      "train_drives": [
+        "2011_09_26/2011_09_26_drive_0005_sync",
+        "2011_09_26/2011_09_26_drive_0013_sync",
+        "2011_09_26/2011_09_26_drive_0014_sync",
+        "2011_09_26/2011_09_26_drive_0036_sync"
+      ],
+      "trainable_parameter_count": 8198272,
+      "transition": "ConvGRU(previous_state,observation,temporal_only,feedback)",
+      "val_drives": [
+        "2011_09_26/2011_09_26_drive_0011_sync",
+        "2011_09_26/2011_09_26_drive_0039_sync"
+      ],
+      "weight_decay": 0.0
+    }
+  },
+  "device": "cuda:0",
+  "epochs": 5,
+  "experiment": "real_frame_error_memory_training",
+  "frozen_test_drives_read": false,
+  "git_revision": "268e92698019344b9d091f50177819154ba9e87f",
+  "gpu_name": "NVIDIA GeForce RTX 5090",
+  "learning_rate": 0.0001,
+  "legacy_error_driven_checkpoint": "/tmp/predify-storage/experiments/real_frame_error_memory_train_268e926/best_recurrent_transition.pt",
+  "matched_transition_capacity": true,
+  "objective": "mean next-frame per-layer PCoder prediction MSE",
+  "seed": 0,
+  "temporal_predictor_trained": false,
+  "train_drives": [
+    "2011_09_26/2011_09_26_drive_0005_sync",
+    "2011_09_26/2011_09_26_drive_0013_sync",
+    "2011_09_26/2011_09_26_drive_0014_sync",
+    "2011_09_26/2011_09_26_drive_0036_sync"
+  ],
+  "val_drives": [
+    "2011_09_26/2011_09_26_drive_0011_sync",
+    "2011_09_26/2011_09_26_drive_0039_sync"
+  ],
+  "weight_decay": 0.0
+}

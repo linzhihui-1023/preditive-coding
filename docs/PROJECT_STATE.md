@@ -141,21 +141,31 @@ show independent value over a matched observation-driven recurrent input.
 Frozen Test was not read. Outputs are in
 `results/real_frame_matched_recurrent_1765d15/`.
 
-The final error-driven v2 revision `94ad47e` added a dedicated signed-error
-encoder and jointly trained the transition, temporal prediction decoders, and
-error encoder with truncated BPTT window 4. The error-driven update is
-`h_t=T(h_(t-1),P([relu(F_t-Fhat_t),relu(Fhat_t-F_t)]),feedback)` and still
-does not feed the current observation directly into the transition. The
-matched observation control used the same data, optimizer, epochs, learning
-rate, next-frame objective, and ConvGRU transition capacity. On Val 0011/0039,
-disturbance normalized L2 was `0.784296992` (current-stateful),
-`0.660923713` (observation-driven), and `0.660516654` (error-driven v2).
-Error-driven v2 improved over current by `15.782330%`, but only by
-`0.061589%` over observation-driven. Next-frame MSE favored error-driven v2
-(`1.805955697` versus `2.355917884` in the robustness stream), but the primary
-disturbance adaptation metric was effectively tied. The final decision is
-NO-GO for independent prediction-error state-update value. Frozen Test was not
-read. Outputs are in `results/real_frame_error_driven_v2_94ad47e/`.
+The accumulated error-memory revision `268e926` is now the active latest
+real-frame PC result. It restored the observation input while keeping previous
+state and top-down feedback, and tests whether error memory adds robustness on
+top of temporal recurrence:
+`h_t=T(h_(t-1),F_t,E(error_input),feedback)`. The matched conditions are
+`temporal_only`, `instant_error`, and `error_memory`, with identical transition
+capacity and training protocol. Only the transition and signed-error encoder
+train; VGG, original Predify, and feedback decoders remain frozen.
+
+Evaluator revision `1178f7b` ran Val drives 0011/0039 only, using paired
+40-clean/80-corruption/40-recovery streams for Gaussian blur and brightness
+overexposure. Disturbance normalized L2 for blur was `0.517564676`
+(`temporal_only`), `0.618940690` (`instant_error`), and `0.579650802`
+(`error_memory`). Brightness was `0.184214546`, `0.218418550`, and
+`0.199469868`. Error memory improved over instant error but remained worse
+than temporal-only on both corruptions and both Val drives. Current decision:
+`benefit_mainly_from_temporal_recurrence`; accumulated prediction-error memory
+does not establish independent anti-corruption value. Frozen Test was not
+read. Outputs are in `results/real_frame_error_memory_1178f7b/`.
+
+The previous error-driven v2 revision `94ad47e` remains recorded as a no-go:
+it used a dedicated signed-error encoder, joint transition/predictor/error
+training, and short-window BPTT, but improved only `0.061589%` over its matched
+observation-driven control on the primary disturbance metric. Outputs are in
+`results/real_frame_error_driven_v2_94ad47e/`.
 
 ## Current implementation
 
@@ -163,22 +173,23 @@ read. Outputs are in `results/real_frame_error_driven_v2_94ad47e/`.
   - Defaults to `task=real_frame_pc` and implements five real-frame PCoder
     stages using the original PVGG16 feedforward boundaries and decoders.
   - Selects `real_frame_transition_mode=predify` for the frozen baseline or
-    `convgru_error` for the learned transition. The strict error-driven path
-    uses previous state, current dynamic prediction error, and historical
-    feedback; current feedforward features do not enter that transition after
-    first-frame state initialization.
-  - Supports a matched `real_frame_recurrent_error_input=observation` control
-    that feeds the current observation feature into the same transition
-    capacity. This is now the core comparator for testing prediction-error
-    input value.
-  - In v2, `real_frame_recurrent_error_input=dynamic` uses a dedicated
+    `convgru_error` for the learned transition. The latest matched
+    error-memory path uses previous state, current observation drive,
+    historical feedback, and either zero, instantaneous-error, or accumulated
+    dynamic-error input.
+  - Retains older `real_frame_recurrent_error_input=observation` and `zeroed`
+    aliases for compatibility, but the latest formal comparison names are
+    `temporal_only`, `instant_error`, and `error_memory`.
+  - `real_frame_recurrent_error_input=instant` encodes instantaneous
+    `e_t=F_t-Fhat_t`; `real_frame_recurrent_error_input=memory` encodes
+    accumulated `epsilon_t=0.207e_t+0.793epsilon_(t-1)`. Both use a dedicated
     signed-error encoder, not a frozen VGG stage:
-    `[relu(e_t),relu(-e_t)] -> 1x1 projection -> recurrent drive`.
-    The training script jointly trains this encoder, the recurrent transition,
-    and the prediction decoders with short-window truncated BPTT.
-  - Supports `real_frame_recurrent_error_input=zeroed` solely for the formal
-    sanity check; it is not a fair performance comparator because the strict
-    path becomes input-blind after initialization.
+    `[relu(error),relu(-error)] -> 1x1 projection -> recurrent drive`.
+    The latest training script trains only this encoder and the recurrent
+    transition.
+  - In the latest observation/error-memory protocol, `temporal_only` is the
+    matched no-error control: it still receives observation, previous state,
+    and feedback, but its encoded error drive is zero.
   - Snapshots every layer's previous state before processing the current frame,
     preventing current-frame higher-layer predictions from leaking into the
     historical feedback slots.

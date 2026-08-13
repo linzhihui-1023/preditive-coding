@@ -29,6 +29,7 @@ latest unified robustness evaluator revision: 42a7029
 latest strict error-driven training/evaluation revisions: a721fcb / d39ffa3
 latest matched recurrent-control revision: 1765d15
 latest error-driven recurrent v2 revision: 94ad47e
+latest observation/error-memory recurrent revisions: 268e926 / 1178f7b
 ```
 
 All selective-online-adaptation work must stay on
@@ -51,7 +52,51 @@ Read this file first, then consult:
 3. `docs/EXPERIMENT_LOG.md`
 4. `docs/README_FUTURE_FEATURE_KITTI.md`
 
-## Latest Error-driven Recurrent V2 Result
+## Latest Observation/Error-memory Recurrent Result
+
+Code revision `268e926` reorganized the learned real-frame PC path into:
+
+```text
+e_t = F_t - Fhat_t
+epsilon_t = 0.207 e_t + 0.793 epsilon_(t-1)
+h_t = T(h_(t-1), F_t, E(error_input), feedback)
+```
+
+The current observation, previous state, and top-down feedback are present in
+all three matched conditions. VGG, original Predify modules, and feedback
+decoders are frozen. Only the ConvGRU transition and lightweight signed-error
+encoder train. Train drives were 0005/0013/0014/0036; Val drives were
+0011/0039; Frozen Test 0051/0056 was not read.
+
+Evaluator revision `1178f7b` used the paired
+40-clean/80-corruption/40-recovery protocol on Gaussian blur and brightness
+overexposure.
+
+| Corruption | Condition | Next-frame MSE | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Gaussian blur | temporal_only | 2.334490107 | 0.517564676 | 0.351396176 | 0.049391711 |
+| Gaussian blur | instant_error | 1.907473086 | 0.618940690 | 0.455200213 | 0.128084182 |
+| Gaussian blur | error_memory | 2.025569703 | 0.579650802 | 0.411636176 | 0.093996459 |
+| Brightness overexposure | temporal_only | 3.242816785 | 0.184214546 | 0.127207593 | 0.021436488 |
+| Brightness overexposure | instant_error | 2.767941671 | 0.218418550 | 0.159805887 | 0.048202725 |
+| Brightness overexposure | error_memory | 2.956473686 | 0.199469868 | 0.143912379 | 0.048761494 |
+
+`error_memory` improves over `instant_error` by `6.347925%` on blur and
+`8.675399%` on brightness, but it is worse than `temporal_only` by
+`11.995820%` and `8.281280%`. Both Val drives agree. Current conclusion:
+`benefit_mainly_from_temporal_recurrence`; accumulated prediction-error memory
+does not establish independent anti-corruption value here.
+
+Results are in `results/real_frame_error_memory_1178f7b/`. Checkpoints remain
+server-only:
+
+```text
+/tmp/predify-storage/experiments/real_frame_error_memory_train_268e926/best_temporal_only.pt
+/tmp/predify-storage/experiments/real_frame_error_memory_train_268e926/best_instant_error.pt
+/tmp/predify-storage/experiments/real_frame_error_memory_train_268e926/best_error_memory.pt
+```
+
+## Previous Error-driven Recurrent V2 Result
 
 Revision `94ad47e` completed the last constrained error-driven structure:
 dedicated signed-error encoder, joint training of recurrent transition plus

@@ -1,5 +1,34 @@
 # Research Decisions
 
+## 2026-08-14: Accumulated error memory does not beat temporal-only recurrence
+
+Status: accepted
+
+Revision `268e926` implemented the constrained real-frame recurrence with
+observation, previous recurrent state, top-down feedback, and a matched
+lightweight signed-error encoder. The three formal conditions have identical
+recurrent capacity and differ only in error input: `temporal_only` receives
+zero error, `instant_error` receives encoded `e_t=F_t-Fhat_t`, and
+`error_memory` receives encoded accumulated
+`epsilon_t=0.207e_t+0.793epsilon_(t-1)`. VGG, original Predify, and feedback
+decoder parameters stayed frozen; only the transition and error encoder
+trained on clean Train drives 0005/0013/0014/0036. Frozen Test 0051/0056 was
+not read.
+
+Evaluator revision `1178f7b` ran Val drives 0011/0039 with the unchanged paired
+40-clean/80-corruption/40-recovery protocol on fixed Gaussian blur and
+brightness overexposure. On the main disturbance representation-deviation
+metric, blur produced `0.517564676` for temporal-only, `0.618940690` for
+instant error, and `0.579650802` for error memory. Brightness produced
+`0.184214546`, `0.218418550`, and `0.199469868`.
+
+Error memory improved over instant error by `6.347925%` on blur and
+`8.675399%` on brightness, but it was worse than temporal-only by
+`11.995820%` and `8.281280%`. Both Val drives had the same direction.
+Decision: `benefit_mainly_from_temporal_recurrence`. Under this protocol, the
+accumulated prediction-error memory does not provide an independent robustness
+benefit over observation-driven temporal recurrence.
+
 ## 2026-08-14: Error-driven recurrent v2 is No-Go for independent error value
 
 Status: accepted
