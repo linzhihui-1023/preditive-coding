@@ -1414,6 +1414,42 @@ results/real_frame_recurrent_error_cross_corruption_54e893e/
 /tmp/predify-storage/experiments/real_frame_recurrent_error_cross_corruption_54e893e.log
 ```
 
+### Unified Real-frame Robustness Val Benchmark
+
+Evaluator revision: `42a7029`
+
+The unchanged epoch-1 `c9fec52` checkpoint was evaluated on Val drives
+0011/0039 only. The benchmark used paired per-model clean references and the
+same 40-clean/80-corruption/40-recovery protocol for Gaussian blur, Gaussian
+noise, brightness, motion blur, contrast, fog, and JPEG compression, each at
+three fixed severities. No training, tuning, checkpoint selection, or Frozen
+Test access occurred. Original Predify used the legacy `pvgg` path and its
+original independent per-frame `t=0..10` internal inference.
+
+| Model | Blur | Noise | Brightness | Motion blur | Contrast | Fog | JPEG | Overall |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Frozen VGG16 | 0.757655 | 0.653359 | 0.194903 | 0.737504 | 0.365978 | 0.226278 | 0.557366 | 0.499006 |
+| Original Predify | 0.716148 | 0.535335 | 0.168492 | 0.667430 | 0.334296 | 0.201913 | 0.464285 | 0.441128 |
+| Current stateful | 0.665489 | 0.525299 | 0.191541 | 0.600955 | 0.354962 | 0.214037 | 0.370445 | 0.417533 |
+| Learned zeroed | 0.437786 | 0.386891 | 0.139895 | 0.410381 | 0.273876 | 0.158904 | 0.238413 | 0.292307 |
+| Learned recurrent error | 0.420092 | 0.387542 | 0.130466 | 0.387374 | 0.259959 | 0.148264 | 0.220550 | 0.279178 |
+
+Learned improved over current-stateful by `33.1362%` overall and by
+`24.5981%` to `40.9063%` at every corruption/severity combination. It improved
+over zeroed by `4.4913%` overall and for blur, brightness, motion blur,
+contrast, fog, and JPEG. Gaussian noise was the exception: its three-severity
+mean was `0.1683%` worse than zeroed, severity 2/3 were `0.3367%`/`0.6793%`
+worse, and drive 0011 was `1.5002%` worse. The learned recurrent transition
+therefore did not show a corruption-level failure against current-stateful,
+but the dynamic-error input contribution did not generalize to i.i.d. noise.
+
+Tracked artifacts and server-only log:
+
+```text
+results/real_frame_robustness_benchmark_42a7029/
+/tmp/predify-storage/experiments/real_frame_robustness_benchmark_42a7029.log
+```
+
 ## Earlier adjacent-pair result
 
 This older experiment reset model state each batch and therefore tested

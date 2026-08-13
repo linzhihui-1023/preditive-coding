@@ -1,0 +1,13 @@
+evaluator_revision=42a70298fa0ce90cb926525987f5010b8a7aca1f
+model_revision=c9fec52
+checkpoint_epoch=1
+checkpoint_sha256=26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4
+val_drives=0011,0039
+frozen_test_read=false
+models=frozen_vgg16,original_predify,current_stateful,learned_recurrent_error_zeroed,learned_recurrent_error
+corruptions=gaussian_blur,gaussian_noise,brightness,motion_blur,contrast,fog,jpeg_compression
+severity_count=3
+original_predify=legacy_pvgg_t0_through_t10
+training=false
+tuning=false
+checkpoint_selection=false

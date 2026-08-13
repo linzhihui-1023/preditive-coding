@@ -25,6 +25,7 @@ frozen baseline commit: 4cc7a21280881813dbb972415a74dc400843fcc6
 remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
 latest Gate 3 evaluation revision: 80c4aee
 latest Stage-4 prediction training revision: c887e94
+latest unified robustness evaluator revision: 42a7029
 ```
 
 All selective-online-adaptation work must stay on
@@ -46,6 +47,23 @@ Read this file first, then consult:
 2. `docs/DECISIONS.md`
 3. `docs/EXPERIMENT_LOG.md`
 4. `docs/README_FUTURE_FEATURE_KITTI.md`
+
+## Latest Unified Robustness Result
+
+Evaluator revision `42a7029` completed the Val-only 0011/0039 benchmark with
+five models, seven corruptions, and three severities under the paired
+40-clean/80-corruption/40-recovery protocol. Original Predify is the legacy
+`pvgg` path with independent per-frame `t=0..10` inference. Learned and zeroed
+use the same frozen epoch-1 `c9fec52` checkpoint. No training, tuning, or
+Frozen Test read occurred.
+
+Overall `mean_normalized_representation_deviation` was `0.499006257` (Frozen
+VGG16), `0.441128454` (Original Predify), `0.417532706` (current-stateful),
+`0.292306507` (learned zeroed), and `0.279178111` (learned recurrent error).
+Learned beat current-stateful for every corruption/severity. It beat zeroed
+for six corruptions, but was `0.1683%` worse on the Gaussian-noise mean; do not
+claim a universal dynamic-error-input benefit. Results are in
+`results/real_frame_robustness_benchmark_42a7029/`.
 
 ## Settled Research Paradigm
 

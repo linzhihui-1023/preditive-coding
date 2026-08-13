@@ -92,6 +92,21 @@ corruptions, while the dynamic-error input contribution generalized to the
 systematic brightness shift but not to per-frame Gaussian noise. Outputs are
 in `results/real_frame_recurrent_error_cross_corruption_54e893e/`.
 
+The unified real-frame robustness benchmark at evaluator revision `42a7029`
+kept the same paired 40-clean/80-corruption/40-recovery protocol and expanded
+Val-only evaluation to seven corruptions with three fixed severities each.
+It compared Frozen VGG16, the legacy Original Predify `pvgg` path with its
+original per-frame `t=0..10` inference, current-stateful, and the shared-
+checkpoint learned/zeroed recurrent models. Every model used its own clean
+trajectory as reference. Mean normalized representation deviation across all
+corruptions was `0.499006257`, `0.441128454`, `0.417532706`, `0.292306507`,
+and `0.279178111`, respectively. Learned improved over current-stateful for
+every corruption and severity, while its dynamic-error input did not improve
+the zeroed control for Gaussian noise on average (`-0.1683%`). Thus the learned
+transition generalized across this Val benchmark, but the error-input benefit
+remains corruption-specific. Frozen Test was not read. Auditable outputs are
+in `results/real_frame_robustness_benchmark_42a7029/`.
+
 ## Current implementation
 
 - `predify2021/model_factory/pvgg16_targetflow.py`

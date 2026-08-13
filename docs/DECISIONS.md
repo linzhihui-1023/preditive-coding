@@ -796,3 +796,21 @@ Latest, two-tap, and Target-Flow recursive residual histories remain available
 for historical checkpoint compatibility, but are not accepted by the formal
 future-feature matrix runner and are not part of this first controlled-
 corruption comparison.
+
+## 2026-08-13: Report unified robustness as within-model clean deviation
+
+Status: accepted
+
+The unified real-frame robustness benchmark uses each model's own paired clean
+trajectory as its reference. Its aggregate is named
+`mean_normalized_representation_deviation`; it is explicitly not mCE. Raw
+feature distances from Frozen VGG16, legacy Original Predify, and the
+real-frame recurrent models are not treated as distances in one shared feature
+space.
+
+Original Predify is fixed to the legacy `pvgg`/`PVGG16SeparateHP`/`PCoderN`
+path with independent per-real-frame `t=0..10` internal inference. It must not
+be implemented as a mode of current-stateful. The learned and error-zeroed
+conditions load the same epoch-1 `c9fec52` checkpoint; only the recurrent error
+input differs. Unified validation is limited to drives 0011/0039 and cannot
+trigger another read of Frozen Test 0051/0056.
