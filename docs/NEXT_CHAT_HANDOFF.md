@@ -1,6 +1,6 @@
 # Next Chat Handoff
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 ## Start Here
 
@@ -27,6 +27,7 @@ latest Gate 3 evaluation revision: 80c4aee
 latest Stage-4 prediction training revision: c887e94
 latest unified robustness evaluator revision: 42a7029
 latest strict error-driven training/evaluation revisions: a721fcb / d39ffa3
+latest matched recurrent-control revision: 1765d15
 ```
 
 All selective-online-adaptation work must stay on
@@ -48,6 +49,42 @@ Read this file first, then consult:
 2. `docs/DECISIONS.md`
 3. `docs/EXPERIMENT_LOG.md`
 4. `docs/README_FUTURE_FEATURE_KITTI.md`
+
+## Latest Matched Recurrent-control Result
+
+Revision `1765d15` added a fair observation-driven recurrent control for the
+strict error-driven transition. It trained two same-capacity ConvGRU
+transitions with identical train drives 0005/0013/0014/0036, seed, epoch
+count, Adam optimizer, learning rate `1e-4`, and next-frame prediction
+objective. The only difference was the recurrent input:
+
+```text
+Error-driven:      h_t=T(h_(t-1),epsilon_t,feedback)
+Observation-driven h_t=T(h_(t-1),F_t,feedback)
+```
+
+Val used only drives 0011/0039, Gaussian blur sigma 3, and the unchanged
+40-clean/80-blur/40-recovery protocol. Frozen Test 0051/0056 was not read.
+
+| Condition | Next-frame MSE | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |
+| --- | ---: | ---: | ---: | ---: |
+| Current stateful | 2.671453703 | 0.784296992 | 0.427156845 | 0.001205088 |
+| Observation-driven recurrent | 2.344646957 | 0.510357280 | 0.341280196 | 0.042804741 |
+| Error-driven recurrent | 2.341551072 | 0.522036018 | 0.391024056 | 0.060610952 |
+
+Error-driven improved over current by `33.438988%`, but was `2.288345%` worse
+than observation-driven on the primary disturbance representation-deviation
+metric. Next-frame MSE was effectively tied. Conclusion:
+`benefit_mainly_from_recurrent_temporal_modeling`; prediction error did not
+show independent value over the matched observation-driven recurrent input.
+The zeroed condition remains only a sanity check because it is input-blind
+after initialization. Results are in
+`results/real_frame_matched_recurrent_1765d15/`. Checkpoints remain server-only:
+
+```text
+/tmp/predify-storage/experiments/real_frame_matched_recurrent_train_1765d15/best_error_driven_recurrent.pt
+/tmp/predify-storage/experiments/real_frame_matched_recurrent_train_1765d15/best_observation_driven_recurrent.pt
+```
 
 ## Latest Unified Robustness Result
 

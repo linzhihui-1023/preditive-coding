@@ -1,5 +1,30 @@
 # Research Decisions
 
+## 2026-08-14: Matched observation control rejects independent error-input claim
+
+Status: accepted
+
+Revision `1765d15` replaced the invalid input-blind zeroed core comparison
+with a matched observation-driven recurrent control. Error-driven and
+observation-driven transitions use the same ConvGRU capacity, train drives,
+seed, epoch count, optimizer, learning rate, and next-frame prediction
+objective. The only intended difference is recurrent input: dynamic prediction
+error state `epsilon_t` versus current observation feature `F_t`. Zeroed
+remains a sanity check only.
+
+On Val 0011/0039 with the unchanged Gaussian-blur sigma-3 40/80/40 protocol,
+disturbance normalized L2 was `0.784296992` for current-stateful,
+`0.510357280` for observation-driven, and `0.522036018` for error-driven.
+Error-driven improved over current by `33.438988%`, but was `2.288345%` worse
+than observation-driven. Next-frame MSE was effectively tied:
+`2.341551072` for error-driven and `2.344646957` for observation-driven.
+
+Therefore the current matched-control decision is
+`benefit_mainly_from_recurrent_temporal_modeling`. Do not claim that
+prediction error has independent state-update value under this protocol unless
+a later predeclared experiment beats this observation-driven control. Frozen
+Test drives 0051/0056 were not read.
+
 ## 2026-08-13: Cross-corruption Val separates recurrent and error contributions
 
 Status: accepted

@@ -1,0 +1,13 @@
+git_revision=1765d157511c861221bba041208d3ba43da19d0d
+train_drives=0005,0013,0014,0036
+val_drives=0011,0039
+frozen_test_read=false
+core_conditions=current_stateful,observation_driven_recurrent,error_driven_recurrent
+sanity_condition=error_driven_recurrent_zeroed
+matched_transition_capacity=true
+top_down_feedback=true
+current_feedforward_transition_input=false
+instant_error=e_t=F_t-Fhat_t
+training_target=F_(t+1)
+epochs=5
+lr=1e-4

@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 ## Active research direction
 
@@ -124,19 +124,40 @@ metric. No additional structure or corruption experiment is authorized from
 this result. Frozen Test was not read. Outputs are in
 `results/real_frame_error_driven_d39ffa3/`.
 
+The matched-control revision `1765d15` fixed the invalid zeroed core control by
+adding an observation-driven recurrent condition with the same ConvGRU
+capacity, training data, epoch count, optimizer, learning rate, and next-frame
+prediction objective. The only difference is the recurrent input:
+`h_t=T(h_(t-1),epsilon_t,feedback)` for error-driven versus
+`h_t=T(h_(t-1),F_t,feedback)` for observation-driven. On Val 0011/0039 with
+the same blur-severity-3 40/80/40 protocol, disturbance normalized L2 was
+`0.784296992` (current-stateful), `0.510357280` (observation-driven), and
+`0.522036018` (error-driven). Error-driven improved over current by
+`33.438988%` but was `2.288345%` worse than observation-driven; next-frame MSE
+was essentially tied (`2.341551072` error-driven versus `2.344646957`
+observation-driven). The current conclusion is
+`benefit_mainly_from_recurrent_temporal_modeling`: prediction error did not
+show independent value over a matched observation-driven recurrent input.
+Frozen Test was not read. Outputs are in
+`results/real_frame_matched_recurrent_1765d15/`.
+
 ## Current implementation
 
 - `predify2021/model_factory/pvgg16_targetflow.py`
   - Defaults to `task=real_frame_pc` and implements five real-frame PCoder
     stages using the original PVGG16 feedforward boundaries and decoders.
   - Selects `real_frame_transition_mode=predify` for the frozen baseline or
-    `convgru_error` for the learned transition. The strict learned path uses
-    previous state, current dynamic prediction error, and historical feedback;
-    current feedforward features do not enter the transition after first-frame
-    state initialization.
+    `convgru_error` for the learned transition. The strict error-driven path
+    uses previous state, current dynamic prediction error, and historical
+    feedback; current feedforward features do not enter that transition after
+    first-frame state initialization.
+  - Supports a matched `real_frame_recurrent_error_input=observation` control
+    that feeds the current observation feature into the same transition
+    capacity. This is now the core comparator for testing prediction-error
+    input value.
   - Supports `real_frame_recurrent_error_input=zeroed` solely for the formal
-    same-checkpoint error-input control; dynamic-error state computation and
-    all other recurrence inputs remain unchanged.
+    sanity check; it is not a fair performance comparator because the strict
+    path becomes input-blind after initialization.
   - Snapshots every layer's previous state before processing the current frame,
     preventing current-frame higher-layer predictions from leaking into the
     historical feedback slots.

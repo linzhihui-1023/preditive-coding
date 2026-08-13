@@ -1489,6 +1489,50 @@ results/real_frame_error_driven_d39ffa3/
 checkpoint sha256: 7b743640cae5901874090b3eed438d3ea697eafd8415ebbfcf3fefddcb6015d3
 ```
 
+### Matched Observation-driven Recurrent Control
+
+Code/training revision: `1765d15`
+
+The invalid input-blind zeroed control was replaced as the core comparison by
+a matched-capacity observation-driven ConvGRU transition. Two recurrent
+transitions were trained from the same seed and with identical train drives
+0005/0013/0014/0036, epochs, Adam learning rate `1e-4`, and next-frame
+prediction objective. The only difference was the second transition input:
+`epsilon_t` for error-driven versus current observation feature `F_t` for
+observation-driven. Validation used only drives 0011/0039 with Gaussian blur
+sigma 3 and the unchanged 40-clean/80-blur/40-recovery protocol. Frozen Test
+drives 0051/0056 were not read.
+
+| Condition | Next-frame MSE | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |
+| --- | ---: | ---: | ---: | ---: |
+| Current stateful | 2.671453703 | 0.784296992 | 0.427156845 | 0.001205088 |
+| Observation-driven recurrent | 2.344646957 | 0.510357280 | 0.341280196 | 0.042804741 |
+| Error-driven recurrent | 2.341551072 | 0.522036018 | 0.391024056 | 0.060610952 |
+
+Error-driven improved over current-stateful by `33.438988%`, but was
+`2.288345%` worse than observation-driven on the primary disturbance
+representation-deviation metric. Next-frame MSE was nearly tied
+(`2.341551072` error-driven versus `2.344646957` observation-driven), while
+observation-driven had better disturbance and recovery representation
+deviation. The matched-control conclusion is therefore:
+`benefit_mainly_from_recurrent_temporal_modeling`. Prediction error did not
+show independent value over a same-capacity observation-driven recurrent
+input. The error-zeroed condition remains only a sanity check and again had
+zero paired representation deviation because it is input-blind after
+initialization.
+
+Tracked artifacts and server-only checkpoints/logs:
+
+```text
+results/real_frame_matched_recurrent_1765d15/
+/tmp/predify-storage/experiments/real_frame_matched_recurrent_train_1765d15/best_error_driven_recurrent.pt
+/tmp/predify-storage/experiments/real_frame_matched_recurrent_train_1765d15/best_observation_driven_recurrent.pt
+/tmp/predify-storage/experiments/real_frame_recurrent_error_train_1765d15.log
+/tmp/predify-storage/experiments/real_frame_recurrent_error_eval_1765d15.log
+error checkpoint sha256: 05166f66273b5545fce2cd160c4a0f730882df8e153ad7c5cf30e670b4cf8fca
+observation checkpoint sha256: 531dbef98d71475c58a978abb3e9a3b1ce893c4fd7882276172a85efaf7717f3
+```
+
 ## Earlier adjacent-pair result
 
 This older experiment reset model state each batch and therefore tested
