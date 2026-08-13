@@ -144,7 +144,7 @@ class SignedErrorEncoder(nn.Module):
     def __init__(self, input_channels: int, output_channels: int):
         super().__init__()
         self.projection = nn.Conv2d(2 * input_channels, output_channels, kernel_size=1)
-        nn.init.zeros_(self.projection.weight)
+        nn.init.kaiming_uniform_(self.projection.weight, a=5**0.5)
         nn.init.zeros_(self.projection.bias)
 
     def forward(self, instant_error: torch.Tensor, output_size=None):
