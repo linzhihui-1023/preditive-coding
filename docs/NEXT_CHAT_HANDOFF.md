@@ -749,6 +749,26 @@ results/stage4_same_drive_60_20_20_69b24b1/
 /tmp/predify-storage/experiments/seed0_stage4_same_drive_60_20_20_69b24b1/
 ```
 
+The next and only main Stage-4 experiment uses the predeclared multi-drive
+protocol below without changing the aligned temporal-difference architecture:
+
+```text
+Train: 0005 + 0013 + 0014 + 0036  (1411 transitions)
+Val:   0011 + 0039                (626 transitions)
+Test:  0051 + 0056                (728 transitions, frozen)
+```
+
+Training receives no Test-drive environment variable and checkpoint selection
+uses Val only. The evaluator first replays Train/Val, atomically creates a
+checkpoint-specific frozen-Test receipt, and then reads 0051/0056 exactly once.
+Drive 0051 has a timestamp discontinuity and is replayed as two independently
+reset segments of 56 and 379 transitions. Never rerun the evaluator for a
+checkpoint whose receipt already exists.
+
+```bash
+scripts/run_kitti_seed0_stage4_multidrive.sh
+```
+
 Run the three-condition 1x1 Temporal Error matrix:
 
 ```bash

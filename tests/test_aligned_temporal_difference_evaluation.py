@@ -1,4 +1,7 @@
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from predify2021.mce_scores.evaluate_kitti_aligned_temporal_difference import (
     ALIGNED_DIFFERENCE_DEFINITION,
@@ -8,6 +11,15 @@ from predify2021.mce_scores.evaluate_kitti_aligned_temporal_difference import (
 )
 from predify2021.mce_scores.evaluate_kitti_stage4_same_drive_diagnostic import (
     validate_same_drive_checkpoint,
+)
+from predify2021.mce_scores.evaluate_kitti_stage4_multidrive import (
+    FROZEN_TEST_DRIVES,
+    TRAIN_DRIVES,
+    VAL_DRIVES,
+    claim_frozen_test_access,
+    evaluate_drive,
+    finalize_frozen_test_receipt,
+    validate_multidrive_checkpoint,
 )
 
 
@@ -160,6 +172,78 @@ class AlignedTemporalDifferenceEvaluationTest(unittest.TestCase):
                 expected_revision=REVISION,
                 expected_drive="drive_0005",
             )
+
+    def test_multidrive_checkpoint_uses_exact_train_val_and_no_test(self):
+        checkpoint = _checkpoint()
+        checkpoint["config"].update(
+            {
+                "formal_split": True,
+                "same_drive_split": False,
+                "same_drive_three_way_split": False,
+                "stream_mode": True,
+                "reset_each_frame": False,
+                "shuffle_train_pairs": False,
+                "shuffle_val_pairs": False,
+                "train_drives": TRAIN_DRIVES,
+                "val_drives": VAL_DRIVES,
+            }
+        )
+        validation = validate_multidrive_checkpoint(checkpoint, REVISION)
+        self.assertEqual(validation["future_feature_stage"], 4)
+
+        checkpoint["config"]["test_drives"] = FROZEN_TEST_DRIVES
+        with self.assertRaisesRegex(ValueError, "must not contain"):
+            validate_multidrive_checkpoint(checkpoint, REVISION)
+
+    def test_frozen_test_receipt_allows_only_one_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint = Path(directory) / "best.pt"
+            checkpoint.write_bytes(b"fixed checkpoint")
+            receipt, payload = claim_frozen_test_access(checkpoint, REVISION)
+            self.assertTrue(receipt.is_file())
+            self.assertEqual(payload["frozen_test_drives"], FROZEN_TEST_DRIVES)
+            completed = finalize_frozen_test_receipt(
+                receipt,
+                payload,
+                Path(directory) / "summary.json",
+            )
+            self.assertEqual(completed["status"], "completed")
+            with self.assertRaisesRegex(RuntimeError, "already claimed"):
+                claim_frozen_test_access(checkpoint, REVISION)
+
+    def test_multidrive_replay_resets_at_every_valid_time_segment(self):
+        class SegmentedDataset:
+            valid_sample_segments = ((0, 1), (2, 3, 4))
+
+            def __len__(self):
+                return 5
+
+            def __getitem__(self, index):
+                return index
+
+        def fake_evaluate_split(model, dataset, split, drive, fixed_dt_s):
+            return [{"sample_index": index} for index in range(len(dataset))]
+
+        with patch(
+            "predify2021.mce_scores.evaluate_kitti_stage4_multidrive."
+            "evaluate_split",
+            side_effect=fake_evaluate_split,
+        ) as replay:
+            rows = evaluate_drive(
+                model=object(),
+                dataset=SegmentedDataset(),
+                split="test",
+                drive="drive_0051",
+                fixed_dt_s=0.1035,
+            )
+
+        self.assertEqual(replay.call_count, 2)
+        self.assertEqual([row["sample_index"] for row in rows], list(range(5)))
+        self.assertEqual([row["segment_index"] for row in rows], [0, 0, 1, 1, 1])
+        self.assertEqual(
+            [row["segment_sample_index"] for row in rows],
+            [0, 1, 0, 1, 2],
+        )
 
 
 if __name__ == "__main__":

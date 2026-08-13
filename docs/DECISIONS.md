@@ -1,5 +1,21 @@
 # Research Decisions
 
+## 2026-08-13: Freeze the Stage-4 multi-drive protocol before Test access
+
+Status: accepted
+
+Run one unchanged Stage-4 aligned temporal-difference experiment with Train
+drives 0005/0013/0014/0036, Val drives 0011/0039, and frozen Test drives
+0051/0056. The training process must not receive Test drive names. Frame order
+is preserved, sequence state resets only at drive or fixed-time-segment
+boundaries, and Val alone selects the best epoch.
+
+Drives 0051 and 0056 are final reporting data from this point onward. The
+selected checkpoint may read them exactly once, after an atomic receipt is
+created next to that checkpoint. Test metrics must not influence epochs,
+parameters, architecture, or follow-up variants. Drive 0051's discontinuous
+valid samples are evaluated as separate reset segments.
+
 ## 2026-08-13: Same-drive Euclidean prediction generalizes forward
 
 Status: accepted

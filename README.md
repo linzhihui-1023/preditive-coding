@@ -161,6 +161,17 @@ generalization under the Euclidean feature objective, not an all-metric pass.
 No further same-drive variants are planned. Auditable outputs are under
 `results/stage4_same_drive_60_20_20_69b24b1/`.
 
+The predeclared Stage-4 multi-drive experiment keeps the same aligned temporal
+difference model and fixes Train to drives 0005, 0013, 0014, and 0036; Val to
+0011 and 0039; and frozen Test to 0051 and 0056. Training and checkpoint
+selection receive only Train/Val drive names. The independent evaluator claims
+one atomic Test access only after the best Val checkpoint has been selected.
+Run the single formal experiment with:
+
+```bash
+scripts/run_kitti_seed0_stage4_multidrive.sh
+```
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

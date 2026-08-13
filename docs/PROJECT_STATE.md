@@ -171,6 +171,17 @@ next transition.
     shuffled transitions or shared raw frames.
   - Selects only on the middle Val segment and evaluates the final Test
     segment once after best-checkpoint selection.
+- `scripts/run_kitti_seed0_stage4_multidrive.sh`
+  - Trains the unchanged Stage-4 aligned temporal-difference model on drives
+    0005/0013/0014/0036 and selects checkpoints on 0011/0039 only.
+  - Keeps frozen Test drives 0051/0056 out of the training process and invokes
+    their one-time evaluator only after best-Val selection.
+- `predify2021/mce_scores/evaluate_kitti_stage4_multidrive.py`
+  - Enforces the exact Train/Val checkpoint contract and refuses checkpoints
+    that contain Test drives.
+  - Atomically claims one checkpoint-specific frozen-Test read, resets at
+    every fixed-time segment, and records aggregate and per-drive same-stage
+    Copy-current gates.
 - `predify2021/mce_scores/evaluate_kitti_aligned_temporal_difference.py`
   - Enforces prediction-stage/Target-Flow-stage checkpoint separation and
     replays both train and held-out drives into one per-frame schema.
@@ -215,6 +226,13 @@ Stage-4 MSE by `9.964079%` and normalized error, while cosine worsened. This is
 same-drive forward generalization for the Euclidean objective, not an
 all-metric pass. No further same-drive variants are allowed; the next result
 must use the fixed multi-drive Train/Val/Test protocol.
+
+That multi-drive protocol is fixed before training: Train is
+0005/0013/0014/0036, Val is 0011/0039, and frozen Test is 0051/0056. The
+training process cannot receive Test drive names, all loaders remain ordered,
+and only Val selects the epoch. A checkpoint-specific atomic receipt prevents
+0051/0056 from being evaluated more than once. Their metrics are final
+reporting only and cannot feed back into model or parameter selection.
 
 The Stage-4 aligned temporal-difference run completed at revision `fdc4743`.
 Its epoch-1 checkpoint improved fixed replay MSE by `6.815535%` on train drive
