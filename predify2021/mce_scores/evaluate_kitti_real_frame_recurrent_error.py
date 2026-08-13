@@ -28,13 +28,11 @@ from predify2021.model_factory import get_model
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 CONDITIONS = (
-    "current_stateful",
     "temporal_only",
     "instant_error",
     "error_memory",
 )
 CORE_CONDITIONS = (
-    "current_stateful",
     "temporal_only",
     "instant_error",
     "error_memory",
@@ -344,7 +342,8 @@ def write_readme(path, summary):
         "",
         "VGG, original Predify, and feedback decoders are frozen. Only the "
         "observation/error recurrent transition and signed-error encoder train. "
-        "Validation uses drives 0011/0039 and the unchanged 40 clean / 80 "
+        "Validation uses only the three matched formal conditions on drives "
+        "0011/0039 and the unchanged 40 clean / 80 "
         "corruption / 40 recovery protocol. Frozen Test drives 0051/0056 were "
         "not read.",
     ]
@@ -471,7 +470,6 @@ def main():
     torch.backends.cudnn.benchmark = False
 
     models = {
-        "current_stateful": build_model(weights_path, "predify"),
         "temporal_only": build_model(
             weights_path,
             "convgru_error",
