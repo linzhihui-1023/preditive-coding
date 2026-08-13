@@ -3,6 +3,7 @@ import csv
 import hashlib
 import json
 import os
+import random
 from pathlib import Path
 
 import torch
@@ -73,7 +74,9 @@ def assert_state(model, expected_frame_index):
             raise RuntimeError("Dynamic-error recurrence changed.")
 
 
-def evaluate_condition(base_model, condition, datasets):
+def evaluate_condition(base_model, condition, datasets, seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     clean_model = copy.deepcopy(base_model).to(DEVICE).eval()
     corrupted_model = copy.deepcopy(base_model).to(DEVICE).eval()
     rows = []
@@ -232,6 +235,7 @@ def main():
     camera = os.environ.get("PREDIFY_KITTI_CAMERA", "image_02")
     fixed_dt_s = float(os.environ.get("PREDIFY_FIXED_TS_S", "0.1035"))
     tolerance = float(os.environ.get("PREDIFY_FIXED_TS_TOL_S", "0.001"))
+    seed = int(os.environ.get("PREDIFY_SEED", "0"))
     drives = tuple(
         drive.strip()
         for drive in os.environ["PREDIFY_RECURRENT_ERROR_VAL_DRIVES"].split(",")
@@ -241,6 +245,12 @@ def main():
         raise ValueError(f"Validation drives must be exactly {ALLOWED_DRIVES}.")
     if any(forbidden in drive for forbidden in FORBIDDEN_TEST_DRIVE_IDS for drive in drives):
         raise RuntimeError("Frozen Test drive entered validation.")
+
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
     datasets = {
         drive: build_drive_datasets(root, drive, camera, fixed_dt_s, tolerance)
@@ -255,7 +265,9 @@ def main():
     rows = []
     for condition in CONDITIONS:
         print(f"Evaluating {condition} on {DEVICE}...", flush=True)
-        rows.extend(evaluate_condition(models[condition], condition, datasets))
+        rows.extend(
+            evaluate_condition(models[condition], condition, datasets, seed)
+        )
         del models[condition]
 
     metrics = {
