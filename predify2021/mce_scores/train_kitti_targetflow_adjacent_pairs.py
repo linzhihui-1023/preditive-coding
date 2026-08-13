@@ -1768,9 +1768,10 @@ def main():
             "temporal_error_time_constant": TEMPORAL_ERROR_TIME_CONSTANT,
             "temporal_error_gain": TEMPORAL_ERROR_GAIN,
             "temporal_error_definition": (
-                "e_t=F_t-Fhat_(t|t-1); "
-                "E_t=(Ts_e/tau_e)*e_t+"
-                "(1-K_e*Ts_e/tau_e)*E_(t-1)"
+                "e_t=Fhat_(t|t-1)-F_t; "
+                "epsilon_t=(Ts_e/tau_e)*e_t+"
+                "(1-K_e*Ts_e/tau_e)*epsilon_(t-1); "
+                "one_update_after_observation_per_real_video_transition; detached_memory"
             ),
             "pretrained": USE_PRETRAINED,
             "train_backbone": TRAIN_BACKBONE,

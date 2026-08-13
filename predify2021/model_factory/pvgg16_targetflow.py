@@ -339,6 +339,7 @@ class PVGG16TargetFlow(nn.Module):
         self.two_tap_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_prediction_error_memory = None
         self.temporal_error_state_memory = None
+        self.temporal_error_state_update_count = 0
         self.future_feature_previous_prediction_stage_memory = None
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
@@ -354,6 +355,7 @@ class PVGG16TargetFlow(nn.Module):
         self.two_tap_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_prediction_error_memory = None
         self.temporal_error_state_memory = None
+        self.temporal_error_state_update_count = 0
         self.future_feature_previous_prediction_stage_memory = None
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
@@ -651,6 +653,10 @@ class PVGG16TargetFlow(nn.Module):
             "target_delta_prediction_feature": None,
             "target_residual_prediction_feature": None,
             "prediction_error_feature": None,
+            "instantaneous_prediction_error_feature": None,
+            "previous_dynamic_prediction_error_state_feature": None,
+            "dynamic_prediction_error_state_feature": None,
+            "temporal_error_state_update_index": None,
         }
 
     def _run_forward_stages(self, x: torch.Tensor):
@@ -954,7 +960,7 @@ class PVGG16TargetFlow(nn.Module):
                     "target_residual_prediction_feature": future_prediction_target
                     - prediction_base.detach(),
                     "prediction_error_feature": (
-                        future_prediction_target - predicted_future
+                        predicted_future - future_prediction_target
                     ),
                     # Compatibility aliases for existing Stage-5 evaluators.
                     "future_top_target": future_prediction_target,
@@ -962,8 +968,8 @@ class PVGG16TargetFlow(nn.Module):
                     - current_feature.detach(),
                     "target_residual_top": future_prediction_target
                     - prediction_base.detach(),
-                    "prediction_error_top": future_prediction_target
-                    - predicted_future,
+                    "prediction_error_top": predicted_future
+                    - future_prediction_target,
                 }
             )
             previous_temporal_error_state = self._resolve_memory(
@@ -980,10 +986,29 @@ class PVGG16TargetFlow(nn.Module):
                 time_constant=float(self.temporal_error_time_constant.item()),
                 error_gain=float(self.temporal_error_gain.item()),
             )
+            self.temporal_error_state_update_count += 1
             self.temporal_prediction_error_memory = (
                 temporal_prediction_error.detach()
             )
             self.temporal_error_state_memory = temporal_error_state.detach()
+            self.future_prediction_outputs.update(
+                {
+                    "instantaneous_prediction_error_feature": (
+                        temporal_prediction_error.detach()
+                    ),
+                    "previous_dynamic_prediction_error_state_feature": (
+                        None
+                        if previous_temporal_error_state is None
+                        else previous_temporal_error_state.detach()
+                    ),
+                    "dynamic_prediction_error_state_feature": (
+                        temporal_error_state.detach()
+                    ),
+                    "temporal_error_state_update_index": (
+                        self.temporal_error_state_update_count
+                    ),
+                }
+            )
         run_backward_target_flow(
             self.layer_states,
             self.feedback_modules,

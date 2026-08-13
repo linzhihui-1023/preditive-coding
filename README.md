@@ -182,6 +182,19 @@ and seed. Auditable outputs, including the one-time Test receipt, are under
 `results/stage4_multidrive_c887e94/`. Do not rerun or tune against the frozen
 Test drives.
 
+The next phase keeps that Stage-4 predictor and every network weight frozen.
+It restores one independent prediction-error state chain with
+`e_t=Fhat_t^4-F_t^4`, updates `epsilon_t` exactly once after each observed
+frame, detaches it, and never feeds it back to the predictor. The inference-
+only diagnostic compares instantaneous RMS, `EMA(RMS(e_t))`, and
+`RMS(epsilon_t)` under matched persistent versus shuffled blur, i.i.d. noise,
+and RGB-bias domain-proxy trajectories on Val drives 0011/0039. It does not
+read frozen Test drives 0051/0056. Run it with:
+
+```bash
+scripts/run_kitti_stage4_dynamic_error_state_phase1.sh
+```
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

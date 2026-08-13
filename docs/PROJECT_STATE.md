@@ -83,10 +83,13 @@ next transition.
     history for the following transition.
   - Maintains causal top-layer latest, two-tap, and recursive history snapshots
     independently of the configured local-loss error state.
-  - Adds an independent top-layer Temporal Prediction Error state for the
+  - Adds an independent prediction-stage Temporal Prediction Error state for the
     future-feature task:
-    `e_t^5 = F_t^5 - Fhat_(t|t-1)^5` and
-    `E_t^5 = alpha_e e_t^5 + (1-K_e alpha_e)E_(t-1)^5`.
+    the active selective-adaptation branch now uses
+    `e_t^4 = Fhat_(t|t-1)^4 - F_t^4` and
+    `epsilon_t^4 = alpha_e e_t^4 + (1-K_e alpha_e)epsilon_(t-1)^4`.
+    It updates once after observation, detaches, and resets at real sequence
+    boundaries.
     The predictor can select this state through
     `PREDIFY_FEATURE_HISTORY_MODE=temporal_error`; the older `recursive` mode
     remains Target Flow residual memory.
@@ -187,6 +190,15 @@ next transition.
     replays both train and held-out drives into one per-frame schema.
   - Records Stage, feature shape, MSE/cosine/normalized error, and signed and
     relative improvements against same-stage Copy-current.
+- `predify2021/mce_scores/evaluate_kitti_stage4_dynamic_error_state.py`
+  - Keeps the `c887e94` Stage-4 predictor frozen and validates that the dynamic
+    error state is not a predictor input.
+  - Compares fixed instantaneous RMS, scalar EMA-envelope, and dynamic-state
+    RMS scores under matched persistent/shuffled blur, noise, and RGB bias on
+    Val drives only; it also audits exact tensor-EMA equivalence at `K=1`.
+- `scripts/run_kitti_stage4_dynamic_error_state_phase1.sh`
+  - Runs the inference-only phase-1 diagnostic without reading frozen Test
+    drives or creating an optimizer.
 - `predify2021/mce_scores/diagnose_kitti_future_feature_delta.py`
   - Re-evaluates a Current-only best checkpoint on ordered train and validation
     pairs and reports true/predicted delta scale, L2/RMS quantiles, norm ratio,
@@ -576,9 +588,9 @@ For the current complete training drive, horizon-1 normalization is based on
 
 Target Flow uses residual `r_t=F_t-T_t` and
 `epsilon_t=(Ts_r/tau_r)r_t+(1-K_r*Ts_r/tau_r)epsilon_(t-1)`. Temporal
-Prediction Error is separate: `e_t=F_t-Fhat_(t|t-1)` and
-`E_t=(Ts_e/tau_e)e_t+(1-K_e*Ts_e/tau_e)E_(t-1)`. There is no independent
-`d_t` term. Each recurrence must satisfy its own stability condition; the
+Prediction Error is separate: `e_t=Fhat_(t|t-1)-F_t` and
+`epsilon_t=(Ts_e/tau_e)e_t+(1-K_e*Ts_e/tau_e)epsilon_(t-1)`. There is no
+independent `d_t` term. Each recurrence must satisfy its own stability condition; the
 current `Ts=0.1035, tau=0.5, K=1` gives memory coefficient 0.793 for both, but
 their parameter families and physical meanings remain independent.
 

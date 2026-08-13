@@ -125,9 +125,9 @@ The two residual/error families must remain distinct:
 
 ```text
 Target Flow residual: r_t^l = F_t^l - T_t^l
-Target Flow state: epsilon_t^l <- r_t^l
-Temporal Prediction Error: e_t^5 = F_t^5 - Fhat_(t|t-1)^5
-Temporal Error state: E_t^5 <- e_t^5
+Target Flow state: epsilon_t^(TF,l) <- r_t^l
+Stage-4 Prediction Error: e_t^4 = Fhat_(t|t-1)^4 - F_t^4
+Dynamic Prediction Error state: epsilon_t^(pred,4) <- e_t^4
 ```
 
 The top Target Flow residual uses the next-frame target only after prediction.
@@ -135,17 +135,18 @@ Recursive target flow propagates the detached top target through all five
 feedback levels. There is no independent `d_t` term in the implemented error
 formula.
 
-The strict top-layer Temporal Prediction Error recurrence is:
+The active Stage-4 Dynamic Prediction Error recurrence is:
 
 ```text
-e_t^5 = F_t^5 - Fhat_(t|t-1)^5
-E_t^5 = alpha_e e_t^5 + (1-K_e alpha_e)E_(t-1)^5
+e_t^4 = Fhat_(t|t-1)^4 - F_t^4
+epsilon_t^4 = alpha_e e_t^4 + (1-K_e alpha_e)epsilon_(t-1)^4
 ```
 
-Prediction for `t -> t+1` can use only the previously completed `E_t^5`.
-The current `e_(t+1)^5` is computed after observing the future target, updates
-`E_(t+1)^5`, and becomes available only to the next transition. Stored `e` and
-`E` are detached. The first implementation is top-layer only.
+For phase 1, prediction never consumes this state. The current `e_(t+1)^4` is
+computed only after observing `F_(t+1)^4`, updates `epsilon_(t+1)^4` exactly
+once, and is detached before the next real-video transition. Drive and
+fixed-time-segment boundaries reset it. There are no same-frame iterations,
+online updates, new fusion modules, or backbone changes.
 
 ## Formal Mechanism Configuration
 
@@ -789,6 +790,24 @@ results/stage4_multidrive_c887e94/
 The frozen Test receipt is completed and bound to checkpoint SHA-256
 `8a29c40fc71f0d54a2d21306a9444407d25865a01262713d05f522b495ab7754`.
 Do not evaluate 0051/0056 again or use their result for model selection.
+
+The active next experiment is the inference-only Stage-4 Dynamic Prediction
+Error state diagnostic. It reuses the frozen epoch-7 `c887e94` checkpoint,
+keeps `future_feature_history_mode=aligned_difference`, and therefore does not
+feed `epsilon_t^4` into the predictor. Val drives 0011/0039 receive matched
+persistent and shuffled severity sequences for blur, i.i.d. Gaussian noise,
+and an RGB-bias domain-shift proxy. The same severity multiset, occupancy, raw
+frames, and checkpoint are used; only temporal ordering differs.
+
+```bash
+scripts/run_kitti_stage4_dynamic_error_state_phase1.sh
+```
+
+Primary fixed scores are `RMS(e_t)`, scalar `EMA(RMS(e_t))`, and
+`RMS(epsilon_t)`. A matched tensor EMA is also recorded only to audit the fact
+that the formal `K=1` dynamics are mathematically identical to a tensor EMA
+with `alpha=0.207`. No score or direction is selected from the data, no
+network is updated, and frozen Test drives are not read.
 
 Run the three-condition 1x1 Temporal Error matrix:
 

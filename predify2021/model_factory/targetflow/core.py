@@ -150,7 +150,7 @@ def build_temporal_prediction_error_state(
     time_constant,
     error_gain,
 ):
-    """Update E_t = alpha*e_t + (1-K*alpha)*E_(t-1)."""
+    """Update epsilon_t = alpha*e_t + (1-K*alpha)*epsilon_(t-1)."""
     if prediction_error is None:
         return None
 

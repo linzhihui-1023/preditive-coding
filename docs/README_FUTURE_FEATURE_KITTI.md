@@ -144,13 +144,15 @@ frame stream, not against the historical Stage-5 MSE. Spatial motion radius is
 measured in prediction-stage feature cells; it is configurable and is not
 automatically rescaled across stages.
 
-The signed diagnostic is the Temporal Prediction Error
-`e_t = F_t - Fhat_(t|t-1)`. In the implementation of transition `t -> t+1`,
-this is stored canonically as
-`prediction_error_feature = F_next - Fhat_(t+1|t)` after the prediction is
-made. `prediction_error_top` remains only as a compatibility alias for older
-Stage-5 evaluators. MSE is sign invariant, but this stored tensor must retain
-the documented sign.
+The active selective-adaptation branch defines the signed Prediction Error as
+`e_t = Fhat_(t|t-1) - F_t`. For transition `t -> t+1`, it is stored only after
+the target arrives as
+`prediction_error_feature = Fhat_(t+1|t) - F_next`.
+`prediction_error_top` remains a compatibility alias. MSE is sign invariant,
+but the state tensor must retain this documented sign. Historical Stage-5
+Temporal Error experiments and the immutable `predify-temporal-v1` worktree
+used the opposite convention; their norm/cosine reports are sign invariant,
+while their signed state must not be mixed with the active definition.
 
 Best checkpoints are selected by validation feature MSE.
 

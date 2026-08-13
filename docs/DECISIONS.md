@@ -1,5 +1,25 @@
 # Research Decisions
 
+## 2026-08-13: Restore one observation-gated Stage-4 error-state chain
+
+Status: accepted
+
+Keep the successful `c887e94` Stage-4 aligned temporal-difference predictor,
+VGG backbone, and all weights frozen. Define the active signed error as
+`e_t^4=Fhat_(t|t-1)^4-F_t^4`. Only after `F_t^4` arrives, update
+`epsilon_t^4=alpha_e e_t^4+(1-K_e alpha_e)epsilon_(t-1)^4` once, detach it,
+and carry it across the real video stream. Reset at drive or continuous-
+segment boundaries. Do not run same-frame iterations, feed the state into the
+predictor, create an optimizer, or perform online adaptation in phase 1.
+
+The first diagnostic compares fixed `RMS(e_t)`, scalar `EMA(RMS(e_t))`, and
+`RMS(epsilon_t)` under matched persistent/shuffled blur, i.i.d. noise, and RGB
+bias on Val drives 0011/0039 only. Frozen Test drives 0051/0056 remain
+consumed and are not read. Because the formal parameters have `K=1`, the
+dynamic tensor state is mathematically a tensor EMA at `alpha=0.207`; record
+that equivalence explicitly and do not claim novelty over an identical tensor
+EMA. Online adaptation remains blocked until the state itself proves useful.
+
 ## 2026-08-13: Multi-drive Stage-4 clears the frozen-Test Copy gate
 
 Status: accepted
