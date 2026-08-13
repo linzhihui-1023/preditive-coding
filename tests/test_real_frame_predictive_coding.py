@@ -315,8 +315,9 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
             else:
                 self.assertIsNone(state.previous_feedback_prediction)
             with torch.no_grad():
-                error_drive = self.model.forward_stages[layer_index](
-                    expected_dynamic_error
+                error_drive = self.model.recurrent_error_encoder_modules[layer_index](
+                    expected_instant_error,
+                    state.feedforward_drive.shape[-2:],
                 )
                 expected = self.model.recurrent_transition_modules[layer_index](
                     previous_representation,
@@ -335,9 +336,13 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
             if parameter.requires_grad
         }
         self.assertTrue(trainable_names)
-        self.assertTrue(
-            all(name.startswith("recurrent_transition_modules.") for name in trainable_names)
+        allowed_prefixes = (
+            "recurrent_transition_modules.",
+            "recurrent_error_encoder_modules.",
+            "input_prediction_module.",
+            "feedback_modules.",
         )
+        self.assertTrue(all(name.startswith(allowed_prefixes) for name in trainable_names))
 
         self.model.step_frame(self.frame1)
         self.model.step_frame(self.frame2)
@@ -361,6 +366,38 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
             parameter for parameter in self.model.parameters() if not parameter.requires_grad
         ]
         self.assertTrue(all(parameter.grad is None for parameter in frozen_parameters))
+        memories = (
+            self.model.representation_state_memory
+            + self.model.prediction_state_memory
+            + self.model.instant_error_state_memory
+            + self.model.error_state_memory
+        )
+        self.assertTrue(all(not memory.requires_grad for memory in memories))
+        self.assertTrue(all(memory.grad_fn is None for memory in memories))
+
+    def test_short_window_keeps_then_detaches_recurrent_gradient_chain(self):
+        self.model.step_frame(self.frame1, detach_recurrent_state=False)
+        self.assertTrue(
+            any(
+                memory is not None and memory.grad_fn is not None
+                for memory in self.model.prediction_state_memory
+            )
+        )
+        self.model.step_frame(self.frame2, detach_recurrent_state=False)
+        self.assertTrue(
+            any(
+                memory is not None and memory.grad_fn is not None
+                for memory in self.model.representation_state_memory
+            )
+        )
+        loss = self.model.collect_recurrent_transition_loss(self.frame3)
+        self.assertIsNotNone(loss)
+        loss.backward()
+        trainable_parameters = [
+            parameter for parameter in self.model.parameters() if parameter.requires_grad
+        ]
+        self.assertTrue(any(parameter.grad is not None for parameter in trainable_parameters))
+        self.model.detach_recurrent_state()
         memories = (
             self.model.representation_state_memory
             + self.model.prediction_state_memory
@@ -432,6 +469,12 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
                 transition.candidate.weight[:, :channels].zero_()
                 diagonal = torch.arange(channels)
                 transition.candidate.weight[diagonal, diagonal, 0, 0] = 0.1
+            for encoder in self.model.recurrent_error_encoder_modules:
+                encoder.projection.weight.zero_()
+                output_channels = encoder.projection.out_channels
+                input_channels = encoder.projection.in_channels
+                diagonal = torch.arange(min(output_channels, input_channels))
+                encoder.projection.weight[diagonal, diagonal, 0, 0] = 0.1
             zeroed.recurrent_transition_modules.load_state_dict(
                 self.model.recurrent_transition_modules.state_dict()
             )

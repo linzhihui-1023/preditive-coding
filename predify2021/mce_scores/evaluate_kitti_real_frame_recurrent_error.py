@@ -28,13 +28,12 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 CONDITIONS = (
     "current_stateful",
     "observation_driven_recurrent",
-    "error_driven_recurrent",
-    "error_driven_recurrent_zeroed",
+    "error_driven_recurrent_v2",
 )
 CORE_CONDITIONS = (
     "current_stateful",
     "observation_driven_recurrent",
-    "error_driven_recurrent",
+    "error_driven_recurrent_v2",
 )
 
 
@@ -62,6 +61,18 @@ def build_model(
         model.recurrent_transition_modules.load_state_dict(
             payload["recurrent_transition_state_dict"]
         )
+        if payload.get("recurrent_error_encoder_state_dict") is not None:
+            model.recurrent_error_encoder_modules.load_state_dict(
+                payload["recurrent_error_encoder_state_dict"]
+            )
+        prediction_state = payload.get("prediction_state_dict")
+        if prediction_state is not None:
+            model.input_prediction_module.load_state_dict(
+                prediction_state["input_prediction_module"]
+            )
+            model.feedback_modules.load_state_dict(
+                prediction_state["feedback_modules"]
+            )
     model.requires_grad_(False)
     return model
 
@@ -257,13 +268,13 @@ def sha256_file(path):
 def write_readme(path, summary):
     baseline = summary["conditions"]["current_stateful"]
     observation = summary["conditions"]["observation_driven_recurrent"]
-    learned = summary["conditions"]["error_driven_recurrent"]
-    zeroed = summary["conditions"]["error_driven_recurrent_zeroed"]
+    learned = summary["conditions"]["error_driven_recurrent_v2"]
     lines = [
-        "# Prediction-error-driven Recurrent Validation",
+        "# Prediction-error-driven Recurrent V2 Validation",
         "",
-        "Frozen backbone, feedback decoders, and existing Predify parameters. "
-        "Only the new recurrent transition was trained on drives 0005/0013/0014/0036. "
+        "Frozen backbone and non-recurrent Predify body. The recurrent transition, "
+        "temporal predictor, and dedicated signed-error encoder were trained on "
+        "drives 0005/0013/0014/0036. "
         "Validation uses drives 0011/0039 and the unchanged 40 clean / 80 blur / "
         "40 recovery protocol. Frozen Test drives 0051/0056 were not read.",
         "",
@@ -271,15 +282,11 @@ def write_readme(path, summary):
         "| --- | ---: | ---: | ---: | ---: |",
         f"| Current stateful | {baseline['mean_next_frame_prediction_mse']:.9f} | {baseline['disturbance_mean_representation_normalized_l2']:.9f} | {baseline['recovery_first_10_mean_representation_normalized_l2']:.9f} | {baseline['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
         f"| Observation-driven recurrent | {observation['mean_next_frame_prediction_mse']:.9f} | {observation['disturbance_mean_representation_normalized_l2']:.9f} | {observation['recovery_first_10_mean_representation_normalized_l2']:.9f} | {observation['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
-        f"| Error-driven recurrent | {learned['mean_next_frame_prediction_mse']:.9f} | {learned['disturbance_mean_representation_normalized_l2']:.9f} | {learned['recovery_first_10_mean_representation_normalized_l2']:.9f} | {learned['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
+        f"| Error-driven recurrent v2 | {learned['mean_next_frame_prediction_mse']:.9f} | {learned['disturbance_mean_representation_normalized_l2']:.9f} | {learned['recovery_first_10_mean_representation_normalized_l2']:.9f} | {learned['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
         "",
         f"Error-driven vs current disturbance improvement: {summary['comparison']['error_vs_current_improvement_percent']:.6f}%.",
         f"Error-driven vs observation disturbance improvement: {summary['comparison']['error_vs_observation_improvement_percent']:.6f}%.",
         f"Conclusion: {summary['comparison']['conclusion']}.",
-        "",
-        "Sanity check: error-zeroed disturbance normalized L2 = "
-        f"{zeroed['disturbance_mean_representation_normalized_l2']:.9f}; it is "
-        "not used as the core performance control.",
         "",
         "## Per Drive",
         "",
@@ -320,7 +327,7 @@ def main():
     revision = os.environ["PREDIFY_GIT_REVISION"]
     output_dir = Path(os.environ["PREDIFY_RECURRENT_ERROR_EVAL_OUTPUT_DIR"])
     training_dir = Path(os.environ["PREDIFY_RECURRENT_ERROR_TRAIN_OUTPUT_DIR"])
-    error_checkpoint = checkpoint_for(training_dir, "error_driven_recurrent")
+    error_checkpoint = checkpoint_for(training_dir, "error_driven_recurrent_v2")
     observation_checkpoint = checkpoint_for(
         training_dir, "observation_driven_recurrent"
     )
@@ -358,14 +365,8 @@ def main():
             observation_checkpoint,
             recurrent_input="observation",
         ),
-        "error_driven_recurrent": build_model(
+        "error_driven_recurrent_v2": build_model(
             weights_path, "convgru_error", error_checkpoint
-        ),
-        "error_driven_recurrent_zeroed": build_model(
-            weights_path,
-            "convgru_error",
-            error_checkpoint,
-            recurrent_input="zeroed",
         ),
     }
     rows = []
@@ -388,10 +389,7 @@ def main():
     observation_value = metrics["observation_driven_recurrent"][
         "disturbance_mean_representation_normalized_l2"
     ]
-    learned_value = metrics["error_driven_recurrent"][
-        "disturbance_mean_representation_normalized_l2"
-    ]
-    zeroed_value = metrics["error_driven_recurrent_zeroed"][
+    learned_value = metrics["error_driven_recurrent_v2"][
         "disturbance_mean_representation_normalized_l2"
     ]
     error_vs_current = 100.0 * (
@@ -413,7 +411,7 @@ def main():
     with (training_dir / "training_summary.json").open() as handle:
         training_summary = json.load(handle)
     summary = {
-        "experiment": "real_frame_matched_recurrent_validation",
+        "experiment": "real_frame_error_driven_v2_validation",
         "git_revision": revision,
         "device": str(DEVICE),
         "gpu_name": torch.cuda.get_device_name(DEVICE),
@@ -422,8 +420,7 @@ def main():
             "metric": "disturbance_mean_representation_normalized_l2",
             "current_stateful": baseline_value,
             "observation_driven_recurrent": observation_value,
-            "error_driven_recurrent": learned_value,
-            "error_driven_recurrent_zeroed_sanity": zeroed_value,
+            "error_driven_recurrent_v2": learned_value,
             "error_vs_current_improvement_percent": error_vs_current,
             "error_vs_observation_improvement_percent": error_vs_observation,
             "error_vs_observation_absolute_change": observation_value - learned_value,
@@ -441,21 +438,22 @@ def main():
             "dynamic_error": "epsilon_t=0.207*e_t+0.793*epsilon_(t-1)",
             "instant_error": "e_t=F_t-Fhat_t",
             "core_conditions": CORE_CONDITIONS,
-            "sanity_conditions": ("error_driven_recurrent_zeroed",),
-            "state_transition_error": "h_t=T(h_(t-1),epsilon_t,feedback)",
+            "state_transition_error": "h_t=T(h_(t-1),P([relu(e_t),relu(-e_t)]),feedback)",
             "state_transition_observation": "h_t=T(h_(t-1),F_t,feedback)",
             "current_feedforward_transition_input": False,
             "learned_top_down_feedback": True,
             "matched_transition_capacity": True,
-            "error_zeroed_sanity_check": "only recurrent transition error drive is zero",
+            "dedicated_error_encoder": True,
+            "temporal_predictor_trained": True,
+            "tbptt_window": training_summary["tbptt_window"],
             "cross_frame_state_detached": True,
             "future_predictor": False,
             "online_learning_during_validation": False,
         },
         "training": training_summary,
         "checkpoints": {
-            "error_driven_recurrent": str(error_checkpoint),
-            "error_driven_recurrent_sha256": sha256_file(error_checkpoint),
+            "error_driven_recurrent_v2": str(error_checkpoint),
+            "error_driven_recurrent_v2_sha256": sha256_file(error_checkpoint),
             "observation_driven_recurrent": str(observation_checkpoint),
             "observation_driven_recurrent_sha256": sha256_file(
                 observation_checkpoint
