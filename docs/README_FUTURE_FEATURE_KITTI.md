@@ -2,8 +2,9 @@
 
 ## Task
 
-The primary experiment predicts the complete VGG stage-5 feature map of the
-next video frame. It does not replace the existing 2-DoF motion proxy head.
+The future-feature task predicts a complete VGG feature map of the next video
+frame. `PREDIFY_FUTURE_FEATURE_STAGE` selects Stage 3, 4, or 5 and defaults to
+5. It does not replace the existing 2-DoF motion proxy head.
 
 - `PREDIFY_TASK=motion`: original temporal motion/feature path.
 - `PREDIFY_TASK=future_feature`: independent future-feature residual head.
@@ -14,8 +15,18 @@ For the active task:
 
 `Fhat_(t+1|t) = F_t + delta_hat`
 
-The backbone runs once for the current frame. The next-frame backbone feature
-is a detached supervision target and is computed only after prediction.
+The backbone runs once for the current frame. The next-frame prediction-stage
+feature is a detached supervision target and is computed only after
+prediction. It is separate from the Predify Target Flow top target:
+
+```text
+T_TF = F_(t+1)^5
+T_future = F_(t+1)^s_pred, s_pred in {3,4,5}
+```
+
+Changing `s_pred` never changes Target Flow's Stage-5 top. Checkpoint config
+records both stages, the prediction-stage channels, and the two target
+definitions.
 
 ## Causal Order
 
@@ -24,7 +35,7 @@ Each stream transition executes in this order:
 1. Read state completed by the previous transition.
 2. Extract the current feature `F_t`.
 3. Predict `Fhat_(t+1|t)` from `F_t` and old history `H_t`.
-4. Extract the detached target `F_(t+1)`.
+4. Extract detached `T_TF` and `T_future` in one future-frame pass.
 5. Compute prediction and Target Flow losses.
 6. Update latest, two-tap, and recursive state for the next transition.
 
@@ -125,12 +136,21 @@ Validation reports:
   `||Fhat-F_next||_2 / (||F_next||_2 + eps)`.
 - The same three metrics for copy-current.
 - Maximum future/delta MSE equivalence error.
+- Signed and relative improvement against Copy-current from the same stage.
+
+Absolute metrics from different VGG stages are not directly comparable. A
+Stage-4 experiment must be judged against Stage-4 Copy-current on the same
+frame stream, not against the historical Stage-5 MSE. Spatial motion radius is
+measured in prediction-stage feature cells; it is configurable and is not
+automatically rescaled across stages.
 
 The signed diagnostic is the Temporal Prediction Error
 `e_t = F_t - Fhat_(t|t-1)`. In the implementation of transition `t -> t+1`,
-this is stored as
-`prediction_error_top = F_next - Fhat_(t+1|t)` after the prediction is made.
-MSE is sign invariant, but this stored tensor must retain the documented sign.
+this is stored canonically as
+`prediction_error_feature = F_next - Fhat_(t+1|t)` after the prediction is
+made. `prediction_error_top` remains only as a compatibility alias for older
+Stage-5 evaluators. MSE is sign invariant, but this stored tensor must retain
+the documented sign.
 
 Best checkpoints are selected by validation feature MSE.
 

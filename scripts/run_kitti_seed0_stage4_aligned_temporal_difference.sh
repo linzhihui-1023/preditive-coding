@@ -5,22 +5,22 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PREDIFY_PYTHON_BIN:-/home/lin/anaconda3/envs/predifyproject/bin/python}"
 GIT_REVISION="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 SHORT_REVISION="${GIT_REVISION:0:7}"
-OUTPUT_ROOT="${PREDIFY_ALIGNED_DIFFERENCE_OUTPUT_ROOT:-/tmp/predify-storage/experiments/seed0_aligned_temporal_difference_${SHORT_REVISION}}"
+OUTPUT_ROOT="${PREDIFY_STAGE4_ALIGNED_DIFFERENCE_OUTPUT_ROOT:-/tmp/predify-storage/experiments/seed0_stage4_aligned_temporal_difference_${SHORT_REVISION}}"
 
 if [[ "$(git -C "$REPO_ROOT" branch --show-current)" != "predify-selective-adaptation-v2" ]]; then
-    echo "Aligned Temporal Difference must run from predify-selective-adaptation-v2." >&2
+    echo "Stage-4 Aligned Temporal Difference must run from predify-selective-adaptation-v2." >&2
     exit 2
 fi
 if [[ "$REPO_ROOT" != "/home/lin/predify2021_selective_adaptation" ]]; then
-    echo "Aligned Temporal Difference must use the isolated selective-adaptation worktree." >&2
+    echo "Stage-4 Aligned Temporal Difference must use the isolated selective-adaptation worktree." >&2
     exit 3
 fi
 if [[ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]]; then
-    echo "Refusing a formal Aligned Temporal Difference run from a dirty worktree." >&2
+    echo "Refusing a formal Stage-4 run from a dirty worktree." >&2
     exit 4
 fi
 if [[ -e "$OUTPUT_ROOT" ]]; then
-    echo "Refusing to overwrite Aligned Temporal Difference output: $OUTPUT_ROOT" >&2
+    echo "Refusing to overwrite Stage-4 output: $OUTPUT_ROOT" >&2
     exit 5
 fi
 mkdir -p "$OUTPUT_ROOT"
@@ -40,7 +40,7 @@ COMMON_ENV=(
     "MKL_NUM_THREADS=24"
     "PREDIFY_GIT_REVISION=$GIT_REVISION"
     "PREDIFY_TASK=future_feature"
-    "PREDIFY_FUTURE_FEATURE_STAGE=5"
+    "PREDIFY_FUTURE_FEATURE_STAGE=4"
     "PREDIFY_KITTI_ROOT=/home/lin/predify/kitti_raw"
     "PREDIFY_TRAIN_DRIVES=2011_09_26/2011_09_26_drive_0005_sync"
     "PREDIFY_VAL_DRIVES=2011_09_26/2011_09_26_drive_0011_sync"
@@ -102,8 +102,8 @@ COMMON_ENV=(
     "PREDIFY_FUTURE_MOTION_PATCH_SIZE=3"
 )
 
-PREFIX="$OUTPUT_ROOT/aligned_temporal_difference_seed0"
-printf 'git_revision=%s\noutput_root=%s\ncondition=aligned_temporal_difference\ntrain_drive=0005\nval_drive=0011\ncopy_mse_gate=0.06008010\ncopy_cosine_gate=0.91990469\ncopy_normalized_error_gate=0.37576611\n' \
+PREFIX="$OUTPUT_ROOT/stage4_aligned_temporal_difference_seed0"
+printf 'git_revision=%s\noutput_root=%s\ncondition=stage4_aligned_temporal_difference\nfuture_feature_stage=4\ntarget_flow_top_stage=5\ntrain_drive=0005\nval_drive=0011\nmotion_radius_stage4_cells=1\nmetric_gate=same-stage-copy-current\ncross-stage-absolute-metric-comparison=forbidden\n' \
     "$GIT_REVISION" "$OUTPUT_ROOT" > "$OUTPUT_ROOT/manifest.txt"
 
 env -i \

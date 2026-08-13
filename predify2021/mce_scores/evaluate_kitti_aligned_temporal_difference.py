@@ -15,11 +15,6 @@ from predify2021.model_factory.get_model import get_model
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPS = 1e-12
-COPY_CURRENT_REFERENCE = {
-    "feature_mse": 0.06008010,
-    "feature_cosine": 0.91990469,
-    "normalized_feature_error": 0.37576611,
-}
 TEMPORAL_ALIGNMENT_DEFINITION = (
     "local_match_F_previous_to_F_current_target_coordinates;"
     "use_matched_source_not_historical_future_warp"
@@ -30,12 +25,23 @@ ALIGNED_DIFFERENCE_DEFINITION = (
 )
 
 
-def validate_checkpoint(checkpoint, expected_revision):
+def validate_checkpoint(checkpoint, expected_revision, expected_stage):
+    expected_stage = int(expected_stage)
+    if expected_stage not in {3, 4, 5}:
+        raise ValueError(f"Expected prediction stage 3, 4, or 5, got {expected_stage}.")
     config = checkpoint.get("config")
     if not isinstance(config, dict) or config.get("prediction_task") != "future_feature":
         raise ValueError("Checkpoint is not a future-feature model.")
     required_config = {
         "git_revision": expected_revision,
+        "future_feature_stage": expected_stage,
+        "target_flow_top_stage": 5,
+        "future_feature_channels": 256 if expected_stage == 3 else 512,
+        "target_flow_top_target_definition": "T_TF=F_next_stage5",
+        "future_prediction_target_definition": (
+            f"T_future=F_next_stage{expected_stage}"
+        ),
+        "future_target_separated_from_target_flow_top": True,
         "future_feature_history_mode": "aligned_difference",
         "future_feature_temporal_fusion_mode": "none",
         "future_feature_temporal_fusion_architecture": "none",
@@ -43,6 +49,7 @@ def validate_checkpoint(checkpoint, expected_revision):
         "future_feature_history_definition": ALIGNED_DIFFERENCE_DEFINITION,
         "future_feature_prediction_form": "current_residual",
         "future_motion_radius": 1,
+        "future_motion_radius_units": f"stage{expected_stage}_feature_cells",
         "future_motion_patch_size": 3,
         "pretrained": True,
         "train_backbone": False,
@@ -70,6 +77,9 @@ def validate_checkpoint(checkpoint, expected_revision):
             "Aligned temporal difference may optimize only the Future Predictor."
         )
     return {
+        "future_feature_stage": int(config["future_feature_stage"]),
+        "target_flow_top_stage": int(config["target_flow_top_stage"]),
+        "future_feature_channels": int(config["future_feature_channels"]),
         "history_mode": config["future_feature_history_mode"],
         "fusion_mode": config["future_feature_temporal_fusion_mode"],
         "predictor_kernel_size": int(config["future_feature_predictor_kernel_size"]),
@@ -98,6 +108,7 @@ def build_model(checkpoint, validation):
         temporal_error_time_constant=config.get("temporal_error_time_constant", 0.5),
         temporal_error_gain=config.get("temporal_error_gain", 1.0),
         task="future_feature",
+        future_feature_stage=validation["future_feature_stage"],
         future_feature_history_mode=validation["history_mode"],
         future_feature_temporal_fusion_mode=validation["fusion_mode"],
         future_feature_predictor_kernel_size=validation["predictor_kernel_size"],
@@ -141,20 +152,36 @@ def evaluate_split(model, dataset, split, drive, fixed_dt_s):
         ):
             current = current.to(DEVICE)
             future = futures[:, 0].to(DEVICE)
+            target_cache = {}
+
+            def resolve_future_stage(stage):
+                if not target_cache:
+                    target_cache.update(
+                        model.extract_forward_features_at_stages(
+                            future,
+                            stages=(model.number_of_layers, model.future_feature_stage),
+                            detach=True,
+                        )
+                    )
+                return target_cache[int(stage)]
+
             model.step_frame(
                 current,
-                top_target_provider=lambda: model.extract_top_forward_feature(
-                    future,
-                    detach=True,
+                top_target_provider=lambda: resolve_future_stage(
+                    model.number_of_layers
+                ),
+                future_feature_target_provider=lambda: resolve_future_stage(
+                    model.future_feature_stage
                 ),
             )
             outputs = model.future_prediction_outputs
-            predicted = outputs["predicted_future_top"].float()
-            target = outputs["future_top_target"].float()
-            current_top = outputs["current_top"].float()
-            prediction_base = outputs["prediction_base_top"].float()
+            predicted = outputs["predicted_future_feature"].float()
+            target = outputs["future_prediction_target"].float()
+            current_feature = outputs["current_prediction_feature"].float()
+            prediction_base = outputs["prediction_base_feature"].float()
             predicted_flat = predicted.flatten(1)
             target_flat = target.flatten(1)
+            current_flat = current_feature.flatten(1)
             alignment_applied = bool(outputs["aligned_difference_applied"])
             raw_previous = outputs["aligned_difference_raw_previous_top"]
             aligned_previous = outputs["aligned_difference_previous_top"]
@@ -163,7 +190,7 @@ def evaluate_split(model, dataset, split, drive, fixed_dt_s):
             motion_dy = outputs["motion_dy"]
             motion_dx = outputs["motion_dx"]
             prediction_base_current_max_abs = float(
-                (prediction_base - current_top).abs().max().item()
+                (prediction_base - current_feature).abs().max().item()
             )
             if prediction_base_current_max_abs != 0.0:
                 raise RuntimeError("Prediction base changed F_t in aligned-difference mode.")
@@ -171,10 +198,10 @@ def evaluate_split(model, dataset, split, drive, fixed_dt_s):
                 raise RuntimeError("Temporal Fusion ran in aligned-difference mode.")
             if alignment_applied:
                 raw_alignment_mse = float(
-                    (raw_previous.float() - current_top).square().mean().item()
+                    (raw_previous.float() - current_feature).square().mean().item()
                 )
                 aligned_alignment_mse = float(
-                    (aligned_previous.float() - current_top).square().mean().item()
+                    (aligned_previous.float() - current_feature).square().mean().item()
                 )
                 alignment_reduction = (
                     raw_alignment_mse - aligned_alignment_mse
@@ -194,10 +221,35 @@ def evaluate_split(model, dataset, split, drive, fixed_dt_s):
                 nonzero_motion_fraction = ""
                 mean_motion_magnitude = ""
                 mean_matching_cost = ""
+            feature_mse = float((predicted - target).square().mean().item())
+            feature_cosine = float(
+                F.cosine_similarity(predicted_flat, target_flat, dim=1).mean().item()
+            )
+            normalized_feature_error = float(
+                (
+                    torch.linalg.vector_norm(predicted_flat - target_flat, dim=1)
+                    / torch.linalg.vector_norm(target_flat, dim=1).clamp_min(EPS)
+                ).mean().item()
+            )
+            copy_mse = float((current_feature - target).square().mean().item())
+            copy_cosine = float(
+                F.cosine_similarity(current_flat, target_flat, dim=1).mean().item()
+            )
+            copy_normalized_feature_error = float(
+                (
+                    torch.linalg.vector_norm(current_flat - target_flat, dim=1)
+                    / torch.linalg.vector_norm(target_flat, dim=1).clamp_min(EPS)
+                ).mean().item()
+            )
             raw_start = int(dataset.valid_start_indices[sample_index])
             rows.append(
                 {
                     "condition": "aligned_temporal_difference",
+                    "future_feature_stage": model.future_feature_stage,
+                    "target_flow_top_stage": model.number_of_layers,
+                    "prediction_feature_channels": predicted.shape[1],
+                    "prediction_feature_height": predicted.shape[2],
+                    "prediction_feature_width": predicted.shape[3],
                     "split": split,
                     "drive": drive,
                     "sample_index": sample_index,
@@ -209,17 +261,27 @@ def evaluate_split(model, dataset, split, drive, fixed_dt_s):
                     "horizon_seconds": fixed_dt_s,
                     "temporal_fusion_applied": False,
                     "alignment_applied": alignment_applied,
-                    "feature_mse": float((predicted - target).square().mean().item()),
-                    "feature_cosine": float(
-                        F.cosine_similarity(predicted_flat, target_flat, dim=1).mean().item()
+                    "feature_mse": feature_mse,
+                    "feature_cosine": feature_cosine,
+                    "normalized_feature_error": normalized_feature_error,
+                    "copy_mse": copy_mse,
+                    "copy_cosine": copy_cosine,
+                    "copy_normalized_feature_error": (
+                        copy_normalized_feature_error
                     ),
-                    "normalized_feature_error": float(
-                        (
-                            torch.linalg.vector_norm(predicted_flat - target_flat, dim=1)
-                            / torch.linalg.vector_norm(target_flat, dim=1).clamp_min(EPS)
-                        ).mean().item()
+                    "mse_improvement_vs_same_stage_copy": (
+                        copy_mse - feature_mse
                     ),
-                    "copy_mse": float((current_top - target).square().mean().item()),
+                    "relative_mse_improvement_vs_same_stage_copy": (
+                        (copy_mse - feature_mse) / max(copy_mse, EPS)
+                    ),
+                    "cosine_improvement_vs_same_stage_copy": (
+                        feature_cosine - copy_cosine
+                    ),
+                    "normalized_error_improvement_vs_same_stage_copy": (
+                        copy_normalized_feature_error
+                        - normalized_feature_error
+                    ),
                     "raw_previous_to_current_mse": raw_alignment_mse,
                     "aligned_previous_to_current_mse": aligned_alignment_mse,
                     "alignment_mse_reduction_fraction": alignment_reduction,
@@ -233,7 +295,13 @@ def evaluate_split(model, dataset, split, drive, fixed_dt_s):
                         float(temporal_difference.square().mean().item())
                     ),
                     "predicted_residual_rms": math.sqrt(
-                        float(outputs["predicted_residual_top"].float().square().mean().item())
+                        float(
+                            outputs["predicted_residual_feature"]
+                            .float()
+                            .square()
+                            .mean()
+                            .item()
+                        )
                     ),
                 }
             )
@@ -246,6 +314,12 @@ def summarize_rows(rows):
         "feature_cosine",
         "normalized_feature_error",
         "copy_mse",
+        "copy_cosine",
+        "copy_normalized_feature_error",
+        "mse_improvement_vs_same_stage_copy",
+        "relative_mse_improvement_vs_same_stage_copy",
+        "cosine_improvement_vs_same_stage_copy",
+        "normalized_error_improvement_vs_same_stage_copy",
         "prediction_base_current_max_abs",
         "aligned_temporal_difference_rms",
         "predicted_residual_rms",
@@ -260,6 +334,13 @@ def summarize_rows(rows):
     )
     return {
         "sample_count": len(rows),
+        "future_feature_stage": int(rows[0]["future_feature_stage"]),
+        "target_flow_top_stage": int(rows[0]["target_flow_top_stage"]),
+        "prediction_feature_shape_chw": [
+            int(rows[0]["prediction_feature_channels"]),
+            int(rows[0]["prediction_feature_height"]),
+            int(rows[0]["prediction_feature_width"]),
+        ],
         "temporal_fusion_applied_count": 0,
         "alignment_applied_count": sum(bool(row["alignment_applied"]) for row in rows),
         "metrics": {
@@ -278,29 +359,41 @@ def summarize_rows(rows):
 
 
 def evaluate_gate(metrics):
+    reference = {
+        "feature_mse": float(metrics["copy_mse"]["mean"]),
+        "feature_cosine": float(metrics["copy_cosine"]["mean"]),
+        "normalized_feature_error": float(
+            metrics["copy_normalized_feature_error"]["mean"]
+        ),
+    }
     observed = {
-        key: float(metrics[key]["mean"]) for key in COPY_CURRENT_REFERENCE
+        key: float(metrics[key]["mean"]) for key in reference
     }
     checks = {
         "feature_mse_below_copy": (
-            observed["feature_mse"] < COPY_CURRENT_REFERENCE["feature_mse"]
+            observed["feature_mse"] < reference["feature_mse"]
         ),
         "feature_cosine_above_copy": (
-            observed["feature_cosine"] > COPY_CURRENT_REFERENCE["feature_cosine"]
+            observed["feature_cosine"] > reference["feature_cosine"]
         ),
         "normalized_error_below_copy": (
             observed["normalized_feature_error"]
-            < COPY_CURRENT_REFERENCE["normalized_feature_error"]
+            < reference["normalized_feature_error"]
         ),
     }
     return {
-        "reference": COPY_CURRENT_REFERENCE,
+        "reference": reference,
+        "reference_scope": "same_prediction_stage_same_frame_stream_copy_current",
         "observed": observed,
         "checks": checks,
         "all_three_pass": all(checks.values()),
         "deltas_observed_minus_reference": {
-            key: observed[key] - COPY_CURRENT_REFERENCE[key] for key in observed
+            key: observed[key] - reference[key] for key in observed
         },
+        "relative_mse_improvement_vs_copy": (
+            (reference["feature_mse"] - observed["feature_mse"])
+            / max(reference["feature_mse"], EPS)
+        ),
     }
 
 
@@ -310,9 +403,16 @@ def main():
         raise FileExistsError(f"Refusing to overwrite non-empty directory: {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
     expected_revision = os.environ["PREDIFY_GIT_REVISION"]
+    expected_stage = int(os.environ["PREDIFY_FUTURE_FEATURE_STAGE"])
+    if expected_stage not in {3, 4, 5}:
+        raise ValueError("PREDIFY_FUTURE_FEATURE_STAGE must be 3, 4, or 5.")
     checkpoint_path = Path(os.environ["PREDIFY_ALIGNED_DIFFERENCE_CHECKPOINT"])
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    validation = validate_checkpoint(checkpoint, expected_revision)
+    validation = validate_checkpoint(
+        checkpoint,
+        expected_revision,
+        expected_stage,
+    )
     config = checkpoint["config"]
     root = os.environ.get("PREDIFY_KITTI_ROOT", "/home/lin/predify/kitti_raw")
     camera = os.environ.get("PREDIFY_KITTI_CAMERA", "image_02")
@@ -367,8 +467,16 @@ def main():
         writer.writeheader()
         writer.writerows(rows)
     result = {
-        "experiment": "kitti_stage5_aligned_temporal_difference_predictor",
+        "experiment": (
+            f"kitti_stage{expected_stage}_aligned_temporal_difference_predictor"
+        ),
         "git_revision": expected_revision,
+        "future_feature_stage": expected_stage,
+        "target_flow_top_stage": validation["target_flow_top_stage"],
+        "metric_comparison_scope": (
+            "within_stage_against_same_stage_copy_current_only;"
+            "absolute_metrics_are_not_compared_across_vgg_stages"
+        ),
         "device": str(DEVICE),
         "camera": camera,
         "fixed_dt_s": fixed_dt_s,

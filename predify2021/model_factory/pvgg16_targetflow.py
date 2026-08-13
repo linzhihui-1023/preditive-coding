@@ -81,11 +81,10 @@ def _make_feedback_modules():
 
 class PVGG16TargetFlow(nn.Module):
     """
-    Target-flow PVGG16 skeleton with explicit temporal top targets.
+    Target-flow PVGG16 skeleton with separate Target Flow and prediction targets.
 
-    The current frame x_t is processed normally. The next frame x_{t+1} can be
-    passed in explicitly, and its top-layer forward feature is used as a
-    stop-gradient top target for x_t.
+    Target Flow always receives the next frame's Stage-5 feature. Future-feature
+    prediction can independently target Stage 3, 4, or 5.
     """
 
     def __init__(
@@ -105,6 +104,7 @@ class PVGG16TargetFlow(nn.Module):
         temporal_error_time_constant: float = 1.0,
         temporal_error_gain: float = 1.0,
         task: str = "motion",
+        future_feature_stage: int = 5,
         future_feature_history_mode: str = "none",
         future_feature_temporal_fusion_mode: str = "none",
         future_feature_predictor_kernel_size: int = 1,
@@ -219,6 +219,16 @@ class PVGG16TargetFlow(nn.Module):
                 f"{future_feature_history_mode}"
             )
         self.task = task
+        self.future_feature_stage = int(future_feature_stage)
+        if self.future_feature_stage not in {3, 4, 5}:
+            raise ValueError(
+                "future_feature_stage must be one of 3, 4, or 5, got "
+                f"{self.future_feature_stage}."
+            )
+        self.future_feature_stage_index = self.future_feature_stage - 1
+        self.future_feature_channels = self.stage_channels[
+            self.future_feature_stage_index
+        ]
         self.future_feature_history_mode = future_feature_history_mode
         if future_feature_temporal_fusion_mode not in {
             "none",
@@ -290,13 +300,17 @@ class PVGG16TargetFlow(nn.Module):
         )
         self.future_feature_predictor = nn.Sequential(
             nn.Conv2d(
-                2 * self.stage_channels[-1],
-                1024,
+                2 * self.future_feature_channels,
+                2 * self.future_feature_channels,
                 kernel_size=future_feature_predictor_kernel_size,
                 padding=future_feature_predictor_kernel_size // 2,
             ),
             nn.ReLU(inplace=False),
-            nn.Conv2d(1024, self.stage_channels[-1], kernel_size=1),
+            nn.Conv2d(
+                2 * self.future_feature_channels,
+                self.future_feature_channels,
+                kernel_size=1,
+            ),
         )
         self.temporal_fusion_module = None
         if self.future_feature_temporal_fusion_mode in {
@@ -304,9 +318,17 @@ class PVGG16TargetFlow(nn.Module):
             "aligned_two_frame_residual",
         }:
             self.temporal_fusion_module = nn.Sequential(
-                nn.Conv2d(2 * self.stage_channels[-1], self.stage_channels[-1], 1),
+                nn.Conv2d(
+                    2 * self.future_feature_channels,
+                    self.future_feature_channels,
+                    1,
+                ),
                 nn.ReLU(inplace=False),
-                nn.Conv2d(self.stage_channels[-1], self.stage_channels[-1], 1),
+                nn.Conv2d(
+                    self.future_feature_channels,
+                    self.future_feature_channels,
+                    1,
+                ),
             )
             nn.init.zeros_(self.temporal_fusion_module[-1].weight)
             nn.init.zeros_(self.temporal_fusion_module[-1].bias)
@@ -317,7 +339,7 @@ class PVGG16TargetFlow(nn.Module):
         self.two_tap_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_prediction_error_memory = None
         self.temporal_error_state_memory = None
-        self.future_feature_previous_top_memory = None
+        self.future_feature_previous_prediction_stage_memory = None
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
@@ -332,7 +354,7 @@ class PVGG16TargetFlow(nn.Module):
         self.two_tap_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_prediction_error_memory = None
         self.temporal_error_state_memory = None
-        self.future_feature_previous_top_memory = None
+        self.future_feature_previous_prediction_stage_memory = None
         self.prediction_state_memory = [None for _ in range(self.number_of_layers)]
         self.temporal_context = None
         self.temporal_prediction = None
@@ -376,12 +398,15 @@ class PVGG16TargetFlow(nn.Module):
             "two_tap": self.two_tap_error_state_memory,
             "recursive": self.recursive_error_state_memory,
         }
-        history = self._resolve_memory(memory_by_mode[mode][-1], current_top)
+        history = self._resolve_memory(
+            memory_by_mode[mode][self.future_feature_stage_index],
+            current_top,
+        )
         return torch.zeros_like(current_top) if history is None else history.detach()
 
     def _build_historical_warp_base(self, current_top: torch.Tensor):
         previous_top = self._resolve_memory(
-            self.future_feature_previous_top_memory,
+            self.future_feature_previous_prediction_stage_memory,
             current_top,
         )
         if previous_top is None:
@@ -408,7 +433,7 @@ class PVGG16TargetFlow(nn.Module):
 
     def _build_aligned_difference_history(self, current_top: torch.Tensor):
         previous_top = self._resolve_memory(
-            self.future_feature_previous_top_memory,
+            self.future_feature_previous_prediction_stage_memory,
             current_top,
         )
         if previous_top is None:
@@ -436,7 +461,7 @@ class PVGG16TargetFlow(nn.Module):
 
     def _build_temporal_fusion_base(self, current_top: torch.Tensor):
         previous_top = self._resolve_memory(
-            self.future_feature_previous_top_memory,
+            self.future_feature_previous_prediction_stage_memory,
             current_top,
         )
         if previous_top is None:
@@ -481,7 +506,8 @@ class PVGG16TargetFlow(nn.Module):
             alignment_diagnostics,
         )
 
-    def _predict_future_top_feature(self, current_top: torch.Tensor):
+    def _predict_future_feature(self, current_feature: torch.Tensor):
+        current_top = current_feature
         fusion_previous_top = None
         raw_fusion_previous_top = None
         aligned_previous_top = None
@@ -560,6 +586,19 @@ class PVGG16TargetFlow(nn.Module):
         predicted_future = prediction_base + predicted_residual
         predicted_delta = predicted_future - current_top
         self.future_prediction_outputs = {
+            "future_feature_stage": self.future_feature_stage,
+            "target_flow_top_stage": self.number_of_layers,
+            "current_prediction_feature": current_top,
+            "history_prediction_feature": history_top,
+            "prediction_base_feature": prediction_base,
+            "predicted_residual_feature": predicted_residual,
+            "predicted_delta_feature": predicted_delta,
+            "predicted_future_feature": predicted_future,
+            "previous_prediction_stage_feature": (
+                aligned_difference_raw_previous_top
+                if aligned_difference_raw_previous_top is not None
+                else raw_fusion_previous_top
+            ),
             "current_top": current_top,
             "history_top": history_top,
             "fusion_previous_top": fusion_previous_top,
@@ -607,6 +646,11 @@ class PVGG16TargetFlow(nn.Module):
             "target_delta_top": None,
             "target_residual_top": None,
             "prediction_error_top": None,
+            "target_flow_top_target": None,
+            "future_prediction_target": None,
+            "target_delta_prediction_feature": None,
+            "target_residual_prediction_feature": None,
+            "prediction_error_feature": None,
         }
 
     def _run_forward_stages(self, x: torch.Tensor):
@@ -620,14 +664,65 @@ class PVGG16TargetFlow(nn.Module):
             forward_outputs.append(current)
         return forward_inputs, forward_outputs
 
-    def extract_top_forward_feature(self, x: torch.Tensor, detach: bool = True):
+    def extract_forward_feature(
+        self,
+        x: torch.Tensor,
+        stage: int,
+        detach: bool = True,
+    ):
+        stage = int(stage)
+        if stage < 1 or stage > self.number_of_layers:
+            raise ValueError(
+                f"stage must be between 1 and {self.number_of_layers}, got {stage}."
+            )
         if detach:
             with torch.no_grad():
                 _, forward_outputs = self._run_forward_stages(x)
-                return forward_outputs[-1]
+                return forward_outputs[stage - 1]
 
         _, forward_outputs = self._run_forward_stages(x)
-        return forward_outputs[-1]
+        return forward_outputs[stage - 1]
+
+    def extract_forward_features_at_stages(
+        self,
+        x: torch.Tensor,
+        stages,
+        detach: bool = True,
+    ):
+        stages = tuple(dict.fromkeys(int(stage) for stage in stages))
+        if not stages:
+            raise ValueError("At least one forward stage must be requested.")
+        if any(stage < 1 or stage > self.number_of_layers for stage in stages):
+            raise ValueError(
+                f"stages must be between 1 and {self.number_of_layers}, got {stages}."
+            )
+
+        def extract():
+            _, forward_outputs = self._run_forward_stages(x)
+            return {stage: forward_outputs[stage - 1] for stage in stages}
+
+        if detach:
+            with torch.no_grad():
+                return extract()
+        return extract()
+
+    def extract_prediction_stage_feature(
+        self,
+        x: torch.Tensor,
+        detach: bool = True,
+    ):
+        return self.extract_forward_feature(
+            x,
+            stage=self.future_feature_stage,
+            detach=detach,
+        )
+
+    def extract_top_forward_feature(self, x: torch.Tensor, detach: bool = True):
+        return self.extract_forward_feature(
+            x,
+            stage=self.number_of_layers,
+            detach=detach,
+        )
 
     def extract_top_forward_features(self, x: torch.Tensor, detach: bool = True):
         if x.dim() == 4:
@@ -639,6 +734,27 @@ class PVGG16TargetFlow(nn.Module):
         flat_x = x.reshape(batch_size * num_horizons, *x.shape[2:])
         flat_top = self.extract_top_forward_feature(flat_x, detach=detach)
         return flat_top.reshape(batch_size, num_horizons, *flat_top.shape[1:])
+
+    def extract_prediction_stage_features(
+        self,
+        x: torch.Tensor,
+        detach: bool = True,
+    ):
+        if x.dim() == 4:
+            return self.extract_prediction_stage_feature(x, detach=detach)
+        if x.dim() != 5:
+            raise ValueError(
+                f"Expected future frames with 4 or 5 dims, but got {x.dim()}."
+            )
+
+        batch_size, num_horizons = x.shape[:2]
+        flat_x = x.reshape(batch_size * num_horizons, *x.shape[2:])
+        flat_feature = self.extract_prediction_stage_feature(flat_x, detach=detach)
+        return flat_feature.reshape(
+            batch_size,
+            num_horizons,
+            *flat_feature.shape[1:],
+        )
 
     def _resolve_top_target(
         self,
@@ -662,6 +778,24 @@ class PVGG16TargetFlow(nn.Module):
             return self.extract_top_forward_feature(next_x, detach=True)
         return top_target
 
+    def _resolve_future_feature_target(
+        self,
+        future_feature_target: torch.Tensor = None,
+        next_x: torch.Tensor = None,
+        future_x: torch.Tensor = None,
+        resolved_top_target: torch.Tensor = None,
+    ):
+        if future_feature_target is not None:
+            return future_feature_target
+        if future_x is not None:
+            targets = self.extract_prediction_stage_features(future_x, detach=True)
+            return targets[:, 0] if targets.dim() == 5 else targets
+        if next_x is not None:
+            return self.extract_prediction_stage_feature(next_x, detach=True)
+        if self.future_feature_stage == self.number_of_layers:
+            return resolved_top_target
+        return None
+
     def _forward_impl(
         self,
         x: torch.Tensor,
@@ -672,6 +806,8 @@ class PVGG16TargetFlow(nn.Module):
         temporal_target_override: torch.Tensor = None,
         duplicate_current_top_context: bool = False,
         top_target_provider=None,
+        future_feature_target: torch.Tensor = None,
+        future_feature_target_provider=None,
     ):
         if top_target_provider is not None and any(
             value is not None
@@ -679,6 +815,18 @@ class PVGG16TargetFlow(nn.Module):
         ):
             raise ValueError(
                 "top_target_provider cannot be combined with an eagerly resolved target source."
+            )
+        if (
+            future_feature_target_provider is not None
+            and future_feature_target is not None
+        ):
+            raise ValueError(
+                "future_feature_target_provider cannot be combined with an eagerly "
+                "resolved future_feature_target."
+            )
+        if future_feature_target_provider is not None and self.task != "future_feature":
+            raise ValueError(
+                "future_feature_target_provider is valid only for task='future_feature'."
             )
         forward_inputs, forward_outputs = self._run_forward_stages(x)
 
@@ -717,7 +865,9 @@ class PVGG16TargetFlow(nn.Module):
             self.temporal_context = None
             self.temporal_prediction = None
             self.temporal_target = None
-            self._predict_future_top_feature(forward_outputs[-1])
+            self._predict_future_feature(
+                forward_outputs[self.future_feature_stage_index]
+            )
         else:
             self.future_prediction_outputs = None
             pooled_previous_errors = [
@@ -751,6 +901,8 @@ class PVGG16TargetFlow(nn.Module):
 
         if top_target_provider is not None:
             top_target = top_target_provider()
+        if future_feature_target_provider is not None:
+            future_feature_target = future_feature_target_provider()
 
         resolved_top_target = self._resolve_top_target(
             top_target=top_target,
@@ -761,17 +913,57 @@ class PVGG16TargetFlow(nn.Module):
         if resolved_top_target is None:
             raise ValueError("A top target is required to complete Target Flow state update.")
         if self.task == "future_feature":
-            future_top_target = resolved_top_target.detach()
-            current_top = self.future_prediction_outputs["current_top"]
-            prediction_base = self.future_prediction_outputs["prediction_base_top"]
-            predicted_future = self.future_prediction_outputs["predicted_future_top"]
+            future_prediction_target = self._resolve_future_feature_target(
+                future_feature_target=future_feature_target,
+                next_x=next_x,
+                future_x=future_x,
+                resolved_top_target=resolved_top_target,
+            )
+            if future_prediction_target is None:
+                raise ValueError(
+                    "A separate future-feature target is required when "
+                    f"future_feature_stage={self.future_feature_stage}; the Target "
+                    "Flow top target remains Stage-5."
+                )
+            future_prediction_target = future_prediction_target.detach()
+            current_feature = self.future_prediction_outputs[
+                "current_prediction_feature"
+            ]
+            prediction_base = self.future_prediction_outputs[
+                "prediction_base_feature"
+            ]
+            predicted_future = self.future_prediction_outputs[
+                "predicted_future_feature"
+            ]
+            if future_prediction_target.shape != predicted_future.shape:
+                raise ValueError(
+                    "Future prediction target shape does not match the configured "
+                    f"Stage-{self.future_feature_stage} predictor output: "
+                    f"target={tuple(future_prediction_target.shape)}, "
+                    f"prediction={tuple(predicted_future.shape)}."
+                )
             self.future_prediction_outputs.update(
                 {
-                    "future_top_target": future_top_target,
-                    "target_delta_top": future_top_target - current_top.detach(),
-                    "target_residual_top": future_top_target
+                    "future_feature_stage": self.future_feature_stage,
+                    "target_flow_top_stage": self.number_of_layers,
+                    "target_flow_top_target": resolved_top_target.detach(),
+                    "future_prediction_target": future_prediction_target,
+                    "target_delta_prediction_feature": (
+                        future_prediction_target - current_feature.detach()
+                    ),
+                    "target_residual_prediction_feature": future_prediction_target
                     - prediction_base.detach(),
-                    "prediction_error_top": future_top_target - predicted_future,
+                    "prediction_error_feature": (
+                        future_prediction_target - predicted_future
+                    ),
+                    # Compatibility aliases for existing Stage-5 evaluators.
+                    "future_top_target": future_prediction_target,
+                    "target_delta_top": future_prediction_target
+                    - current_feature.detach(),
+                    "target_residual_top": future_prediction_target
+                    - prediction_base.detach(),
+                    "prediction_error_top": future_prediction_target
+                    - predicted_future,
                 }
             )
             previous_temporal_error_state = self._resolve_memory(
@@ -779,7 +971,7 @@ class PVGG16TargetFlow(nn.Module):
                 predicted_future,
             )
             temporal_prediction_error = self.future_prediction_outputs[
-                "prediction_error_top"
+                "prediction_error_feature"
             ]
             temporal_error_state = build_temporal_prediction_error_state(
                 temporal_prediction_error,
@@ -852,7 +1044,9 @@ class PVGG16TargetFlow(nn.Module):
             self.prediction_state_memory[zero_based_idx] = state.target_output.detach()
 
         if self.task == "future_feature":
-            self.future_feature_previous_top_memory = forward_outputs[-1].detach()
+            self.future_feature_previous_prediction_stage_memory = forward_outputs[
+                self.future_feature_stage_index
+            ].detach()
 
         if self.task == "future_feature":
             self.temporal_target = None
@@ -917,20 +1111,20 @@ class PVGG16TargetFlow(nn.Module):
 
     def collect_future_feature_prediction_losses(self):
         outputs = self.future_prediction_outputs
-        if outputs is None or outputs["future_top_target"] is None:
+        if outputs is None or outputs["future_prediction_target"] is None:
             return None
-        future_target = outputs["future_top_target"].detach()
-        target_delta = outputs["target_delta_top"].detach()
-        target_residual = outputs["target_residual_top"].detach()
+        future_target = outputs["future_prediction_target"].detach()
+        target_delta = outputs["target_delta_prediction_feature"].detach()
+        target_residual = outputs["target_residual_prediction_feature"].detach()
         return {
             "future_mse": torch.mean(
-                (outputs["predicted_future_top"] - future_target) ** 2
+                (outputs["predicted_future_feature"] - future_target) ** 2
             ),
             "delta_mse": torch.mean(
-                (outputs["predicted_delta_top"] - target_delta) ** 2
+                (outputs["predicted_delta_feature"] - target_delta) ** 2
             ),
             "residual_mse": torch.mean(
-                (outputs["predicted_residual_top"] - target_residual) ** 2
+                (outputs["predicted_residual_feature"] - target_residual) ** 2
             ),
         }
 
@@ -944,6 +1138,8 @@ class PVGG16TargetFlow(nn.Module):
         temporal_target_override: torch.Tensor = None,
         duplicate_current_top_context: bool = False,
         top_target_provider=None,
+        future_feature_target: torch.Tensor = None,
+        future_feature_target_provider=None,
     ):
         self.reset()
         return self._forward_impl(
@@ -955,6 +1151,8 @@ class PVGG16TargetFlow(nn.Module):
             temporal_target_override=temporal_target_override,
             duplicate_current_top_context=duplicate_current_top_context,
             top_target_provider=top_target_provider,
+            future_feature_target=future_feature_target,
+            future_feature_target_provider=future_feature_target_provider,
         )
 
     def forward_with_next_target(self, x: torch.Tensor, next_x: torch.Tensor):
@@ -971,6 +1169,8 @@ class PVGG16TargetFlow(nn.Module):
         temporal_target_override: torch.Tensor = None,
         duplicate_current_top_context: bool = False,
         top_target_provider=None,
+        future_feature_target: torch.Tensor = None,
+        future_feature_target_provider=None,
     ):
         return self._forward_impl(
             x,
@@ -981,6 +1181,8 @@ class PVGG16TargetFlow(nn.Module):
             temporal_target_override=temporal_target_override,
             duplicate_current_top_context=duplicate_current_top_context,
             top_target_provider=top_target_provider,
+            future_feature_target=future_feature_target,
+            future_feature_target_provider=future_feature_target_provider,
         )
 
     def step_pair(self, x: torch.Tensor, next_x: torch.Tensor):

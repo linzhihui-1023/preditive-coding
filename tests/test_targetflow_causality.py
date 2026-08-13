@@ -419,8 +419,12 @@ class TargetFlowCausalityTest(unittest.TestCase):
         first = self._future_feature_step(self.current, self.future_a)
         self.assertTrue(torch.equal(first["prediction_base_top"], first["current_top"]))
         self.assertIsNone(first["motion_dy"])
-        self.assertIsNotNone(self.model.future_feature_previous_top_memory)
-        self.assertFalse(self.model.future_feature_previous_top_memory.requires_grad)
+        self.assertIsNotNone(
+            self.model.future_feature_previous_prediction_stage_memory
+        )
+        self.assertFalse(
+            self.model.future_feature_previous_prediction_stage_memory.requires_grad
+        )
 
         second = self._future_feature_step(self.future_a, self.future_b)
         self.assertIsNotNone(second["motion_dy"])

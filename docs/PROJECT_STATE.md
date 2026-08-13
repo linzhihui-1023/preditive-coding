@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 ## Active research direction
 
@@ -56,8 +56,11 @@ next transition.
   - Defaults local optimization to instantaneous error so memory controls have
     identical current-frame local losses and gradient coefficients.
   - Keeps the original 2-output motion `temporal_predictor` and adds an
-    independent full-stage-5 `future_feature_predictor` selected through
-    `PREDIFY_TASK`.
+    independent full-map `future_feature_predictor` selected through
+    `PREDIFY_TASK`. `PREDIFY_FUTURE_FEATURE_STAGE` selects Stage 3, 4, or 5.
+  - Keeps the Predify Target Flow top fixed at future Stage 5 while resolving
+    a separate configured-stage target for future prediction. Both targets are
+    deferred until after the current prediction.
   - Predicts a residual feature map with
     `Fhat_(t+1|t) = F_t + P(F_t, H_t)`.
   - Also supports causal historical warp
@@ -70,6 +73,8 @@ next transition.
     `recursive` history conditions; only `H_t` changes. `copy_current` bypasses
     the predictor as a non-learned baseline.
   - Keeps per-layer error and prediction memories across `step_frame` calls.
+    Spatial history uses a detached previous prediction-stage feature rather
+    than a misleadingly named top-feature memory.
   - Detaches every stored error and prediction state. Execution is stateful
     forward recurrence with one-step gradients, not BPTT.
   - Clears memories at sequence boundaries through `reset`.
@@ -122,7 +127,10 @@ next transition.
   - Selects motion checkpoints by validation temporal loss and future-feature
     checkpoints by validation feature MSE.
   - Reports feature MSE, cosine, normalized feature error, the equivalent delta
-    and residual MSE, prediction-base MSE, and matched copy-current metrics.
+    and residual MSE, prediction-base MSE, matched same-stage Copy-current
+    metrics, and within-stage absolute/relative improvements.
+  - Records the prediction stage, Target Flow top stage, channels, separate
+    target equations, and feature-cell radius units in checkpoint config.
   - Computes optional collapse prevention across a sequence-local temporal
     window of pooled top features instead of across the batch dimension.
   - Disables that window completely when its weight is zero and clears it on

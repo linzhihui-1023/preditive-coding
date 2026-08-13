@@ -53,6 +53,7 @@ TOP_TARGET_SOURCE = os.environ.get("PREDIFY_TOP_TARGET_SOURCE", "ema_teacher")
 TEMPORAL_TARGET_MODE = os.environ.get("PREDIFY_TEMPORAL_TARGET_MODE", "next_top")
 TASK_ALIGNED_TARGET = os.environ.get("PREDIFY_TASK_ALIGNED_TARGET", "").strip()
 PREDICTION_TASK = os.environ.get("PREDIFY_TASK", "motion").strip().lower()
+FUTURE_FEATURE_STAGE = int(os.environ.get("PREDIFY_FUTURE_FEATURE_STAGE", "5"))
 FEATURE_HISTORY_MODE = os.environ.get(
     "PREDIFY_FEATURE_HISTORY_MODE",
     "none",
@@ -513,6 +514,7 @@ def build_student_model():
         temporal_error_time_constant=TEMPORAL_ERROR_TIME_CONSTANT,
         temporal_error_gain=TEMPORAL_ERROR_GAIN,
         task=PREDICTION_TASK,
+        future_feature_stage=FUTURE_FEATURE_STAGE,
         future_feature_history_mode=FEATURE_HISTORY_MODE,
         future_feature_temporal_fusion_mode=TEMPORAL_FUSION_MODE,
         future_feature_predictor_kernel_size=(
@@ -861,6 +863,34 @@ def resolve_top_target(student, teacher, next_frames):
     raise ValueError(f"Unsupported PREDIFY_TOP_TARGET_SOURCE: {TOP_TARGET_SOURCE}")
 
 
+def build_future_feature_target_providers(student, teacher, next_frames):
+    target_model = teacher if TOP_TARGET_SOURCE == "ema_teacher" else student
+    if TOP_TARGET_SOURCE not in {"ema_teacher", "student_self"}:
+        raise ValueError(
+            f"Unsupported PREDIFY_TOP_TARGET_SOURCE: {TOP_TARGET_SOURCE}"
+        )
+    if target_model is None:
+        raise ValueError(f"{TOP_TARGET_SOURCE} target model is unavailable.")
+
+    cache = {}
+
+    def resolve(stage):
+        if not cache:
+            cache.update(
+                target_model.extract_forward_features_at_stages(
+                    next_frames,
+                    stages=(target_model.number_of_layers, FUTURE_FEATURE_STAGE),
+                    detach=True,
+                )
+            )
+        return cache[int(stage)]
+
+    return (
+        lambda: resolve(target_model.number_of_layers),
+        lambda: resolve(FUTURE_FEATURE_STAGE),
+    )
+
+
 def resolve_temporal_targets(student, teacher, future_frames):
     if TOP_TARGET_SOURCE == "ema_teacher":
         return teacher.extract_top_forward_features(future_frames, detach=True)
@@ -946,10 +976,14 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
             next_frames = future_frames[:, 0]
             top_target = None
             top_target_provider = None
+            future_feature_target_provider = None
             temporal_top_targets = None
             temporal_target_override = temporal_targets
             if PREDICTION_TASK == "future_feature":
-                top_target_provider = lambda: resolve_top_target(
+                (
+                    top_target_provider,
+                    future_feature_target_provider,
+                ) = build_future_feature_target_providers(
                     student,
                     teacher,
                     next_frames,
@@ -970,6 +1004,9 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
                     temporal_target_override=temporal_target_override,
                     duplicate_current_top_context=CURRENT_TOP_DUPLICATE,
                     top_target_provider=top_target_provider,
+                    future_feature_target_provider=(
+                        future_feature_target_provider
+                    ),
                 )
                 per_layer_losses, total_local_loss = student.collect_learn_flow_losses()
                 _, weighted_loss = combine_local_losses(per_layer_losses, LAYER_LOSS_WEIGHTS)
@@ -1005,10 +1042,16 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
 
             if PREDICTION_TASK == "future_feature":
                 outputs = student.future_prediction_outputs
-                predicted_future = outputs["predicted_future_top"].detach().float()
-                future_target = outputs["future_top_target"].detach().float()
-                current_top = outputs["current_top"].detach().float()
-                prediction_base_top = outputs["prediction_base_top"].detach().float()
+                predicted_future = outputs[
+                    "predicted_future_feature"
+                ].detach().float()
+                future_target = outputs[
+                    "future_prediction_target"
+                ].detach().float()
+                current_top = outputs["current_prediction_feature"].detach().float()
+                prediction_base_top = outputs[
+                    "prediction_base_feature"
+                ].detach().float()
                 predicted_flat = predicted_future.flatten(1)
                 target_flat = future_target.flatten(1)
                 current_flat = current_top.flatten(1)
@@ -1143,6 +1186,14 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
             iterator.update(1)
     iterator.close()
 
+    mean_feature_mse = _mean(feature_mse_history)
+    mean_feature_cosine = _mean(feature_cosine_history)
+    mean_normalized_feature_error = _mean(normalized_feature_error_history)
+    mean_copy_mse = _mean(copy_current_feature_mse_history)
+    mean_copy_cosine = _mean(copy_current_feature_cosine_history)
+    mean_copy_nfe = _mean(copy_current_normalized_feature_error_history)
+    mse_improvement_vs_copy = mean_copy_mse - mean_feature_mse
+
     return {
         "mean_weighted_loss": _mean(weighted_loss_history),
         "mean_optimized_loss": _mean(optimized_loss_history),
@@ -1156,19 +1207,27 @@ def run_epoch(student, teacher, dataloader, optimizer=None, motion_target_stats=
         "mean_temporal_loss": _mean(temporal_loss_history),
         "mean_temporal_mae": _mean(temporal_mae_history),
         "mean_temporal_cosine": _mean(temporal_cosine_history),
-        "mean_feature_mse": _mean(feature_mse_history),
+        "future_feature_stage": FUTURE_FEATURE_STAGE,
+        "target_flow_top_stage": student.number_of_layers,
+        "mean_feature_mse": mean_feature_mse,
         "mean_feature_delta_mse": _mean(feature_delta_mse_history),
-        "mean_feature_cosine": _mean(feature_cosine_history),
-        "mean_normalized_feature_error": _mean(normalized_feature_error_history),
-        "mean_copy_current_feature_mse": _mean(copy_current_feature_mse_history),
+        "mean_feature_cosine": mean_feature_cosine,
+        "mean_normalized_feature_error": mean_normalized_feature_error,
+        "mean_copy_current_feature_mse": mean_copy_mse,
         "mean_prediction_base_feature_mse": _mean(
             prediction_base_feature_mse_history
         ),
-        "mean_copy_current_feature_cosine": _mean(
-            copy_current_feature_cosine_history
+        "mean_copy_current_feature_cosine": mean_copy_cosine,
+        "mean_copy_current_normalized_feature_error": mean_copy_nfe,
+        "mean_feature_mse_improvement_vs_copy": mse_improvement_vs_copy,
+        "relative_feature_mse_improvement_vs_copy": (
+            mse_improvement_vs_copy / mean_copy_mse if mean_copy_mse > 0 else 0.0
         ),
-        "mean_copy_current_normalized_feature_error": _mean(
-            copy_current_normalized_feature_error_history
+        "mean_feature_cosine_improvement_vs_copy": (
+            mean_feature_cosine - mean_copy_cosine
+        ),
+        "mean_normalized_feature_error_improvement_vs_copy": (
+            mean_copy_nfe - mean_normalized_feature_error
         ),
         "max_feature_loss_equivalence_error": max(
             feature_loss_equivalence_error_history,
@@ -1208,6 +1267,14 @@ def print_feature_metrics(epoch, split, metrics):
         f"{split}_base_mse={metrics['mean_prediction_base_feature_mse']:.6f} | "
         f"{split}_copy_cosine={metrics['mean_copy_current_feature_cosine']:.6f} | "
         f"{split}_copy_nfe={metrics['mean_copy_current_normalized_feature_error']:.6f} | "
+        f"{split}_mse_gain_vs_stage_copy="
+        f"{metrics['mean_feature_mse_improvement_vs_copy']:.6f} | "
+        f"{split}_relative_mse_gain_vs_stage_copy="
+        f"{metrics['relative_feature_mse_improvement_vs_copy']:.2%} | "
+        f"{split}_cosine_gain_vs_stage_copy="
+        f"{metrics['mean_feature_cosine_improvement_vs_copy']:.6f} | "
+        f"{split}_nfe_gain_vs_stage_copy="
+        f"{metrics['mean_normalized_feature_error_improvement_vs_copy']:.6f} | "
         f"{split}_delta_equiv_max={metrics['max_feature_loss_equivalence_error']:.3e}",
         flush=True,
     )
@@ -1241,6 +1308,8 @@ def main():
         raise ValueError("PREDIFY_TASK_ALIGNED_TARGET must be empty or 'ego_motion'.")
     if PREDICTION_TASK not in {"motion", "future_feature"}:
         raise ValueError("PREDIFY_TASK must be motion or future_feature.")
+    if FUTURE_FEATURE_STAGE not in {3, 4, 5}:
+        raise ValueError("PREDIFY_FUTURE_FEATURE_STAGE must be 3, 4, or 5.")
     if FEATURE_HISTORY_MODE not in {
         "none",
         "latest",
@@ -1391,7 +1460,9 @@ def main():
         f"val_drives={tuple(val_drives) if val_drives else ('split-from-train',)}, "
         f"train_pairs={train_pairs}, val_pairs={val_pairs}, temporal_horizons={TEMPORAL_HORIZONS}, "
         f"task_aligned_target={TASK_ALIGNED_TARGET or 'none'}, "
-        f"prediction_task={PREDICTION_TASK}, feature_history_mode={FEATURE_HISTORY_MODE}, "
+        f"prediction_task={PREDICTION_TASK}, "
+        f"future_feature_stage={FUTURE_FEATURE_STAGE}, "
+        f"target_flow_top_stage=5, feature_history_mode={FEATURE_HISTORY_MODE}, "
         f"temporal_fusion_mode={TEMPORAL_FUSION_MODE}, "
         f"future_feature_predictor_kernel_size={FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE}, "
         f"future_feature_prediction_form={FUTURE_FEATURE_PREDICTION_FORM}, "
@@ -1478,21 +1549,34 @@ def main():
             "temporal_credit_assignment": "stateful_forward_one_step_gradient",
             "state_memory_detached": True,
             "prediction_task": PREDICTION_TASK,
+            "future_feature_stage": FUTURE_FEATURE_STAGE,
+            "future_feature_channels": student.future_feature_channels,
+            "target_flow_top_stage": student.number_of_layers,
+            "target_flow_top_target_definition": "T_TF=F_next_stage5",
+            "future_prediction_target_definition": (
+                f"T_future=F_next_stage{FUTURE_FEATURE_STAGE}"
+            ),
+            "future_target_separated_from_target_flow_top": True,
             "future_feature_history_mode": FEATURE_HISTORY_MODE,
             "future_feature_temporal_fusion_mode": TEMPORAL_FUSION_MODE,
-            "future_feature_previous_top_memory_detached": True,
+            "future_feature_previous_prediction_stage_memory_detached": True,
             "future_feature_predictor_kernel_size": (
                 FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE
             ),
             "future_feature_predictor_architecture": (
-                f"concat_1024_to_1024_k{FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE}"
-                "_then_512_k1"
+                f"concat_{2 * student.future_feature_channels}_to_"
+                f"{2 * student.future_feature_channels}_k"
+                f"{FUTURE_FEATURE_PREDICTOR_KERNEL_SIZE}_then_"
+                f"{student.future_feature_channels}_k1"
             ),
             "future_feature_temporal_fusion_architecture": (
-                "concat_F_previous_F_current_to_512_k1_relu_512_k1_residual"
+                f"concat_F_previous_F_current_to_{student.future_feature_channels}"
+                f"_k1_relu_{student.future_feature_channels}_k1_residual"
                 if TEMPORAL_FUSION_MODE == "two_frame_residual"
                 else (
-                    "align_F_previous_to_F_current_then_concat_to_512_k1_relu_512_k1_residual"
+                    "align_F_previous_to_F_current_then_concat_to_"
+                    f"{student.future_feature_channels}_k1_relu_"
+                    f"{student.future_feature_channels}_k1_residual"
                     if TEMPORAL_FUSION_MODE == "aligned_two_frame_residual"
                     else "none"
                 )
@@ -1512,9 +1596,18 @@ def main():
                 if FEATURE_HISTORY_MODE == "aligned_difference"
                 else "none"
             ),
-            "future_feature_prediction_space": "full_stage5_feature_map",
+            "future_feature_prediction_space": (
+                f"full_stage{FUTURE_FEATURE_STAGE}_feature_map"
+            ),
             "future_feature_prediction_form": FUTURE_FEATURE_PREDICTION_FORM,
             "future_motion_radius": FUTURE_MOTION_RADIUS,
+            "future_motion_radius_units": (
+                f"stage{FUTURE_FEATURE_STAGE}_feature_cells"
+            ),
+            "future_motion_image_space_note": (
+                "The same feature-cell radius covers different image-space ranges "
+                "at different prediction stages; radius is not auto-rescaled."
+            ),
             "future_motion_patch_size": FUTURE_MOTION_PATCH_SIZE,
             "future_feature_prediction_equation": (
                 "D_current=F_current-align(F_previous,F_current);"

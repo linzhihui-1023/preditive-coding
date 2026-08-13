@@ -1,5 +1,28 @@
 # Research Decisions
 
+## 2026-08-13: Separate prediction stage from the Target Flow top
+
+Status: accepted
+
+Future-feature prediction may target VGG Stage 3, 4, or 5 through
+`PREDIFY_FUTURE_FEATURE_STAGE`, but the Predify Target Flow top remains Stage
+5. The future frame therefore supplies two logically separate targets:
+`T_TF=F_(t+1)^5` for recursive Target Flow and
+`T_future=F_(t+1)^s_pred` for the future-prediction loss. They are resolved
+after the current prediction and can be extracted together in one frozen-VGG
+pass.
+
+The Future Predictor and optional fusion module derive their channels from the
+selected prediction stage. Cross-frame spatial memory stores detached
+`F_t^s_pred` and is named as prediction-stage memory, not top memory. Motion
+radius remains configurable in prediction-stage feature cells and is not
+silently rescaled when the stage changes.
+
+All checkpoints and replays must record both stages. Absolute Stage-4 and
+Stage-5 MSE values are not comparable because they belong to different feature
+spaces. A method passes only by improving MSE, cosine, and normalized error
+against Copy-current computed on the same stage and same frame stream.
+
 ## 2026-08-12: Do not use the persistence score as a 2-DoF degradation trigger
 
 Status: accepted

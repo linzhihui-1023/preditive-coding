@@ -117,6 +117,25 @@ server-side. The exact runner is:
 scripts/run_kitti_seed0_aligned_temporal_difference.sh
 ```
 
+Future-feature prediction is now independently selectable at VGG Stage 3, 4,
+or 5 through `PREDIFY_FUTURE_FEATURE_STAGE`. This does not move the Predify
+Target Flow boundary: its top target remains the next-frame Stage-5 feature,
+while the future predictor receives and is supervised in the configured
+prediction stage. The two target definitions, stages, channels, detached
+prediction-stage memory, and feature-cell motion radius are recorded in every
+new checkpoint.
+
+The first Stage-4 follow-up keeps the aligned temporal-difference mechanism
+and all training controls fixed. It uses radius 1 in Stage-4 feature cells and
+compares its prediction only against a Stage-4 Copy-current replay over the
+same frames. Stage-4 and Stage-5 absolute MSE values are different feature
+spaces and must not be ranked against each other. Run the single condition
+with:
+
+```bash
+scripts/run_kitti_seed0_stage4_aligned_temporal_difference.sh
+```
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

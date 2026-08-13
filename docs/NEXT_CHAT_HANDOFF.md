@@ -1,6 +1,6 @@
 # Next Chat Handoff
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 ## Start Here
 
@@ -71,6 +71,20 @@ The 2-DoF `[forward displacement, yaw change]` task remains only as historical
 diagnostic work and must not be presented as the primary result.
 
 ## Current Causal Feature Task
+
+Future-feature prediction now has an explicit stage boundary
+`s_pred in {3,4,5}`. It is independent of the Predify Target Flow top:
+
+```text
+Target Flow top target: T_TF = F_(t+1)^5
+Future prediction target: T_future = F_(t+1)^s_pred
+Prediction memory: M_(t-1) = detach(F_(t-1)^s_pred)
+```
+
+`PREDIFY_FUTURE_FEATURE_STAGE` selects `s_pred`. Changing it must not change
+the Stage-5 Target Flow target or feedback recursion. The deferred future
+providers extract both requested stages in one future-frame VGG pass, after
+the current prediction has been made.
 
 The existing motion head is preserved. The original independent head remains:
 
@@ -673,6 +687,18 @@ Run only the aligned temporal-difference predictor follow-up:
 ```bash
 scripts/run_kitti_seed0_aligned_temporal_difference.sh
 ```
+
+Run the same single aligned temporal-difference condition at Stage 4:
+
+```bash
+scripts/run_kitti_seed0_stage4_aligned_temporal_difference.sh
+```
+
+The Stage-4 replay computes Copy-current on the same Stage-4 frame stream.
+Judge MSE, cosine, and normalized error against that same-stage reference;
+never compare Stage-4 and Stage-5 absolute MSE as if they shared a feature
+space. Radius 1 means one prediction-stage feature cell and is deliberately
+not auto-rescaled across stages.
 
 Run the three-condition 1x1 Temporal Error matrix:
 

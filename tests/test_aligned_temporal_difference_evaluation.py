@@ -2,7 +2,6 @@ import unittest
 
 from predify2021.mce_scores.evaluate_kitti_aligned_temporal_difference import (
     ALIGNED_DIFFERENCE_DEFINITION,
-    COPY_CURRENT_REFERENCE,
     TEMPORAL_ALIGNMENT_DEFINITION,
     evaluate_gate,
     validate_checkpoint,
@@ -10,6 +9,7 @@ from predify2021.mce_scores.evaluate_kitti_aligned_temporal_difference import (
 
 
 REVISION = "a" * 40
+STAGE = 4
 
 
 def _checkpoint():
@@ -19,6 +19,12 @@ def _checkpoint():
         "config": {
             "prediction_task": "future_feature",
             "git_revision": REVISION,
+            "future_feature_stage": STAGE,
+            "target_flow_top_stage": 5,
+            "future_feature_channels": 512,
+            "target_flow_top_target_definition": "T_TF=F_next_stage5",
+            "future_prediction_target_definition": "T_future=F_next_stage4",
+            "future_target_separated_from_target_flow_top": True,
             "future_feature_history_mode": "aligned_difference",
             "future_feature_temporal_fusion_mode": "none",
             "future_feature_temporal_fusion_architecture": "none",
@@ -27,6 +33,7 @@ def _checkpoint():
             "future_feature_prediction_form": "current_residual",
             "future_feature_predictor_kernel_size": 1,
             "future_motion_radius": 1,
+            "future_motion_radius_units": "stage4_feature_cells",
             "future_motion_patch_size": 3,
             "pretrained": True,
             "train_backbone": False,
@@ -48,9 +55,11 @@ def _checkpoint():
 
 class AlignedTemporalDifferenceEvaluationTest(unittest.TestCase):
     def test_checkpoint_contract_is_strictly_aligned_difference(self):
-        validation = validate_checkpoint(_checkpoint(), REVISION)
+        validation = validate_checkpoint(_checkpoint(), REVISION, STAGE)
         self.assertEqual(validation["history_mode"], "aligned_difference")
         self.assertEqual(validation["fusion_mode"], "none")
+        self.assertEqual(validation["future_feature_stage"], 4)
+        self.assertEqual(validation["target_flow_top_stage"], 5)
 
     def test_temporal_fusion_checkpoint_is_rejected(self):
         checkpoint = _checkpoint()
@@ -58,7 +67,7 @@ class AlignedTemporalDifferenceEvaluationTest(unittest.TestCase):
             "two_frame_residual"
         )
         with self.assertRaisesRegex(ValueError, "none"):
-            validate_checkpoint(checkpoint, REVISION)
+            validate_checkpoint(checkpoint, REVISION, STAGE)
 
     def test_temporal_fusion_parameters_are_rejected(self):
         checkpoint = _checkpoint()
@@ -66,7 +75,7 @@ class AlignedTemporalDifferenceEvaluationTest(unittest.TestCase):
             "temporal_fusion_module.0.weight",
         )
         with self.assertRaisesRegex(ValueError, "only the Future Predictor"):
-            validate_checkpoint(checkpoint, REVISION)
+            validate_checkpoint(checkpoint, REVISION, STAGE)
 
     def test_wrong_difference_definition_is_rejected(self):
         checkpoint = _checkpoint()
@@ -74,7 +83,7 @@ class AlignedTemporalDifferenceEvaluationTest(unittest.TestCase):
             "use_aligned_previous_directly"
         )
         with self.assertRaisesRegex(ValueError, "D_current"):
-            validate_checkpoint(checkpoint, REVISION)
+            validate_checkpoint(checkpoint, REVISION, STAGE)
 
     def test_historical_future_warp_semantics_are_rejected(self):
         checkpoint = _checkpoint()
@@ -82,22 +91,28 @@ class AlignedTemporalDifferenceEvaluationTest(unittest.TestCase):
             "historical_warp_current_toward_future"
         )
         with self.assertRaisesRegex(ValueError, "target_coordinates"):
-            validate_checkpoint(checkpoint, REVISION)
+            validate_checkpoint(checkpoint, REVISION, STAGE)
+
+    def test_checkpoint_for_a_different_prediction_stage_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "future_feature_stage"):
+            validate_checkpoint(_checkpoint(), REVISION, 5)
 
     def test_gate_requires_all_three_metrics_to_improve(self):
         passing_metrics = {
-            "feature_mse": {"mean": COPY_CURRENT_REFERENCE["feature_mse"] - 0.001},
-            "feature_cosine": {
-                "mean": COPY_CURRENT_REFERENCE["feature_cosine"] + 0.001
-            },
-            "normalized_feature_error": {
-                "mean": COPY_CURRENT_REFERENCE["normalized_feature_error"] - 0.001
-            },
+            "feature_mse": {"mean": 0.079},
+            "feature_cosine": {"mean": 0.91},
+            "normalized_feature_error": {"mean": 0.39},
+            "copy_mse": {"mean": 0.08},
+            "copy_cosine": {"mean": 0.90},
+            "copy_normalized_feature_error": {"mean": 0.40},
         }
-        self.assertTrue(evaluate_gate(passing_metrics)["all_three_pass"])
-        passing_metrics["feature_cosine"]["mean"] = COPY_CURRENT_REFERENCE[
-            "feature_cosine"
-        ]
+        passing_gate = evaluate_gate(passing_metrics)
+        self.assertTrue(passing_gate["all_three_pass"])
+        self.assertEqual(
+            passing_gate["reference_scope"],
+            "same_prediction_stage_same_frame_stream_copy_current",
+        )
+        passing_metrics["feature_cosine"]["mean"] = 0.90
         gate = evaluate_gate(passing_metrics)
         self.assertFalse(gate["all_three_pass"])
         self.assertFalse(gate["checks"]["feature_cosine_above_copy"])

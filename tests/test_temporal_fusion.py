@@ -75,7 +75,7 @@ class TemporalFusionTest(unittest.TestCase):
         self.assertIsNone(previous.grad_fn)
         self.assertTrue(
             torch.equal(
-                self.model.future_feature_previous_top_memory,
+                self.model.future_feature_previous_prediction_stage_memory,
                 second["current_top"],
             )
         )
@@ -119,9 +119,13 @@ class TemporalFusionTest(unittest.TestCase):
     def test_reset_removes_previous_feature(self):
         with torch.no_grad():
             self._step(self.frame_a, self.frame_b)
-        self.assertIsNotNone(self.model.future_feature_previous_top_memory)
+        self.assertIsNotNone(
+            self.model.future_feature_previous_prediction_stage_memory
+        )
         self.model.reset()
-        self.assertIsNone(self.model.future_feature_previous_top_memory)
+        self.assertIsNone(
+            self.model.future_feature_previous_prediction_stage_memory
+        )
 
     def test_aligned_fusion_uses_matched_previous_not_future_warp(self):
         self.model.future_feature_temporal_fusion_mode = (
