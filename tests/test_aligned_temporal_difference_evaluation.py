@@ -6,6 +6,9 @@ from predify2021.mce_scores.evaluate_kitti_aligned_temporal_difference import (
     evaluate_gate,
     validate_checkpoint,
 )
+from predify2021.mce_scores.evaluate_kitti_stage4_same_drive_diagnostic import (
+    validate_same_drive_checkpoint,
+)
 
 
 REVISION = "a" * 40
@@ -116,6 +119,47 @@ class AlignedTemporalDifferenceEvaluationTest(unittest.TestCase):
         gate = evaluate_gate(passing_metrics)
         self.assertFalse(gate["all_three_pass"])
         self.assertFalse(gate["checks"]["feature_cosine_above_copy"])
+
+    def test_same_drive_checkpoint_locks_chronological_test_policy(self):
+        checkpoint = _checkpoint()
+        checkpoint["config"].update(
+            {
+                "formal_split": False,
+                "same_drive_split": False,
+                "same_drive_three_way_split": True,
+                "same_drive_drive": "drive_0005",
+                "train_drives": ("drive_0005",),
+                "val_drives": ("drive_0005",),
+                "train_fraction": 0.6,
+                "val_fraction": 0.2,
+                "test_fraction": 0.2,
+                "test_selection_role": (
+                    "unseen_until_after_best_validation_checkpoint_selection"
+                ),
+                "shuffle_train_pairs": False,
+                "shuffle_val_pairs": False,
+                "same_drive_split_metadata": {
+                    "split_name": "chronological_raw_frames_60_20_20",
+                    "chronological_order": ("train", "val", "test"),
+                    "shared_raw_frame_count": 0,
+                    "shuffle": False,
+                },
+            }
+        )
+        validation = validate_same_drive_checkpoint(
+            checkpoint,
+            expected_revision=REVISION,
+            expected_drive="drive_0005",
+        )
+        self.assertEqual(validation["future_feature_stage"], 4)
+
+        checkpoint["config"]["test_selection_role"] = "used_for_epoch_selection"
+        with self.assertRaisesRegex(ValueError, "test_selection_role"):
+            validate_same_drive_checkpoint(
+                checkpoint,
+                expected_revision=REVISION,
+                expected_drive="drive_0005",
+            )
 
 
 if __name__ == "__main__":

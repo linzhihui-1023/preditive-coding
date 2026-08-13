@@ -722,6 +722,18 @@ Server-only checkpoint and logs:
 /tmp/predify-storage/experiments/seed0_stage4_aligned_temporal_difference_fdc4743/
 ```
 
+The next diagnostic is deliberately one-time and same-drive. Drive 0005 raw
+frames are fixed as Train `0--91`, Val `92--122`, and Test `123--153`.
+Transitions crossing boundaries at starts 91 and 122 are excluded, leaving
+`91/30/30` ordered transitions and no shared raw frames. Stage 4, aligned
+temporal difference, radius 1, patch size 3, seed 0, and ten epochs remain
+fixed. Val selects the checkpoint; Test is replayed once afterward. Do not
+create further same-drive variants based on its result.
+
+```bash
+scripts/run_kitti_seed0_stage4_same_drive_diagnostic.sh
+```
+
 Run the three-condition 1x1 Temporal Error matrix:
 
 ```bash

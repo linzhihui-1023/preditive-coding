@@ -23,6 +23,7 @@ from predify2021.mce_scores.evaluate_kitti_same_drive_controlled_corruption impo
 )
 from predify2021.mce_scores.kitti_pairs import (
     KITTINextFramePairDataset,
+    build_same_drive_train_val_test_subsets,
     build_same_drive_train_val_subsets,
     collect_raw_frame_indices,
 )
@@ -50,6 +51,32 @@ def _make_synthetic_drive(root, frame_count, pixel_value=None):
 
 
 class SameDriveRawFrameSplitTest(unittest.TestCase):
+    def test_three_way_split_has_disjoint_chronological_raw_frames(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            drive = _make_synthetic_drive(root, frame_count=120)
+            dataset = KITTINextFramePairDataset(root, drive)
+
+            train, val, test, metadata = build_same_drive_train_val_test_subsets(
+                dataset,
+            )
+            train_frames = collect_raw_frame_indices(train)
+            val_frames = collect_raw_frame_indices(val)
+            test_frames = collect_raw_frame_indices(test)
+
+            self.assertEqual(train_frames, frozenset(range(72)))
+            self.assertEqual(val_frames, frozenset(range(72, 96)))
+            self.assertEqual(test_frames, frozenset(range(96, 120)))
+            self.assertTrue(train_frames.isdisjoint(val_frames))
+            self.assertTrue(train_frames.isdisjoint(test_frames))
+            self.assertTrue(val_frames.isdisjoint(test_frames))
+            self.assertEqual(metadata["train_sample_count"], 71)
+            self.assertEqual(metadata["val_sample_count"], 23)
+            self.assertEqual(metadata["test_sample_count"], 23)
+            self.assertEqual(metadata["excluded_boundary_sample_count"], 2)
+            self.assertEqual(metadata["chronological_order"], ("train", "val", "test"))
+            self.assertFalse(metadata["shuffle"])
+
     def test_same_drive_train_val_have_no_shared_raw_frames(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

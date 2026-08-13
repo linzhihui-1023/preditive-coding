@@ -9,7 +9,10 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from predify2021.mce_scores.kitti_pairs import KITTIMultiHorizonFrameDataset
+from predify2021.mce_scores.kitti_pairs import (
+    KITTIMultiHorizonFrameDataset,
+    get_sample_raw_frame_indices,
+)
 from predify2021.model_factory.get_model import get_model
 
 
@@ -241,7 +244,7 @@ def evaluate_split(model, dataset, split, drive, fixed_dt_s):
                     / torch.linalg.vector_norm(target_flat, dim=1).clamp_min(EPS)
                 ).mean().item()
             )
-            raw_start = int(dataset.valid_start_indices[sample_index])
+            raw_start = min(get_sample_raw_frame_indices(dataset, sample_index))
             rows.append(
                 {
                     "condition": "aligned_temporal_difference",

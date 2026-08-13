@@ -11,6 +11,7 @@ from predify2021.mce_scores.train_kitti_targetflow_adjacent_pairs import (
     reset_stream_state,
     validate_formal_drive_split,
     validate_same_drive_configuration,
+    validate_same_drive_three_way_configuration,
     validate_variance_configuration,
 )
 
@@ -285,6 +286,35 @@ class FormalExperimentConfigurationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exactly 20"):
             validate_same_drive_configuration(
                 True, False, "", "", 0.6, 0.2, 19, True
+            )
+
+    def test_same_drive_three_way_diagnostic_requires_exact_ordered_split(self):
+        valid_arguments = (
+            True,
+            False,
+            False,
+            "",
+            "",
+            0.6,
+            0.2,
+            0.2,
+            True,
+            False,
+            False,
+        )
+        validate_same_drive_three_way_configuration(*valid_arguments)
+
+        with self.assertRaisesRegex(ValueError, "exact fractions"):
+            validate_same_drive_three_way_configuration(
+                True, False, False, "", "", 0.6, 0.3, 0.1, True, False, False
+            )
+        with self.assertRaisesRegex(ValueError, "forbids shuffling"):
+            validate_same_drive_three_way_configuration(
+                True, False, False, "", "", 0.6, 0.2, 0.2, True, True, False
+            )
+        with self.assertRaisesRegex(ValueError, "cannot be combined"):
+            validate_same_drive_three_way_configuration(
+                True, True, False, "", "", 0.6, 0.2, 0.2, True, False, False
             )
 
     def test_positive_variance_weight_requires_trainable_backbone(self):

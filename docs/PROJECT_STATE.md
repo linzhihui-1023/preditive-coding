@@ -166,6 +166,11 @@ next transition.
     a clean revision while retaining the Stage-5 Target Flow top.
   - Fixes radius 1 in Stage-4 feature cells and evaluates only against
     same-stage Copy-current over the same frames.
+- `scripts/run_kitti_seed0_stage4_same_drive_diagnostic.sh`
+  - Runs the sole 0005 chronological 60/20/20 Stage-4 diagnostic without
+    shuffled transitions or shared raw frames.
+  - Selects only on the middle Val segment and evaluates the final Test
+    segment once after best-checkpoint selection.
 - `predify2021/mce_scores/evaluate_kitti_aligned_temporal_difference.py`
   - Enforces prediction-stage/Target-Flow-stage checkpoint separation and
     replays both train and held-out drives into one per-frame schema.

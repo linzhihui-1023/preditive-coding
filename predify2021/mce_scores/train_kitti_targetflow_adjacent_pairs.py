@@ -19,6 +19,7 @@ from .kitti_pairs import (
     KITTIEgoMotionMultiHorizonDataset,
     KITTIMultiHorizonFrameDataset,
     ShuffledFuturePairDataset,
+    build_same_drive_train_val_test_subsets,
     build_same_drive_train_val_subsets,
     build_kitti_ego_motion_multi_horizon_dataset,
     build_kitti_multi_horizon_dataset,
@@ -33,6 +34,9 @@ TRAIN_DRIVES_ENV = os.environ.get("PREDIFY_TRAIN_DRIVES", "")
 VAL_DRIVES_ENV = os.environ.get("PREDIFY_VAL_DRIVES", "")
 FORMAL_SPLIT = os.environ.get("PREDIFY_FORMAL_SPLIT", "0") == "1"
 SAME_DRIVE_SPLIT = os.environ.get("PREDIFY_SAME_DRIVE_SPLIT", "0") == "1"
+SAME_DRIVE_THREE_WAY_SPLIT = (
+    os.environ.get("PREDIFY_SAME_DRIVE_THREE_WAY_SPLIT", "0") == "1"
+)
 SAME_DRIVE_GAP_FRAMES = int(
     os.environ.get("PREDIFY_SAME_DRIVE_GAP_FRAMES", "20")
 )
@@ -48,6 +52,7 @@ WEIGHT_DECAY = float(os.environ.get("PREDIFY_WEIGHT_DECAY", "0.0"))
 EMA_DECAY = float(os.environ.get("PREDIFY_EMA_DECAY", "0.99"))
 TRAIN_FRACTION = float(os.environ.get("PREDIFY_TRAIN_FRACTION", "0.8"))
 VAL_FRACTION = float(os.environ.get("PREDIFY_VAL_FRACTION", "0.2"))
+TEST_FRACTION = float(os.environ.get("PREDIFY_TEST_FRACTION", "0.2"))
 TARGET_FLOW_MODE = os.environ.get("PREDIFY_TARGET_FLOW_MODE", "recursive")
 TOP_TARGET_SOURCE = os.environ.get("PREDIFY_TOP_TARGET_SOURCE", "ema_teacher")
 TEMPORAL_TARGET_MODE = os.environ.get("PREDIFY_TEMPORAL_TARGET_MODE", "next_top")
@@ -241,6 +246,49 @@ def validate_same_drive_configuration(
         raise ValueError("Controlled same-drive training requires exactly 20 gap frames.")
     if not stream_mode:
         raise ValueError("Controlled same-drive training requires stream_mode=1.")
+
+
+def validate_same_drive_three_way_configuration(
+    enabled,
+    legacy_same_drive_split,
+    formal_split,
+    train_drives_raw,
+    val_drives_raw,
+    train_fraction,
+    val_fraction,
+    test_fraction,
+    stream_mode,
+    shuffle_train,
+    shuffle_val,
+):
+    if not enabled:
+        return
+    if legacy_same_drive_split:
+        raise ValueError(
+            "PREDIFY_SAME_DRIVE_THREE_WAY_SPLIT=1 cannot be combined with "
+            "PREDIFY_SAME_DRIVE_SPLIT=1."
+        )
+    if formal_split:
+        raise ValueError(
+            "The same-drive 60/20/20 diagnostic cannot be combined with "
+            "PREDIFY_FORMAL_SPLIT=1."
+        )
+    if train_drives_raw.strip() or val_drives_raw.strip():
+        raise ValueError(
+            "The same-drive 60/20/20 diagnostic uses PREDIFY_KITTI_DRIVE; "
+            "leave PREDIFY_TRAIN_DRIVES and PREDIFY_VAL_DRIVES empty."
+        )
+    expected = (0.6, 0.2, 0.2)
+    observed = (train_fraction, val_fraction, test_fraction)
+    if not all(math.isclose(value, required) for value, required in zip(observed, expected)):
+        raise ValueError(
+            "The same-drive chronological diagnostic requires exact fractions "
+            f"train/val/test={expected}, got {observed}."
+        )
+    if not stream_mode:
+        raise ValueError("The same-drive 60/20/20 diagnostic requires stream_mode=1.")
+    if shuffle_train or shuffle_val:
+        raise ValueError("The same-drive 60/20/20 diagnostic forbids shuffling.")
 
 
 def validate_variance_configuration(train_backbone, variance_weight):
@@ -566,6 +614,7 @@ def build_train_val_loaders():
 
     same_drive_train_dataset = None
     same_drive_val_dataset = None
+    same_drive_test_dataset = None
     if SAME_DRIVE_SPLIT:
         same_drive_dataset = _make_stream_dataset(KITTI_DRIVE)
         (
@@ -577,6 +626,21 @@ def build_train_val_loaders():
             train_fraction=TRAIN_FRACTION,
             val_fraction=VAL_FRACTION,
             gap_frames=SAME_DRIVE_GAP_FRAMES,
+        )
+        train_drives = [KITTI_DRIVE]
+        val_drives = [KITTI_DRIVE]
+    elif SAME_DRIVE_THREE_WAY_SPLIT:
+        same_drive_dataset = _make_stream_dataset(KITTI_DRIVE)
+        (
+            same_drive_train_dataset,
+            same_drive_val_dataset,
+            same_drive_test_dataset,
+            same_drive_split_metadata,
+        ) = build_same_drive_train_val_test_subsets(
+            same_drive_dataset,
+            train_fraction=TRAIN_FRACTION,
+            val_fraction=VAL_FRACTION,
+            test_fraction=TEST_FRACTION,
         )
         train_drives = [KITTI_DRIVE]
         val_drives = [KITTI_DRIVE]
@@ -592,7 +656,7 @@ def build_train_val_loaders():
                 "PREDIFY_STREAM_MODE=1 keeps true video order; shuffled-pair controls are disabled."
             )
 
-        if SAME_DRIVE_SPLIT:
+        if SAME_DRIVE_SPLIT or SAME_DRIVE_THREE_WAY_SPLIT:
             train_sequences = _make_subset_stream_sequence_records(
                 "train",
                 KITTI_DRIVE,
@@ -643,7 +707,7 @@ def build_train_val_loaders():
             same_drive_split_metadata,
         )
 
-    if SAME_DRIVE_SPLIT:
+    if SAME_DRIVE_SPLIT or SAME_DRIVE_THREE_WAY_SPLIT:
         train_dataset = same_drive_train_dataset
         val_dataset = same_drive_val_dataset
         if MAX_TRAIN_PAIRS > 0 and MAX_TRAIN_PAIRS < len(train_dataset):
@@ -1294,6 +1358,19 @@ def main():
         SAME_DRIVE_GAP_FRAMES,
         STREAM_MODE,
     )
+    validate_same_drive_three_way_configuration(
+        SAME_DRIVE_THREE_WAY_SPLIT,
+        SAME_DRIVE_SPLIT,
+        FORMAL_SPLIT,
+        TRAIN_DRIVES_ENV,
+        VAL_DRIVES_ENV,
+        TRAIN_FRACTION,
+        VAL_FRACTION,
+        TEST_FRACTION,
+        STREAM_MODE,
+        SHUFFLE_TRAIN_PAIRS,
+        SHUFFLE_VAL_PAIRS,
+    )
     validate_variance_configuration(TRAIN_BACKBONE, TOP_VARIANCE_WEIGHT)
 
     if len(LAYER_LOSS_WEIGHTS) != 5:
@@ -1471,7 +1548,10 @@ def main():
         f"fixed_ts_s={FIXED_TS_S}, fixed_ts_tol_s={FIXED_TS_TOL_S}, "
         f"stream_mode={STREAM_MODE}, reset_each_frame={RESET_EACH_FRAME}, "
         f"formal_split={FORMAL_SPLIT}, same_drive_split={SAME_DRIVE_SPLIT}, "
-        f"same_drive_gap_frames={SAME_DRIVE_GAP_FRAMES}, val_fraction={VAL_FRACTION}, "
+        f"same_drive_three_way_split={SAME_DRIVE_THREE_WAY_SPLIT}, "
+        f"same_drive_gap_frames={SAME_DRIVE_GAP_FRAMES}, "
+        f"train_fraction={TRAIN_FRACTION}, val_fraction={VAL_FRACTION}, "
+        f"test_fraction={TEST_FRACTION}, "
         f"seed={RANDOM_SEED}, git_revision={git_revision}, "
         f"current_top_duplicate={CURRENT_TOP_DUPLICATE}, "
         f"shuffle_train_pairs={SHUFFLE_TRAIN_PAIRS}, shuffle_val_pairs={SHUFFLE_VAL_PAIRS}, "
@@ -1539,9 +1619,22 @@ def main():
             "reset_each_frame": RESET_EACH_FRAME,
             "formal_split": FORMAL_SPLIT,
             "same_drive_split": SAME_DRIVE_SPLIT,
-            "same_drive_drive": KITTI_DRIVE if SAME_DRIVE_SPLIT else None,
+            "same_drive_three_way_split": SAME_DRIVE_THREE_WAY_SPLIT,
+            "same_drive_drive": (
+                KITTI_DRIVE
+                if SAME_DRIVE_SPLIT or SAME_DRIVE_THREE_WAY_SPLIT
+                else None
+            ),
             "same_drive_gap_frames": (
                 SAME_DRIVE_GAP_FRAMES if SAME_DRIVE_SPLIT else None
+            ),
+            "test_fraction": (
+                TEST_FRACTION if SAME_DRIVE_THREE_WAY_SPLIT else None
+            ),
+            "test_selection_role": (
+                "unseen_until_after_best_validation_checkpoint_selection"
+                if SAME_DRIVE_THREE_WAY_SPLIT
+                else None
             ),
             "same_drive_split_metadata": same_drive_split_metadata,
             "current_top_duplicate": CURRENT_TOP_DUPLICATE,

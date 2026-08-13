@@ -146,6 +146,98 @@ def build_same_drive_train_val_subsets(
     return train_dataset, val_dataset, metadata
 
 
+def build_same_drive_train_val_test_subsets(
+    dataset,
+    train_fraction=0.6,
+    val_fraction=0.2,
+    test_fraction=0.2,
+):
+    """Split one drive into disjoint chronological raw-frame partitions."""
+    if isinstance(dataset, (Subset, ConcatDataset)):
+        raise TypeError("Same-drive splitting requires one unsliced drive dataset.")
+    fractions = (float(train_fraction), float(val_fraction), float(test_fraction))
+    if any(fraction <= 0.0 or fraction >= 1.0 for fraction in fractions):
+        raise ValueError(f"Split fractions must each be in (0, 1), got {fractions}.")
+    if not math.isclose(sum(fractions), 1.0):
+        raise ValueError(f"Split fractions must sum to 1, got {fractions}.")
+
+    frame_paths = getattr(dataset, "frame_paths", None)
+    if frame_paths is None:
+        raise TypeError(
+            f"Dataset {type(dataset).__name__} does not expose frame_paths."
+        )
+    raw_frame_count = len(frame_paths)
+    train_stop = int(math.floor(raw_frame_count * train_fraction))
+    val_stop = int(math.floor(raw_frame_count * (train_fraction + val_fraction)))
+    raw_ranges = {
+        "train": (0, train_stop),
+        "val": (train_stop, val_stop),
+        "test": (val_stop, raw_frame_count),
+    }
+
+    sample_indices = {role: [] for role in raw_ranges}
+    excluded_sample_indices = []
+    for sample_index in range(len(dataset)):
+        raw_indices = get_sample_raw_frame_indices(dataset, sample_index)
+        assigned_role = None
+        for role, (start, stop) in raw_ranges.items():
+            if min(raw_indices) >= start and max(raw_indices) < stop:
+                assigned_role = role
+                sample_indices[role].append(sample_index)
+                break
+        if assigned_role is None:
+            excluded_sample_indices.append(sample_index)
+
+    if any(not indices for indices in sample_indices.values()):
+        raise ValueError(
+            "Same-drive chronological split produced an empty subset: "
+            + ", ".join(
+                f"{role}_samples={len(indices)}"
+                for role, indices in sample_indices.items()
+            )
+        )
+
+    subsets = {
+        role: Subset(dataset, indices) for role, indices in sample_indices.items()
+    }
+    raw_frames = {
+        role: collect_raw_frame_indices(subset) for role, subset in subsets.items()
+    }
+    for left_role, right_role in (("train", "val"), ("train", "test"), ("val", "test")):
+        shared = raw_frames[left_role] & raw_frames[right_role]
+        if shared:
+            raise RuntimeError(
+                f"Same-drive {left_role}/{right_role} split shares raw frames: "
+                f"{sorted(shared)}."
+            )
+
+    metadata = {
+        "split_name": "chronological_raw_frames_60_20_20",
+        "raw_frame_count": raw_frame_count,
+        "train_fraction": fractions[0],
+        "val_fraction": fractions[1],
+        "test_fraction": fractions[2],
+        "train_raw_frame_range": (0, train_stop - 1),
+        "val_raw_frame_range": (train_stop, val_stop - 1),
+        "test_raw_frame_range": (val_stop, raw_frame_count - 1),
+        "train_sample_indices": tuple(sample_indices["train"]),
+        "val_sample_indices": tuple(sample_indices["val"]),
+        "test_sample_indices": tuple(sample_indices["test"]),
+        "train_sample_count": len(sample_indices["train"]),
+        "val_sample_count": len(sample_indices["val"]),
+        "test_sample_count": len(sample_indices["test"]),
+        "excluded_boundary_sample_indices": tuple(excluded_sample_indices),
+        "excluded_boundary_sample_count": len(excluded_sample_indices),
+        "train_raw_frame_count": len(raw_frames["train"]),
+        "val_raw_frame_count": len(raw_frames["val"]),
+        "test_raw_frame_count": len(raw_frames["test"]),
+        "shared_raw_frame_count": 0,
+        "chronological_order": ("train", "val", "test"),
+        "shuffle": False,
+    }
+    return subsets["train"], subsets["val"], subsets["test"], metadata
+
+
 class KITTINextFramePairDataset(Dataset):
     """
     Build adjacent-frame pairs from a single KITTI Raw drive.

@@ -143,6 +143,17 @@ error was `0.49728997` versus `0.48848719`. Auditable lightweight outputs are
 under `results/stage4_aligned_temporal_difference_fdc4743/`; checkpoint and
 logs remain server-side.
 
+The one-time Stage-4 same-drive diagnostic uses only drive 0005 and partitions
+raw frames chronologically into first 60% Train, middle 20% Val, and final 20%
+Test. A transition is admitted only when both raw frames lie inside one
+partition, so no frame is shared across roles. Training and checkpoint
+selection never read Test metrics; the selected checkpoint is replayed once on
+the final segment. Run it with:
+
+```bash
+scripts/run_kitti_seed0_stage4_same_drive_diagnostic.sh
+```
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

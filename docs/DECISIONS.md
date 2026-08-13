@@ -1,5 +1,21 @@
 # Research Decisions
 
+## 2026-08-13: Permit one chronological same-drive diagnostic
+
+Status: accepted
+
+Run exactly one Stage-4 aligned temporal-difference diagnostic on drive 0005.
+Partition raw frames in true time order into first 60% Train, middle 20% Val,
+and last 20% Test. Samples crossing a boundary are excluded, all three raw
+frame sets must be disjoint, and no loader may shuffle. The middle segment
+selects the best epoch; the final segment is evaluated once afterward.
+
+The purpose is narrow: distinguish same-scene forward generalization from
+training-sample fit. A clear Test improvement over Test-segment Copy-current
+supports scene-local temporal dynamics despite cross-drive failure. Failure to
+beat Copy-current indicates that the earlier train-drive gain is primarily
+sample fit. Do not branch into additional same-drive variants after this run.
+
 ## 2026-08-13: Stage-4 aligned difference does not clear its same-stage gate
 
 Status: accepted
