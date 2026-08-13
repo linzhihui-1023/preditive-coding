@@ -16,6 +16,7 @@ from .targetflow import (
     build_temporal_prediction_error_state,
     build_targetflow_learn_signal_from_error,
     build_targetflow_local_loss_from_error,
+    compute_pcoder_c_sqrt,
     compute_module_grad_stats,
     estimate_local_displacement,
     forward_splat_discrete,
@@ -274,6 +275,13 @@ class PVGG16TargetFlow(nn.Module):
             "pc_error_multipliers",
             torch.tensor(pc_error_multipliers, dtype=torch.float32),
         )
+        if self.task == "real_frame_pc":
+            self.register_buffer(
+                "pc_error_c_sqrt",
+                torch.full((self.number_of_layers,), -1.0, dtype=torch.float32),
+            )
+        else:
+            self.pc_error_c_sqrt = None
         if self.task == "real_frame_pc" and self.error_state_mode != "ema":
             raise ValueError(
                 "real_frame_pc requires error_state_mode='ema' so there is one "
@@ -517,11 +525,13 @@ class PVGG16TargetFlow(nn.Module):
                 )
 
             prediction_module = self._prediction_module_for_layer(layer_index)
+            c_sqrt = self.pc_error_c_sqrt[layer_index]
             error_correction = project_dynamic_error_to_representation(
                 prediction_module,
                 previous_representation,
                 previous_prediction,
                 previous_dynamic_error,
+                None if float(c_sqrt.item()) < 0.0 else c_sqrt,
             )
 
             if previous_representation is None:
@@ -545,6 +555,17 @@ class PVGG16TargetFlow(nn.Module):
                     )
                 if error_correction is not None:
                     representation = representation - error_multiplier * error_correction
+
+            if float(c_sqrt.item()) < 0.0:
+                calibrated_c_sqrt = compute_pcoder_c_sqrt(
+                    prediction_module,
+                    representation,
+                )
+                self.pc_error_c_sqrt[layer_index].copy_(calibrated_c_sqrt)
+                c_sqrt = self.pc_error_c_sqrt[layer_index]
+            error_scale = representation.new_tensor(
+                float(prediction_target.numel())
+            ) / c_sqrt.to(representation)
 
             with torch.no_grad():
                 module_output = prediction_module(representation)
@@ -599,6 +620,8 @@ class PVGG16TargetFlow(nn.Module):
                 error_correction=(
                     None if error_correction is None else error_correction.detach()
                 ),
+                error_scale=error_scale.detach(),
+                c_sqrt=c_sqrt.detach().clone(),
                 representation=representation.detach(),
                 prediction_target=prediction_target.detach(),
                 prediction=prediction.detach(),

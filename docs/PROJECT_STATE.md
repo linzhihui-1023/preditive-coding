@@ -27,15 +27,15 @@ predictive-coding recurrence:
    predictor, exposes no training loss, and performs no parameter or online
    update.
 
-The causal state chain awaiting review is:
+The accepted causal state chain is:
 
 ```text
 Frame 1 -> r_1 -> epsilon_1 -> Frame 2 update -> r_2 -> epsilon_2
 ```
 
-No formal experiment may start until this chain is inspected and accepted.
 The earlier same-image repeated-timestep route and all Stage-4 predictor
-variants are inactive.
+variants are inactive. The `K/C_sqrt` alignment revision itself is code and
+unit-test work only; no formal KITTI experiment was run from it.
 
 For the formal dynamic Target Flow state, `Ts=0.1035`, `tau=0.5`, and `K=1`,
 so `epsilon_t = 0.207 r_t + 0.793 epsilon_(t-1)`.
@@ -52,6 +52,10 @@ so `epsilon_t = 0.207 r_t + 0.793 epsilon_(t-1)`.
     `beta=(0.2,0.4,0.4,0.5,0.6)`,
     `lambda=(0.05,0.1,0.1,0.1,0)`, and
     `alpha=(0.01,0.01,0.01,0.01,0.01)`.
+  - Applies the original `PCoderN` error normalization `K/C_sqrt` to the
+    pseudo-target gradient. Each layer's `C_sqrt` is calibrated with the
+    original ten-perturbation procedure, persists across segment resets, and
+    remains a non-trainable buffer.
   - Creates the original Stage-1-to-image decoder in addition to the existing
     Stage-2-through-Stage-5 decoders. It does not create the temporal motion
     head, future-feature predictor, or temporal fusion module in real-frame

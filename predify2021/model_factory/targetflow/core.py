@@ -66,6 +66,8 @@ class RealFramePCoderLayerState:
     previous_feedback_prediction: Optional[torch.Tensor] = None
     previous_dynamic_error: Optional[torch.Tensor] = None
     error_correction: Optional[torch.Tensor] = None
+    error_scale: Optional[torch.Tensor] = None
+    c_sqrt: Optional[torch.Tensor] = None
     representation: Optional[torch.Tensor] = None
     prediction_target: Optional[torch.Tensor] = None
     prediction: Optional[torch.Tensor] = None
@@ -73,29 +75,82 @@ class RealFramePCoderLayerState:
     dynamic_error: Optional[torch.Tensor] = None
 
 
+def _prediction_output(prediction_module: nn.Module, representation: torch.Tensor):
+    module_output = prediction_module(representation)
+    return module_output[-1] if isinstance(module_output, tuple) else module_output
+
+
+def compute_pcoder_c_sqrt(
+    prediction_module: nn.Module,
+    representation: torch.Tensor,
+    repeats: int = 10,
+):
+    """Reproduce the effective decoder-window calibration from ``PCoderN``."""
+    if repeats <= 0:
+        raise ValueError("repeats must be positive.")
+
+    reference_representation = representation.detach()
+    with torch.no_grad():
+        original_prediction = _prediction_output(
+            prediction_module,
+            reference_representation,
+        ).detach()
+        affected_count = original_prediction.new_zeros(())
+        for _ in range(repeats):
+            perturbed = reference_representation.clone()
+            perturbed[
+                :,
+                perturbed.shape[1] // 2,
+                perturbed.shape[2] // 2,
+                perturbed.shape[3] // 2,
+            ] = torch.randint(
+                -10000,
+                10000,
+                (perturbed.shape[0],),
+                device=perturbed.device,
+            ).to(dtype=perturbed.dtype)
+            perturbed_prediction = _prediction_output(
+                prediction_module,
+                perturbed,
+            )
+            affected_count += (
+                (original_prediction != perturbed_prediction).sum().float()
+                / original_prediction.shape[0]
+            )
+
+    affected_count = affected_count / float(repeats)
+    if not torch.isfinite(affected_count) or affected_count <= 0:
+        raise RuntimeError(
+            "PCoderN C calibration produced a non-positive affected-cell count."
+        )
+    return torch.sqrt(affected_count).detach()
+
+
 def project_dynamic_error_to_representation(
     prediction_module: nn.Module,
     previous_representation: Optional[torch.Tensor],
     previous_prediction: Optional[torch.Tensor],
     previous_dynamic_error: Optional[torch.Tensor],
+    c_sqrt: Optional[torch.Tensor],
 ):
     """Project a detached output-space error through a frozen PCoder decoder.
 
     The pseudo-target makes ``previous_dynamic_error`` the exact residual used
-    by an ordinary MSE error-correction gradient, while preventing gradients
+    by an ordinary MSE error-correction gradient. The returned gradient includes
+    the original ``PCoderN`` factor ``K / C_sqrt`` while preventing gradients
     from reaching model parameters or earlier video frames.
     """
     if (
         previous_representation is None
         or previous_prediction is None
         or previous_dynamic_error is None
+        or c_sqrt is None
     ):
         return None
 
     representation = previous_representation.detach().requires_grad_(True)
     with torch.enable_grad():
-        module_output = prediction_module(representation)
-        prediction = module_output[-1] if isinstance(module_output, tuple) else module_output
+        prediction = _prediction_output(prediction_module, representation)
         dynamic_error = previous_dynamic_error.to(
             device=prediction.device,
             dtype=prediction.dtype,
@@ -117,7 +172,11 @@ def project_dynamic_error_to_representation(
             retain_graph=False,
             create_graph=False,
         )[0]
-    return correction.detach()
+    resolved_c_sqrt = c_sqrt.to(device=prediction.device, dtype=prediction.dtype)
+    if not torch.isfinite(resolved_c_sqrt) or resolved_c_sqrt <= 0:
+        raise ValueError("PCoderN C_sqrt must be finite and positive.")
+    error_scale = prediction.new_tensor(float(prediction.numel())) / resolved_c_sqrt
+    return (error_scale * correction).detach()
 
 
 def run_backward_target_flow(

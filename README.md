@@ -62,7 +62,8 @@ At frame `t`, layer `i` inherits the previous real frame's representation,
 prediction, and dynamic Target Flow error. The saved higher-layer prediction
 enters the original feedback term; the saved same-layer prediction and dynamic
 error define the original representation-space error-correction term. After
-that single update, the current prediction produces
+error define the original representation-space error-correction term, including
+the original `PCoderN` normalization `K/C_sqrt`. After that single update, the current prediction produces
 `r_t = target_t - prediction_t`, followed by the formal recurrence
 `epsilon_t = 0.207 r_t + 0.793 epsilon_(t-1)`. A segment reset clears all three
 hierarchical memories. The implementation is intentionally awaiting a causal

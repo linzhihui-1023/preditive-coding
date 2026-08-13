@@ -8,6 +8,7 @@ from .core import (
     build_targetflow_instant_error,
     build_dynamic_targetflow_error,
     build_temporal_prediction_error_state,
+    compute_pcoder_c_sqrt,
     build_targetflow_learn_signal,
     build_targetflow_learn_signal_from_error,
     build_targetflow_local_loss,

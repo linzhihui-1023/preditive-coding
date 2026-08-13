@@ -829,7 +829,7 @@ results/stage4_dynamic_error_state_phase1_eaf29a0/
 /tmp/predify-storage/experiments/stage4_dynamic_error_state_phase1_eaf29a0*
 ```
 
-## Real-frame predictive-coding recurrence (awaiting causal review)
+## Real-frame predictive-coding recurrence (causal review accepted)
 
 The Stage-4 future-prediction route is now stopped. Do not add another future
 predictor, fusion module, online update, or Stage-4 training variant. The new
@@ -854,16 +854,21 @@ g_(t-1)^i = grad_R MSE(
     stopgrad(p_(t-1)^i + epsilon_(t-1)^i)
 )
 
+s_i = K_i / C_sqrt_i
+
 R_t^i = beta_i ff_t^i
       + lambda_i p_(t-1)^(i+1)
       + (1 - beta_i - lambda_i) R_(t-1)^i
-      - alpha_i g_(t-1)^i
+      - alpha_i s_i g_(t-1)^i
 ```
 
 The highest layer has no feedback term. On a segment's first frame,
 `R_1^i = ff_1^i`. Current lower-layer representations remain the targets of
 their current higher-layer predictions, exactly as in the original hook
-schedule. Once the single update is complete:
+schedule. `K_i` is the number of elements in the layer prediction and
+`C_sqrt_i` is calibrated once with the original `PCoderN.compute_C_sqrt`
+ten-perturbation procedure; it is a non-parameter buffer and is not cleared by
+segment reset. Once the single update is complete:
 
 ```text
 p_t^i       = P_i(R_t^i)
@@ -889,8 +894,9 @@ segment state and frame counter. Unit tests audit the exact second-frame update
 equation, historical feedback identity, dynamic formula, one update per layer,
 detachment, reset, future-input rejection, and parameter immutability.
 
-Do not run a formal experiment until the user has inspected and accepted this
-causal chain.
+The causal chain has been accepted. The subsequent scaling-only revision
+aligned the second-frame error correction numerically with the original
+`PCoderN` `K/C_sqrt` update; it did not run a formal KITTI experiment.
 
 ## Frozen historical runners
 

@@ -1,9 +1,22 @@
+import copy
 import unittest
 
 import torch
+import torch.nn as nn
+from predify.modules import PCoderN
 from torchvision.models import vgg16
 
 from predify2021.model_factory.pvgg16_targetflow import PVGG16TargetFlow
+
+
+class PredictionOutputAdapter(nn.Module):
+    def __init__(self, prediction_module):
+        super().__init__()
+        self.prediction_module = copy.deepcopy(prediction_module)
+
+    def forward(self, representation):
+        output = self.prediction_module(representation)
+        return output[-1] if isinstance(output, tuple) else output
 
 
 class RealFramePredictiveCodingTest(unittest.TestCase):
@@ -117,6 +130,77 @@ class RealFramePredictiveCodingTest(unittest.TestCase):
                 torch.allclose(state.representation, expected_representation)
             )
 
+    def test_second_frame_error_correction_matches_pcoder_n_k_over_c_sqrt(self):
+        self.model.step_frame(self.frame1)
+        self.model.step_frame(self.frame2)
+
+        for layer_index, state in enumerate(self.model.layer_states):
+            prediction_module = PredictionOutputAdapter(
+                self.model._prediction_module_for_layer(layer_index)
+            )
+            previous_representation = (
+                state.previous_representation.detach().clone().requires_grad_(True)
+            )
+            previous_prediction = prediction_module(previous_representation)
+            self.assertTrue(
+                torch.allclose(previous_prediction, state.previous_prediction)
+            )
+            pseudo_target = (
+                state.previous_prediction + state.previous_dynamic_error
+            ).detach()
+            correction_loss = nn.functional.mse_loss(
+                previous_prediction,
+                pseudo_target,
+            )
+            raw_gradient = torch.autograd.grad(
+                correction_loss,
+                previous_representation,
+            )[0].detach()
+            expected_error_scale = (
+                state.previous_prediction.numel() / state.c_sqrt
+            )
+            expected_scaled_correction = expected_error_scale * raw_gradient
+
+            self.assertTrue(torch.allclose(state.error_scale, expected_error_scale))
+            self.assertTrue(
+                torch.allclose(
+                    state.error_correction,
+                    expected_scaled_correction,
+                    rtol=1e-5,
+                    atol=1e-7,
+                )
+            )
+
+            reference_pcoder = PCoderN(
+                prediction_module,
+                has_feedback=layer_index + 1 < self.model.number_of_layers,
+                random_init=False,
+            )
+            reference_pcoder.rep = state.previous_representation.detach().clone()
+            reference_pcoder.prd = state.previous_prediction.detach().clone()
+            reference_pcoder.grd = raw_gradient
+            reference_pcoder.prediction_error = correction_loss.detach()
+            reference_pcoder.C_sqrt.copy_(state.c_sqrt)
+            reference_representation, _ = reference_pcoder(
+                ff=state.feedforward_drive,
+                fb=state.previous_feedback_prediction,
+                target=state.prediction_target,
+                build_graph=False,
+                ffm=self.model.pc_ff_multipliers[layer_index],
+                fbm=self.model.pc_fb_multipliers[layer_index],
+                erm=self.model.pc_error_multipliers[layer_index],
+            )
+
+            self.assertTrue(
+                torch.allclose(
+                    state.representation,
+                    reference_representation,
+                    rtol=1e-5,
+                    atol=1e-7,
+                ),
+                f"Layer {layer_index + 1} does not match PCoderN scaling.",
+            )
+
     def test_future_inputs_are_rejected_before_provider_can_run(self):
         provider_called = False
 
@@ -153,6 +237,7 @@ class RealFramePredictiveCodingTest(unittest.TestCase):
     def test_reset_starts_a_new_segment(self):
         self.model.step_frame(self.frame1)
         self.model.step_frame(self.frame2)
+        calibrated_c_sqrt = self.model.pc_error_c_sqrt.clone()
         self.model.reset()
 
         self.assertEqual(self.model.real_frame_update_count, 0)
@@ -162,6 +247,7 @@ class RealFramePredictiveCodingTest(unittest.TestCase):
         )
         self.assertTrue(all(memory is None for memory in self.model.prediction_state_memory))
         self.assertTrue(all(memory is None for memory in self.model.error_state_memory))
+        self.assertTrue(torch.equal(self.model.pc_error_c_sqrt, calibrated_c_sqrt))
 
         self.model.step_frame(self.frame2)
         self.assertEqual(self.model.real_frame_update_count, 1)
