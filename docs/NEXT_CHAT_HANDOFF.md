@@ -734,6 +734,21 @@ create further same-drive variants based on its result.
 scripts/run_kitti_seed0_stage4_same_drive_diagnostic.sh
 ```
 
+This one-time diagnostic completed at revision `69b24b1` and selected epoch
+10 using only the middle 20% Val segment. On the once-read last 20% Test
+segment, Stage-4 MSE was `1.51209933` versus same-segment Copy `1.67944006`, a
+`9.964079%` improvement. Normalized error improved from `0.76012611` to
+`0.72217820`; cosine worsened from `0.70890513` to `0.69367177`. Therefore the
+model shows same-drive forward generalization for the trained Euclidean error,
+but does not pass all three metrics. Do not run further same-drive variants.
+
+Artifacts:
+
+```text
+results/stage4_same_drive_60_20_20_69b24b1/
+/tmp/predify-storage/experiments/seed0_stage4_same_drive_60_20_20_69b24b1/
+```
+
 Run the three-condition 1x1 Temporal Error matrix:
 
 ```bash

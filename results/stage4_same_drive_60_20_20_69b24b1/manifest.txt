@@ -1,0 +1,11 @@
+git_revision=69b24b1e0d6e23f82011ed6533565485c771b783
+output_root=/tmp/predify-storage/experiments/seed0_stage4_same_drive_60_20_20_69b24b1
+condition=stage4_aligned_temporal_difference
+drive=0005
+raw_frame_split=train_first_60,val_middle_20,test_last_20
+shuffle=false
+selection_split=val
+test_access=once_after_best_val_selection
+future_feature_stage=4
+target_flow_top_stage=5
+metric_gate=same-segment-stage4-copy-current

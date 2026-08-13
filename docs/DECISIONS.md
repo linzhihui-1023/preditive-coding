@@ -1,5 +1,21 @@
 # Research Decisions
 
+## 2026-08-13: Same-drive Euclidean prediction generalizes forward
+
+Status: accepted
+
+The one-time revision `69b24b1` diagnostic selected epoch 10 without reading
+the final segment. On the once-evaluated last 20% of drive 0005, Stage-4 MSE
+improved by `9.964079%` over same-segment Copy-current and normalized error
+also improved. Cosine worsened by `0.01523336`, so the strict all-three gate
+failed.
+
+Interpret this as evidence that the fixed aligned-difference predictor learned
+same-scene temporal structure useful for its Euclidean training objective,
+while the earlier 0005-to-0011 failure remains a cross-drive generalization
+problem. Do not describe it as metric-uniform superiority, and do not run more
+same-drive variants. Proceed to the predeclared multi-drive split.
+
 ## 2026-08-13: Permit one chronological same-drive diagnostic
 
 Status: accepted

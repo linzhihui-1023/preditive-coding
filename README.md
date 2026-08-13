@@ -154,6 +154,13 @@ the final segment. Run it with:
 scripts/run_kitti_seed0_stage4_same_drive_diagnostic.sh
 ```
 
+The one-time run at revision `69b24b1` selected epoch 10. On the untouched
+last-20% segment, MSE improved by `9.964079%` and normalized error improved,
+while cosine worsened by `0.01523336`. This is evidence of same-drive forward
+generalization under the Euclidean feature objective, not an all-metric pass.
+No further same-drive variants are planned. Auditable outputs are under
+`results/stage4_same_drive_60_20_20_69b24b1/`.
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

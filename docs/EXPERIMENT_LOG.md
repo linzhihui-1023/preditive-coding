@@ -1,5 +1,32 @@
 # Experiment Log
 
+## Stage-4 same-drive 60/20/20 diagnostic
+
+Date: 2026-08-13
+
+Git revision: `69b24b1e0d6e23f82011ed6533565485c771b783`
+
+The sole same-drive diagnostic split drive 0005 raw frames into chronological
+Train `0--91`, Val `92--122`, and Test `123--153`. Boundary-crossing starts 91
+and 122 were excluded, leaving 91/30/30 transitions with disjoint raw-frame
+sets. No loader shuffled. Stage 4, aligned temporal difference, radius 1,
+patch size 3, seed 0, and ten epochs remained fixed. Val selected epoch 10;
+Test was evaluated once afterward.
+
+| Split | MSE | Copy MSE | MSE gain | Cosine vs Copy | NFE vs Copy |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Val | 1.98922046 | 2.41822275 | +17.740396% | 0.56127751 vs 0.55808507 | 0.85218414 vs 0.93812825 |
+| Test | 1.51209933 | 1.67944006 | +9.964079% | 0.69367177 vs 0.70890513 | 0.72217820 vs 0.76012611 |
+
+Test MSE and normalized error improved, while cosine worsened. This supports
+same-drive forward generalization for the Euclidean feature objective but not
+all-metric superiority. It remains compatible with the previous finding that
+the same architecture fails across drives. No same-drive variants follow.
+
+Audited artifacts are under
+`results/stage4_same_drive_60_20_20_69b24b1/`; the checkpoint and logs remain
+under `/tmp/predify-storage/experiments/seed0_stage4_same_drive_60_20_20_69b24b1/`.
+
 ## Stage-4 aligned temporal-difference predictor
 
 Date: 2026-08-13

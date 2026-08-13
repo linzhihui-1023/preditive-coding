@@ -209,6 +209,13 @@ next transition.
 
 ## Future-feature implementation status
 
+The one-time 0005 same-drive 60/20/20 diagnostic completed at revision
+`69b24b1`. Its Val-selected epoch-10 checkpoint improved untouched Test-segment
+Stage-4 MSE by `9.964079%` and normalized error, while cosine worsened. This is
+same-drive forward generalization for the Euclidean objective, not an
+all-metric pass. No further same-drive variants are allowed; the next result
+must use the fixed multi-drive Train/Val/Test protocol.
+
 The Stage-4 aligned temporal-difference run completed at revision `fdc4743`.
 Its epoch-1 checkpoint improved fixed replay MSE by `6.815535%` on train drive
 0005 but changed held-out drive-0011 MSE by `-0.718741%` relative to Stage-4
