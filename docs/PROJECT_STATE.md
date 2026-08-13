@@ -40,6 +40,15 @@ unit-test work only; no formal KITTI experiment was run from it.
 For the formal dynamic Target Flow state, `Ts=0.1035`, `tau=0.5`, and `K=1`,
 so `epsilon_t = 0.207 r_t + 0.793 epsilon_(t-1)`.
 
+Phase 1 has now completed on Val drives 0011/0039 with a fixed
+clean-40/blur-80/recovery-40 trajectory. Dynamic error changed the disturbance
+normalized representation distance from `0.784450073` (PC-no-error) to
+`0.784296992`, an improvement of only `0.019514%`; therefore the result is
+`NO-GO` under the predeclared 5% practical threshold. The dynamic stream did
+recover without lasting drift, reaching `0.001205088` over the last ten clean
+recovery frames. Frozen Test drives were not read. Auditable outputs are in
+`results/real_frame_pc_phase1_1d25877/`.
+
 ## Current implementation
 
 - `predify2021/model_factory/pvgg16_targetflow.py`

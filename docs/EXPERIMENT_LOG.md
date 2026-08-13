@@ -1240,6 +1240,45 @@ Server artifacts, not tracked by Git:
 /home/lin/predify/kitti_targetflow_stream_ego_motion_dynerr_tau0p5_e10_teacher.pt
 ```
 
+## Real-frame Predictive Coding Phase 1
+
+Date: 2026-08-13
+
+Evaluation revision: `1d2587743f36ce29850d15557d4e7fa795d888ea`
+
+Protocol: frozen PVGG16 and PCoder decoders, Val drives 0011/0039, raw frames
+0--159 on each drive, and a fixed 40-clean/80-persistent-Gaussian-blur/40-clean
+recovery trajectory. Blur used kernel 11 and sigma 3.0. Feedforward reset on
+every frame; PC-no-error retained representation and feedback state with
+`alpha=0`; PC-dynamic-error used the complete `0.207/0.793` recurrence and
+original `K/C_sqrt` correction. No training, optimizer, online update, future
+predictor, or Frozen Test read occurred.
+
+| Condition | Disturbance normalized L2 | Recovery normalized L2 | Recovery last 10 |
+| --- | ---: | ---: | ---: |
+| Feedforward | 0.890284632 | 0.000000000 | 0.000000000 |
+| PC-no-error | 0.784450073 | 0.126158581 | 0.001216764 |
+| PC-dynamic-error | 0.784296992 | 0.126198921 | 0.001205088 |
+
+The dynamic condition improved disturbance distance over PC-no-error by only
+`0.019514%`, below the predeclared 5% practical threshold, although both drives
+had the same favorable direction. Dynamic recovery declined from `0.427156845`
+in the first ten recovery frames to `0.001205088` in the final ten. Decision:
+`NO-GO`. This rejects a meaningful incremental dynamic-error benefit only for
+the fixed Phase-1 mechanism and blur protocol.
+
+Tracked audit artifacts:
+
+```text
+results/real_frame_pc_phase1_1d25877/
+```
+
+Server-only log:
+
+```text
+/tmp/predify-storage/experiments/real_frame_pc_phase1_1d25877.log
+```
+
 ## Earlier adjacent-pair result
 
 This older experiment reset model state each batch and therefore tested

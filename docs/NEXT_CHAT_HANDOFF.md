@@ -898,6 +898,44 @@ The causal chain has been accepted. The subsequent scaling-only revision
 aligned the second-frame error correction numerically with the original
 `PCoderN` `K/C_sqrt` update; it did not run a formal KITTI experiment.
 
+### Phase-1 mechanism result
+
+Real-frame Predictive Coding Phase 1 ran from clean evaluation revision
+`1d25877` on Val drives 0011 and 0039 only. Each drive used raw frames 0--159:
+40 clean, 80 persistent Gaussian-blur (`kernel=11`, `sigma=3.0`), then 40
+clean recovery frames. Every condition had a synchronized condition-matched
+clean counterfactual. No parameter trained, no optimizer or future predictor
+existed, and Frozen Test drives 0051/0056 were not read.
+
+Mean corrupted-to-clean representation normalized L2 across five layers and
+both drives was:
+
+| Condition | Disturbance | Recovery | Recovery last 10 |
+| --- | ---: | ---: | ---: |
+| Feedforward | 0.890284632 | 0.000000000 | 0.000000000 |
+| PC-no-error | 0.784450073 | 0.126158581 | 0.001216764 |
+| PC-dynamic-error | 0.784296992 | 0.126198921 | 0.001205088 |
+
+Dynamic error improved the primary disturbance metric over PC-no-error by only
+`0.019514%`, despite being directionally lower on both drives. This is below
+the predeclared `5%` practical threshold. Recovery did not show persistent
+drift: dynamic distance fell from `0.427156845` over its first 10 recovery
+frames to `0.001205088` over its final 10. Decision: **NO-GO** for a meaningful
+incremental benefit from the tested dynamic error correction. This is limited
+to the fixed recurrence, coefficients, and single blur trajectory.
+
+Versioned artifacts:
+
+```text
+results/real_frame_pc_phase1_1d25877/
+```
+
+Server-only log:
+
+```text
+/tmp/predify-storage/experiments/real_frame_pc_phase1_1d25877.log
+```
+
 ## Frozen historical runners
 
 The commands below belong to completed predictor research. They remain for
