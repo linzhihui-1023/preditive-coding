@@ -1,5 +1,35 @@
 # Experiment Log
 
+## Stage-4 multi-drive aligned-difference predictor
+
+Date: 2026-08-13
+
+Git revision: `c887e94edda86885fd0bedfaaf25e56c957719bb`
+
+The formal seed-0 run trained the unchanged Stage-4 aligned temporal-
+difference predictor on drives 0005/0013/0014/0036, selected on 0011/0039,
+and reserved 0051/0056 as frozen Test. All transitions remained ordered.
+Training received 1411 Train and 626 Val transitions and no Test drive names.
+Val MSE selected epoch 7 before an atomic receipt claimed one Test read.
+
+| Split | MSE | Copy MSE | MSE gain | Cosine vs Copy | NFE vs Copy |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Train | 0.93394784 | 1.15164056 | +18.902836% | 0.79362428 vs 0.76854944 | 0.59781858 vs 0.66215935 |
+| Val | 1.01279691 | 1.14439157 | +11.499093% | 0.82207205 vs 0.81639943 | 0.55275378 vs 0.58144107 |
+| Frozen Test | 0.77194043 | 0.89291654 | +13.548423% | 0.83322664 vs 0.82239107 | 0.54544640 vs 0.58067843 |
+
+Drive 0051 used two independently reset segments of 56 and 379 transitions;
+its MSE gain was `11.697142%`. Drive 0056 used one 293-transition segment and
+improved by `15.702122%`. Both passed MSE, cosine, and normalized-error checks
+against their own same-stage Copy-current replay.
+
+The audit verified all 2765 CSV rows, split and drive counts, reset boundaries,
+summary aggregation, stage separation, best-Val selection, absence of Test
+drives from training config, completed single-access receipt, artifact hashes,
+and finite logs. Lightweight artifacts are under
+`results/stage4_multidrive_c887e94/`; the 1.41 GB checkpoint and logs remain
+under `/tmp/predify-storage/experiments/seed0_stage4_multidrive_c887e94/`.
+
 ## Stage-4 same-drive 60/20/20 diagnostic
 
 Date: 2026-08-13

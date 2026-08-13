@@ -24,7 +24,7 @@ frozen baseline tag: predify-temporal-v1
 frozen baseline commit: 4cc7a21280881813dbb972415a74dc400843fcc6
 remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
 latest Gate 3 evaluation revision: 80c4aee
-latest Stage-4 prediction training revision: fdc4743
+latest Stage-4 prediction training revision: c887e94
 ```
 
 All selective-online-adaptation work must stay on
@@ -749,8 +749,9 @@ results/stage4_same_drive_60_20_20_69b24b1/
 /tmp/predify-storage/experiments/seed0_stage4_same_drive_60_20_20_69b24b1/
 ```
 
-The next and only main Stage-4 experiment uses the predeclared multi-drive
-protocol below without changing the aligned temporal-difference architecture:
+The main Stage-4 experiment completed at revision `c887e94` using the
+predeclared protocol below without changing the aligned temporal-difference
+architecture:
 
 ```text
 Train: 0005 + 0013 + 0014 + 0036  (1411 transitions)
@@ -768,6 +769,26 @@ checkpoint whose receipt already exists.
 ```bash
 scripts/run_kitti_seed0_stage4_multidrive.sh
 ```
+
+Val selected epoch 7. The once-read frozen Test aggregate passed all three
+same-stage Copy-current checks: MSE `0.77194043` versus `0.89291654`
+(`+13.548423%`), cosine `0.83322664` versus `0.82239107`, and normalized error
+`0.54544640` versus `0.58067843`. Drive 0051 improved MSE by `11.697142%` and
+drive 0056 by `15.702122%`; both passed all three checks independently. Treat
+this as one-seed evidence that training-drive diversity resolves the earlier
+single-train-drive generalization failure for this fixed architecture. It is
+not a multi-seed or cross-stage result.
+
+Artifacts:
+
+```text
+results/stage4_multidrive_c887e94/
+/tmp/predify-storage/experiments/seed0_stage4_multidrive_c887e94/
+```
+
+The frozen Test receipt is completed and bound to checkpoint SHA-256
+`8a29c40fc71f0d54a2d21306a9444407d25865a01262713d05f522b495ab7754`.
+Do not evaluate 0051/0056 again or use their result for model selection.
 
 Run the three-condition 1x1 Temporal Error matrix:
 

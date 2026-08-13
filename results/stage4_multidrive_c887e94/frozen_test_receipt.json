@@ -1,0 +1,12 @@
+{
+  "checkpoint_path": "/tmp/predify-storage/experiments/seed0_stage4_multidrive_c887e94/stage4_multidrive_seed0_best_student.pt",
+  "checkpoint_sha256": "8a29c40fc71f0d54a2d21306a9444407d25865a01262713d05f522b495ab7754",
+  "frozen_test_drives": [
+    "2011_09_26/2011_09_26_drive_0051_sync",
+    "2011_09_26/2011_09_26_drive_0056_sync"
+  ],
+  "git_revision": "c887e94edda86885fd0bedfaaf25e56c957719bb",
+  "output_summary_path": "/tmp/predify-storage/experiments/seed0_stage4_multidrive_c887e94/evaluation/summary.json",
+  "policy": "single_access_after_best_validation_checkpoint_selection",
+  "status": "completed"
+}

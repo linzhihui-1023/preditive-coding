@@ -172,6 +172,16 @@ Run the single formal experiment with:
 scripts/run_kitti_seed0_stage4_multidrive.sh
 ```
 
+The formal run at revision `c887e94` selected epoch 7 using Val only. On the
+once-read frozen Test drives 0051/0056, MSE was `0.77194043` versus same-stage
+Copy-current `0.89291654`, a `13.548423%` improvement. Cosine improved from
+`0.82239107` to `0.83322664`, and normalized error improved from `0.58067843`
+to `0.54544640`; both Test drives also passed all three checks independently.
+The result supports multi-drive generalization for this fixed Stage-4 model
+and seed. Auditable outputs, including the one-time Test receipt, are under
+`results/stage4_multidrive_c887e94/`. Do not rerun or tune against the frozen
+Test drives.
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

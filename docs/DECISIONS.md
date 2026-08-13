@@ -1,5 +1,22 @@
 # Research Decisions
 
+## 2026-08-13: Multi-drive Stage-4 clears the frozen-Test Copy gate
+
+Status: accepted
+
+The formal revision `c887e94` run trained the unchanged Stage-4 aligned
+temporal-difference predictor on 0005/0013/0014/0036 and selected epoch 7 on
+0011/0039. On the once-read frozen 0051/0056 aggregate, MSE improved by
+`13.548423%` over same-stage Copy-current, cosine improved by `0.01083557`, and
+normalized error improved by `0.03523203`. Both Test drives passed all three
+checks independently.
+
+Interpret this as one-seed evidence that broader training-drive coverage can
+generalize the fixed predictor beyond the training scenes, unlike the earlier
+0005-only result. Do not claim multi-seed robustness, compare absolute Stage-4
+and Stage-5 MSE, or tune follow-up work from 0051/0056. Their one-time receipt
+is completed; these Test drives must not be replayed for this checkpoint.
+
 ## 2026-08-13: Freeze the Stage-4 multi-drive protocol before Test access
 
 Status: accepted

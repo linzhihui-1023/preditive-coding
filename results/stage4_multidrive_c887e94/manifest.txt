@@ -1,0 +1,13 @@
+git_revision=c887e94edda86885fd0bedfaaf25e56c957719bb
+output_root=/tmp/predify-storage/experiments/seed0_stage4_multidrive_c887e94
+condition=stage4_aligned_temporal_difference
+train_drives=0005,0013,0014,0036
+val_drives=0011,0039
+frozen_test_drives=0051,0056
+training_environment_contains_test_drives=false
+selection_split=val_only
+frozen_test_access=single_after_best_val_selection
+shuffle=false
+future_feature_stage=4
+target_flow_top_stage=5
+metric_gate=same-stage-copy-current
