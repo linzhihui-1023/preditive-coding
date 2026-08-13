@@ -27,8 +27,8 @@ from predify2021.model_factory import get_model
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 CONDITIONS = (
     "current_stateful",
-    "learned_recurrent_error",
-    "learned_recurrent_error_zeroed",
+    "learned_error_driven_zeroed",
+    "learned_error_driven",
 )
 
 
@@ -212,10 +212,10 @@ def sha256_file(path):
 
 def write_readme(path, summary):
     baseline = summary["conditions"]["current_stateful"]
-    learned = summary["conditions"]["learned_recurrent_error"]
-    zeroed = summary["conditions"]["learned_recurrent_error_zeroed"]
+    learned = summary["conditions"]["learned_error_driven"]
+    zeroed = summary["conditions"]["learned_error_driven_zeroed"]
     lines = [
-        "# Learned Recurrent-error Validation",
+        "# Prediction-error-driven Recurrent Validation",
         "",
         "Frozen backbone, feedback decoders, and existing Predify parameters. "
         "Only the new recurrent transition was trained on drives 0005/0013/0014/0036. "
@@ -225,8 +225,8 @@ def write_readme(path, summary):
         "| Condition | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |",
         "| --- | ---: | ---: | ---: |",
         f"| Current stateful | {baseline['disturbance_mean_representation_normalized_l2']:.9f} | {baseline['recovery_first_10_mean_representation_normalized_l2']:.9f} | {baseline['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
-        f"| Learned recurrent-error | {learned['disturbance_mean_representation_normalized_l2']:.9f} | {learned['recovery_first_10_mean_representation_normalized_l2']:.9f} | {learned['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
-        f"| Learned recurrent-error zeroed | {zeroed['disturbance_mean_representation_normalized_l2']:.9f} | {zeroed['recovery_first_10_mean_representation_normalized_l2']:.9f} | {zeroed['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
+        f"| Learned error-driven | {learned['disturbance_mean_representation_normalized_l2']:.9f} | {learned['recovery_first_10_mean_representation_normalized_l2']:.9f} | {learned['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
+        f"| Learned error-driven zeroed | {zeroed['disturbance_mean_representation_normalized_l2']:.9f} | {zeroed['recovery_first_10_mean_representation_normalized_l2']:.9f} | {zeroed['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
         "",
         f"Learned vs current disturbance improvement: {summary['comparison']['learned_vs_current_improvement_percent']:.6f}%.",
         f"Learned vs zeroed disturbance improvement: {summary['comparison']['learned_vs_zeroed_improvement_percent']:.6f}%.",
@@ -300,10 +300,10 @@ def main():
     }
     models = {
         "current_stateful": build_model(weights_path, "predify"),
-        "learned_recurrent_error": build_model(
+        "learned_error_driven": build_model(
             weights_path, "convgru_error", checkpoint
         ),
-        "learned_recurrent_error_zeroed": build_model(
+        "learned_error_driven_zeroed": build_model(
             weights_path,
             "convgru_error",
             checkpoint,
@@ -327,10 +327,10 @@ def main():
     baseline_value = metrics["current_stateful"][
         "disturbance_mean_representation_normalized_l2"
     ]
-    learned_value = metrics["learned_recurrent_error"][
+    learned_value = metrics["learned_error_driven"][
         "disturbance_mean_representation_normalized_l2"
     ]
-    zeroed_value = metrics["learned_recurrent_error_zeroed"][
+    zeroed_value = metrics["learned_error_driven_zeroed"][
         "disturbance_mean_representation_normalized_l2"
     ]
     learned_vs_current = 100.0 * (
@@ -346,7 +346,7 @@ def main():
     with (training_dir / "training_summary.json").open() as handle:
         training_summary = json.load(handle)
     summary = {
-        "experiment": "real_frame_learned_recurrent_error_validation",
+        "experiment": "real_frame_learned_error_driven_validation",
         "git_revision": revision,
         "device": str(DEVICE),
         "gpu_name": torch.cuda.get_device_name(DEVICE),
@@ -354,8 +354,8 @@ def main():
         "comparison": {
             "metric": "disturbance_mean_representation_normalized_l2",
             "current_stateful": baseline_value,
-            "learned_recurrent_error": learned_value,
-            "learned_recurrent_error_zeroed": zeroed_value,
+            "learned_error_driven": learned_value,
+            "learned_error_driven_zeroed": zeroed_value,
             "learned_vs_current_improvement_percent": learned_vs_current,
             "learned_vs_zeroed_improvement_percent": learned_vs_zeroed,
             "conclusion": conclusion,
@@ -370,6 +370,9 @@ def main():
             "blur_kernel_size": BLUR_KERNEL_SIZE,
             "blur_sigma": BLUR_SIGMA,
             "dynamic_error": "epsilon_t=0.207*e_t+0.793*epsilon_(t-1)",
+            "instant_error": "e_t=F_t-Fhat_t",
+            "state_transition": "h_t=T(h_(t-1),epsilon_t,feedback)",
+            "current_feedforward_transition_input": False,
             "learned_top_down_feedback": True,
             "learned_and_zeroed_share_checkpoint": True,
             "zeroed_control": "only recurrent transition error drive is zero",

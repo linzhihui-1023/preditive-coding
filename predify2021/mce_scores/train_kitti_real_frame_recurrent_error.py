@@ -81,20 +81,22 @@ def run_epoch(model, datasets, optimizer=None):
         drive_updates = 0
         for raw_frames in segment_raw_frames(dataset):
             model.reset()
-            for raw_index in raw_frames:
+            for raw_index, next_raw_index in zip(raw_frames[:-1], raw_frames[1:]):
                 frame = dataset._load_frame(dataset.frame_paths[raw_index])
                 frame = frame.unsqueeze(0).to(DEVICE)
+                next_frame = dataset._load_frame(dataset.frame_paths[next_raw_index])
+                next_frame = next_frame.unsqueeze(0).to(DEVICE)
                 if training:
                     optimizer.zero_grad(set_to_none=True)
                     model.step_frame(frame)
-                    loss = model.collect_recurrent_transition_loss()
+                    loss = model.collect_recurrent_transition_loss(next_frame)
                     if loss is not None:
                         loss.backward()
                         optimizer.step()
                 else:
                     with torch.no_grad():
                         model.step_frame(frame)
-                        loss = model.collect_recurrent_transition_loss()
+                        loss = model.collect_recurrent_transition_loss(next_frame)
 
                 if loss is not None:
                     value = float(loss.detach().item())
@@ -102,7 +104,7 @@ def run_epoch(model, datasets, optimizer=None):
                     drive_loss += value
                     update_count += 1
                     drive_updates += 1
-                del frame
+                del frame, next_frame
 
         per_drive[drive] = {
             "mean_prediction_mse": drive_loss / drive_updates,
@@ -177,10 +179,13 @@ def main():
                     "git_revision": revision,
                     "epoch": epoch,
                     "val_prediction_mse": best_val,
-                    "transition_mode": "convgru_error",
+                    "transition_mode": "prediction_error_driven_convgru",
                     "top_down_feedback": True,
                     "recurrent_error_input": "dynamic",
+                    "current_feedforward_transition_input": False,
                     "dynamic_error": "epsilon_t=0.207*e_t+0.793*epsilon_(t-1)",
+                    "instant_error": "e_t=F_t-Fhat_t",
+                    "training_target": "F_(t+1)",
                     "train_drives": TRAIN_DRIVES,
                     "val_drives": VAL_DRIVES,
                     "recurrent_transition_state_dict": (
@@ -198,7 +203,7 @@ def main():
         raise RuntimeError("A frozen Predify parameter changed during training.")
 
     summary = {
-        "experiment": "real_frame_learned_recurrent_error_training",
+        "experiment": "real_frame_learned_error_driven_training",
         "git_revision": revision,
         "device": str(DEVICE),
         "gpu_name": torch.cuda.get_device_name(DEVICE),
@@ -216,10 +221,11 @@ def main():
             parameter.numel()
             for parameter in model.recurrent_transition_modules.parameters()
         ),
-        "objective": "mean existing per-layer PCoder prediction MSE",
+        "objective": "mean next-frame per-layer PCoder prediction MSE",
         "transition": (
-            "original feedforward+feedback base plus ConvGRU error correction"
+            "ConvGRU(previous_state,current_dynamic_prediction_error,feedback)"
         ),
+        "current_feedforward_transition_input": False,
         "bptt": False,
         "cross_frame_state_detached": True,
         "history": history,

@@ -66,5 +66,5 @@ env -i \
     "$PYTHON_BIN" -u -m predify2021.mce_scores.evaluate_kitti_real_frame_recurrent_error \
     2>&1 | tee "$LOG_ROOT/real_frame_recurrent_error_eval_${SHORT_REVISION}.log"
 
-printf 'git_revision=%s\ntrain_drives=0005,0013,0014,0036\nval_drives=0011,0039\nfrozen_test_read=false\nconditions=current_stateful,learned_recurrent_error,learned_recurrent_error_zeroed\nshared_learned_checkpoint=true\ntop_down_feedback=true\nepochs=5\nlr=1e-4\n' \
+printf 'git_revision=%s\ntrain_drives=0005,0013,0014,0036\nval_drives=0011,0039\nfrozen_test_read=false\nconditions=current_stateful,learned_error_driven_zeroed,learned_error_driven\nshared_learned_checkpoint=true\ntop_down_feedback=true\ncurrent_feedforward_transition_input=false\ninstant_error=e_t=F_t-Fhat_t\ntraining_target=F_(t+1)\nepochs=5\nlr=1e-4\n' \
     "$GIT_REVISION" > "$EVAL_OUTPUT/manifest.txt"

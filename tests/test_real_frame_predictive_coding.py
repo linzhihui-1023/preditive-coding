@@ -269,17 +269,19 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
         ).eval()
         cls.frame1 = torch.randn(1, 3, 32, 32)
         cls.frame2 = torch.randn(1, 3, 32, 32)
+        cls.frame3 = torch.randn(1, 3, 32, 32)
 
     def setUp(self):
         self.model.reset()
         self.model.zero_grad(set_to_none=True)
 
-    def test_convgru_replaces_gradient_projection_and_keeps_feedback_update(self):
+    def test_convgru_uses_current_prediction_error_without_feedforward_shortcut(self):
         self.model.step_frame(self.frame1)
         first_states = RealFramePredictiveCodingTest._clone_states(
             self.model.layer_states
         )
         self.model.step_frame(self.frame2)
+        current_targets, _ = self.model._real_frame_feature_targets(self.frame2)
 
         self.assertEqual(
             self.model.recurrence_outputs["transition_mode"],
@@ -287,10 +289,18 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
         )
         for layer_index, state in enumerate(self.model.layer_states):
             previous_representation = first_states[layer_index]["representation"]
-            base_representation = previous_representation + (
-                self.model.pc_ff_multipliers[layer_index]
-                * (state.feedforward_drive - previous_representation)
+            expected_instant_error = (
+                current_targets[layer_index]
+                - first_states[layer_index]["prediction"]
             )
+            self.assertTrue(torch.allclose(state.instant_error, expected_instant_error))
+            expected_dynamic_error = (
+                0.207 * expected_instant_error
+                + 0.793 * first_states[layer_index]["dynamic_error"]
+            )
+            self.assertTrue(torch.allclose(state.dynamic_error, expected_dynamic_error))
+
+            base_representation = previous_representation
             feedback_drive = torch.zeros_like(state.feedforward_drive)
             if layer_index + 1 < self.model.number_of_layers:
                 expected_feedback = first_states[layer_index + 1]["prediction"]
@@ -306,11 +316,10 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
                 self.assertIsNone(state.previous_feedback_prediction)
             with torch.no_grad():
                 error_drive = self.model.forward_stages[layer_index](
-                    first_states[layer_index]["dynamic_error"]
+                    expected_dynamic_error
                 )
                 expected = self.model.recurrent_transition_modules[layer_index](
                     previous_representation,
-                    state.feedforward_drive,
                     error_drive,
                     feedback_drive,
                     base_representation,
@@ -319,13 +328,8 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
             self.assertIsNone(state.error_scale)
             self.assertIsNone(state.c_sqrt)
             self.assertTrue(torch.allclose(state.representation, expected))
-            expected_dynamic_error = (
-                0.207 * state.instant_error
-                + 0.793 * first_states[layer_index]["dynamic_error"]
-            )
-            self.assertTrue(torch.allclose(state.dynamic_error, expected_dynamic_error))
 
-    def test_only_transition_parameters_train_and_cross_frame_state_is_detached(self):
+    def test_next_frame_loss_trains_only_transition_and_state_is_detached(self):
         trainable_names = {
             name for name, parameter in self.model.named_parameters()
             if parameter.requires_grad
@@ -337,9 +341,16 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
 
         self.model.step_frame(self.frame1)
         self.model.step_frame(self.frame2)
-        loss = self.model.collect_recurrent_transition_loss()
+        predictions = tuple(self.model.recurrent_transition_predictions)
+        future_targets, _ = self.model._real_frame_feature_targets(self.frame3)
+        loss = self.model.collect_recurrent_transition_loss(self.frame3)
         self.assertIsNotNone(loss)
         self.assertTrue(loss.requires_grad)
+        expected_loss = torch.stack([
+            torch.nn.functional.mse_loss(prediction, target)
+            for prediction, target in zip(predictions, future_targets)
+        ]).mean()
+        self.assertTrue(torch.allclose(loss, expected_loss))
         loss.backward()
 
         trainable_parameters = [
@@ -365,9 +376,9 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
         with torch.no_grad():
             for transition in self.model.recurrent_transition_modules:
                 channels = transition.candidate.out_channels
-                transition.candidate.weight[:, channels : 2 * channels].zero_()
+                transition.candidate.weight[:, :channels].zero_()
                 diagonal = torch.arange(channels)
-                transition.candidate.weight[diagonal, channels + diagonal, 0, 0] = 0.1
+                transition.candidate.weight[diagonal, diagonal, 0, 0] = 0.1
             zeroed.recurrent_transition_modules.load_state_dict(
                 self.model.recurrent_transition_modules.state_dict()
             )
