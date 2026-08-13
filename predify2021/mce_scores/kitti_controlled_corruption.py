@@ -1,9 +1,11 @@
 import hashlib
+import io
 import math
 from collections import Counter
 from dataclasses import asdict, dataclass
 
 import torch
+import torch.nn.functional as F
 from PIL import Image
 from torchvision.transforms import functional as TF
 
@@ -170,12 +172,24 @@ class ControlledCorruptionConfig:
     noise_std: float = 0.03
     blur_kernel_size: int = 11
     blur_sigma: float = 3.0
+    motion_blur_kernel_size: int = 9
+    contrast_factor: float = 0.6
+    fog_alpha: float = 0.2
+    jpeg_quality: int = 50
     seed: int = 0
 
     def __post_init__(self):
-        if self.corruption_type not in {"bias", "iid_gaussian", "gaussian_blur"}:
+        if self.corruption_type not in {
+            "bias",
+            "iid_gaussian",
+            "gaussian_blur",
+            "motion_blur",
+            "contrast",
+            "fog",
+            "jpeg_compression",
+        }:
             raise ValueError(
-                "corruption_type must be bias, iid_gaussian, or gaussian_blur, got "
+                "Unsupported corruption_type: "
                 f"{self.corruption_type!r}."
             )
         if len(self.bias_rgb) != 3:
@@ -190,6 +204,14 @@ class ControlledCorruptionConfig:
             raise ValueError("blur_kernel_size must be a positive odd integer.")
         if not math.isfinite(self.blur_sigma) or self.blur_sigma <= 0:
             raise ValueError("blur_sigma must be finite and positive.")
+        if self.motion_blur_kernel_size <= 0 or self.motion_blur_kernel_size % 2 == 0:
+            raise ValueError("motion_blur_kernel_size must be a positive odd integer.")
+        if not 0.0 < self.contrast_factor <= 1.0:
+            raise ValueError("contrast_factor must be in (0, 1].")
+        if not 0.0 < self.fog_alpha < 1.0:
+            raise ValueError("fog_alpha must be in (0, 1).")
+        if not 1 <= self.jpeg_quality <= 100:
+            raise ValueError("jpeg_quality must be in [1, 100].")
 
     def to_dict(self):
         return asdict(self)
@@ -238,6 +260,44 @@ def apply_controlled_corruption(
             kernel_size=[config.blur_kernel_size, config.blur_kernel_size],
             sigma=[severity * config.blur_sigma, severity * config.blur_sigma],
         )
+    elif config.corruption_type == "motion_blur":
+        kernel_size = config.motion_blur_kernel_size
+        kernel = image_tensor.new_zeros((3, 1, kernel_size, kernel_size))
+        kernel[:, 0, kernel_size // 2, :] = 1.0 / kernel_size
+        padded = F.pad(
+            image_tensor.unsqueeze(0),
+            (kernel_size // 2,) * 4,
+            mode="reflect",
+        )
+        blurred = F.conv2d(padded, kernel, groups=3).squeeze(0)
+        corrupted = (1.0 - severity) * image_tensor + severity * blurred
+    elif config.corruption_type == "contrast":
+        mean = image_tensor.mean(dim=(1, 2), keepdim=True)
+        factor = 1.0 - severity * (1.0 - config.contrast_factor)
+        corrupted = mean + factor * (image_tensor - mean)
+    elif config.corruption_type == "fog":
+        generator = torch.Generator(device="cpu")
+        generator.manual_seed(
+            _absolute_frame_seed(config.seed, drive, camera, frame_name)
+        )
+        veil = torch.rand((1, 1, 28, 28), generator=generator)
+        veil = F.interpolate(
+            veil,
+            size=image_tensor.shape[-2:],
+            mode="bilinear",
+            align_corners=False,
+        ).squeeze(0)
+        veil = TF.gaussian_blur(veil, kernel_size=[31, 31], sigma=[10.0, 10.0])
+        veil = 0.7 + 0.3 * veil
+        alpha = severity * config.fog_alpha
+        corrupted = (1.0 - alpha) * image_tensor + alpha * veil
+    elif config.corruption_type == "jpeg_compression":
+        quality = round(100.0 - severity * (100 - config.jpeg_quality))
+        buffer = io.BytesIO()
+        TF.to_pil_image(image_tensor).save(buffer, format="JPEG", quality=quality)
+        buffer.seek(0)
+        with Image.open(buffer) as decoded:
+            corrupted = TF.pil_to_tensor(decoded.convert("RGB")).float().div(255.0)
     return corrupted.clamp(0.0, 1.0)
 
 
