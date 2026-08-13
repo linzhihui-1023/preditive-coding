@@ -379,13 +379,18 @@ def summarize(rows, windows, drives, corruptions):
             row for row in windows if row["corruption"] == corruption
         ]
 
-    aurocs = {}
+    directional_aurocs = {}
+    separability_aurocs = {}
     score_contrasts = {}
     for scope, examples in scopes.items():
         labels = [int(row["classification_label"]) for row in examples]
-        aurocs[scope] = {
+        directional_aurocs[scope] = {
             field: binary_auroc([row[field] for row in examples], labels)
             for field in SCORE_FIELDS
+        }
+        separability_aurocs[scope] = {
+            field: max(auc, 1.0 - auc)
+            for field, auc in directional_aurocs[scope].items()
         }
         positives = [row for row in examples if row["classification_label"] == 1]
         negatives = [row for row in examples if row["classification_label"] == 0]
@@ -409,26 +414,37 @@ def summarize(rows, windows, drives, corruptions):
             for field in SCORE_FIELDS
         }
 
-    primary = aurocs["all_drives_all_corruptions"]
-    dynamic_auc = primary["dynamic_error_state_rms"]
+    primary_directional = directional_aurocs["all_drives_all_corruptions"]
+    primary_separability = separability_aurocs["all_drives_all_corruptions"]
+    dynamic_separability = primary_separability["dynamic_error_state_rms"]
+    dynamic_better = (
+        dynamic_separability > primary_separability["instant_error_rms"]
+        and dynamic_separability
+        > primary_separability["simple_scalar_ema_error_rms"]
+    )
     return {
         "primary_unit": "nonoverlapping disturbance window",
         "score_direction": "higher_means_more_persistent",
         "no_score_or_direction_selection": True,
-        "aurocs": aurocs,
+        "higher_is_persistent_aurocs": directional_aurocs,
+        "direction_independent_separability_aurocs": separability_aurocs,
         "persistent_minus_shuffled_score_contrasts": score_contrasts,
         "phase_distributions": phase_distributions,
         "primary_aggregate": {
-            "aurocs": primary,
-            "dynamic_minus_instant_auroc": (
-                dynamic_auc - primary["instant_error_rms"]
+            "higher_is_persistent_aurocs": primary_directional,
+            "direction_independent_separability_aurocs": primary_separability,
+            "dynamic_minus_instant_separability_auroc": (
+                dynamic_separability - primary_separability["instant_error_rms"]
             ),
-            "dynamic_minus_simple_scalar_ema_auroc": (
-                dynamic_auc - primary["simple_scalar_ema_error_rms"]
+            "dynamic_minus_simple_scalar_ema_separability_auroc": (
+                dynamic_separability
+                - primary_separability["simple_scalar_ema_error_rms"]
             ),
-            "dynamic_strictly_better_than_both_primary_controls": (
-                dynamic_auc > primary["instant_error_rms"]
-                and dynamic_auc > primary["simple_scalar_ema_error_rms"]
+            "dynamic_strictly_better_than_both_primary_controls": dynamic_better,
+            "phase1_decision": (
+                "go_dynamic_state_better_than_controls"
+                if dynamic_better
+                else "no_go_dynamic_state_not_better_than_controls"
             ),
         },
         "maximum_dynamic_formula_error": max(

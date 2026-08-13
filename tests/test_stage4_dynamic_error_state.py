@@ -154,8 +154,55 @@ class DynamicErrorWindowTest(unittest.TestCase):
         result = summarize(frame_rows, windows, ("drive",), ("blur",))
         self.assertTrue(result["no_score_or_direction_selection"])
         self.assertEqual(
-            set(result["primary_aggregate"]["aurocs"]),
+            set(
+                result["primary_aggregate"][
+                    "direction_independent_separability_aurocs"
+                ]
+            ),
             set(SCORE_FIELDS),
+        )
+
+    def test_separability_does_not_rank_near_random_above_inverse_signal(self):
+        windows = []
+        for condition, instant, simple, dynamic in (
+            ("persistent", 1.0, 1.0, 1.01),
+            ("shuffled", 2.0, 2.0, 1.0),
+        ):
+            for _ in range(2):
+                windows.append(
+                    {
+                        "drive": "drive",
+                        "corruption": "blur",
+                        "condition": condition,
+                        "classification_label": int(condition == "persistent"),
+                        "instant_error_rms": instant,
+                        "simple_scalar_ema_error_rms": simple,
+                        "dynamic_error_state_rms": dynamic,
+                    }
+                )
+        frame_rows = [
+            {
+                "drive": "drive",
+                "corruption": "blur",
+                "condition": condition,
+                "phase": "disturbance",
+                "dynamic_formula_max_abs": 0.0,
+                "dynamic_minus_matched_tensor_ema_max_abs": 0.0,
+                **{field: 1.0 for field in SCORE_FIELDS},
+            }
+            for condition in CONDITIONS
+        ]
+        result = summarize(frame_rows, windows, ("drive",), ("blur",))
+        primary = result["primary_aggregate"]
+        self.assertEqual(primary["higher_is_persistent_aurocs"]["instant_error_rms"], 0.0)
+        self.assertEqual(
+            primary["direction_independent_separability_aurocs"][
+                "instant_error_rms"
+            ],
+            1.0,
+        )
+        self.assertFalse(
+            primary["dynamic_strictly_better_than_both_primary_controls"]
         )
 
 
