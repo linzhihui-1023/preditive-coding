@@ -1,0 +1,326 @@
+{
+  "a_to_c_total": {
+    "feedback_absolute_reduction": 0.019199629248060845,
+    "feedforward": 0.8902846315191034,
+    "main_source": "representation_memory",
+    "pc_no_error": 0.7844500732168771,
+    "relative_improvement_percent": 11.887721584235319,
+    "representation_memory_absolute_reduction": 0.08663492905416548
+  },
+  "adjacent_improvements": {
+    "a_to_b_representation_memory": {
+      "absolute_reduction": 0.08663492905416548,
+      "relative_improvement_percent": 9.731149565767439,
+      "source": 0.8902846315191034,
+      "source_condition": "feedforward",
+      "target": 0.8036497024649379,
+      "target_condition": "representation_memory_only"
+    },
+    "b_to_c_feedback": {
+      "absolute_reduction": 0.019199629248060845,
+      "relative_improvement_percent": 2.3890544834611567,
+      "source": 0.8036497024649379,
+      "source_condition": "representation_memory_only",
+      "target": 0.7844500732168771,
+      "target_condition": "pc_no_error"
+    },
+    "c_to_d_dynamic_error": {
+      "absolute_reduction": 0.00015308089402332747,
+      "relative_improvement_percent": 0.019514421535531574,
+      "source": 0.7844500732168771,
+      "source_condition": "pc_no_error",
+      "target": 0.7842969923228538,
+      "target_condition": "pc_dynamic_error"
+    }
+  },
+  "c_sqrt": {
+    "feedforward": [
+      8.66025447845459,
+      65.91433715820312,
+      119.06216430664062,
+      175.30088806152344,
+      236.8898468017578
+    ],
+    "pc_dynamic_error": [
+      8.66025447845459,
+      65.91433715820312,
+      119.06216430664062,
+      175.30088806152344,
+      236.8898468017578
+    ],
+    "pc_no_error": [
+      8.66025447845459,
+      65.91433715820312,
+      119.06216430664062,
+      175.30088806152344,
+      236.8898468017578
+    ],
+    "representation_memory_only": [
+      8.66025447845459,
+      65.91433715820312,
+      119.06216430664062,
+      175.30088806152344,
+      236.8898468017578
+    ]
+  },
+  "conditions": {
+    "feedforward": {
+      "disturbance_per_drive_mean_normalized_l2": {
+        "2011_09_26/2011_09_26_drive_0011_sync": 0.8863080383039404,
+        "2011_09_26/2011_09_26_drive_0039_sync": 0.8942612247342693
+      },
+      "disturbance_per_layer_mean_normalized_l2": {
+        "1": 0.7443293139810405,
+        "2": 0.8939975834892637,
+        "3": 0.8778679868800984,
+        "4": 0.919648848399927,
+        "5": 1.0155794248451964
+      },
+      "phases": {
+        "baseline": {
+          "frame_layer_count": 400,
+          "mean_dynamic_error_rms": 0.25465332377051886,
+          "mean_instantaneous_prediction_error_rms": 1.2302092800850846,
+          "mean_representation_normalized_l2": 0.0
+        },
+        "disturbance": {
+          "frame_layer_count": 800,
+          "mean_dynamic_error_rms": 0.14495361751479224,
+          "mean_instantaneous_prediction_error_rms": 0.700259014144617,
+          "mean_representation_normalized_l2": 0.8902846315191034
+        },
+        "recovery": {
+          "frame_layer_count": 400,
+          "mean_dynamic_error_rms": 0.25708820627255013,
+          "mean_instantaneous_prediction_error_rms": 1.2419719973880452,
+          "mean_representation_normalized_l2": 0.0
+        }
+      },
+      "recovery_first_10_mean_normalized_l2": 0.0,
+      "recovery_last_10_mean_normalized_l2": 0.0,
+      "recovery_reduction_percent": 0.0
+    },
+    "pc_dynamic_error": {
+      "disturbance_per_drive_mean_normalized_l2": {
+        "2011_09_26/2011_09_26_drive_0011_sync": 0.7564145483359619,
+        "2011_09_26/2011_09_26_drive_0039_sync": 0.812179436309743
+      },
+      "disturbance_per_layer_mean_normalized_l2": {
+        "1": 0.5220145086309539,
+        "2": 0.8095683607040897,
+        "3": 0.7789518799735554,
+        "4": 0.823902837043283,
+        "5": 0.9870473752623854
+      },
+      "phases": {
+        "baseline": {
+          "frame_layer_count": 400,
+          "mean_dynamic_error_rms": 0.46234453853157925,
+          "mean_instantaneous_prediction_error_rms": 0.6175038719020592,
+          "mean_representation_normalized_l2": 0.0
+        },
+        "disturbance": {
+          "frame_layer_count": 800,
+          "mean_dynamic_error_rms": 0.392523045647563,
+          "mean_instantaneous_prediction_error_rms": 0.4558738537937208,
+          "mean_representation_normalized_l2": 0.7842969923228538
+        },
+        "recovery": {
+          "frame_layer_count": 400,
+          "mean_dynamic_error_rms": 0.527888838503171,
+          "mean_instantaneous_prediction_error_rms": 0.6413270544298684,
+          "mean_representation_normalized_l2": 0.1261989214667341
+        }
+      },
+      "recovery_first_10_mean_normalized_l2": 0.42715684546977123,
+      "recovery_last_10_mean_normalized_l2": 0.0012050880215588628,
+      "recovery_reduction_percent": 99.71788160851465
+    },
+    "pc_no_error": {
+      "disturbance_per_drive_mean_normalized_l2": {
+        "2011_09_26/2011_09_26_drive_0011_sync": 0.7564581613507911,
+        "2011_09_26/2011_09_26_drive_0039_sync": 0.8124419850829608
+      },
+      "disturbance_per_layer_mean_normalized_l2": {
+        "1": 0.5221467099625301,
+        "2": 0.809750198421718,
+        "3": 0.7791496389831847,
+        "4": 0.8239088202437396,
+        "5": 0.9872949984732088
+      },
+      "phases": {
+        "baseline": {
+          "frame_layer_count": 400,
+          "mean_dynamic_error_rms": 0.4645091431107435,
+          "mean_instantaneous_prediction_error_rms": 0.6190848659202607,
+          "mean_representation_normalized_l2": 0.0
+        },
+        "disturbance": {
+          "frame_layer_count": 800,
+          "mean_dynamic_error_rms": 0.3949299187915578,
+          "mean_instantaneous_prediction_error_rms": 0.45785917276874555,
+          "mean_representation_normalized_l2": 0.7844500732168771
+        },
+        "recovery": {
+          "frame_layer_count": 400,
+          "mean_dynamic_error_rms": 0.530305184540827,
+          "mean_instantaneous_prediction_error_rms": 0.6432160686695299,
+          "mean_representation_normalized_l2": 0.1261585811602549
+        }
+      },
+      "recovery_first_10_mean_normalized_l2": 0.42706309164379136,
+      "recovery_last_10_mean_normalized_l2": 0.0012167640822113362,
+      "recovery_reduction_percent": 99.71508563815993
+    },
+    "representation_memory_only": {
+      "disturbance_per_drive_mean_normalized_l2": {
+        "2011_09_26/2011_09_26_drive_0011_sync": 0.7809693775325056,
+        "2011_09_26/2011_09_26_drive_0039_sync": 0.8263300273973703
+      },
+      "disturbance_per_layer_mean_normalized_l2": {
+        "1": 0.5296223941819009,
+        "2": 0.8213285404062326,
+        "3": 0.8145269405054087,
+        "4": 0.8550547546768877,
+        "5": 0.9977158825542567
+      },
+      "phases": {
+        "baseline": {
+          "frame_layer_count": 400,
+          "mean_dynamic_error_rms": 0.5479660909159328,
+          "mean_instantaneous_prediction_error_rms": 0.721371385135531,
+          "mean_representation_normalized_l2": 0.0
+        },
+        "disturbance": {
+          "frame_layer_count": 800,
+          "mean_dynamic_error_rms": 0.4735004923391438,
+          "mean_instantaneous_prediction_error_rms": 0.5473595306711342,
+          "mean_representation_normalized_l2": 0.8036497024649379
+        },
+        "recovery": {
+          "frame_layer_count": 400,
+          "mean_dynamic_error_rms": 0.6478120897436704,
+          "mean_instantaneous_prediction_error_rms": 0.7783781125024608,
+          "mean_representation_normalized_l2": 0.13551947899694514
+        }
+      },
+      "recovery_first_10_mean_normalized_l2": 0.458937463503298,
+      "recovery_last_10_mean_normalized_l2": 0.0008505332464430888,
+      "recovery_reduction_percent": 99.81467338927824
+    }
+  },
+  "decision": "NO-GO",
+  "device": "cuda:0",
+  "drives": [
+    "2011_09_26/2011_09_26_drive_0011_sync",
+    "2011_09_26/2011_09_26_drive_0039_sync"
+  ],
+  "experiment": "real_frame_predictive_coding_phase1",
+  "frozen_test_drives_read": false,
+  "git_revision": "9a3d9bd8b64bd13fd846add5b04d6e0610a83834",
+  "gpu_name": "NVIDIA GeForce RTX 5090",
+  "pcoder_weight_sha256": {
+    "pvgg16_imagenet_pretrained_pc1_pmodule.pth": "2c1df5f6c7c99d1c72a25aff8c71e5488554293ed8e1b3b11b614303109fd1a7",
+    "pvgg16_imagenet_pretrained_pc2_pmodule.pth": "71bafee34c5d34f1930257cfe8fef3131fc05a5035f9081194d8736e64c23ea1",
+    "pvgg16_imagenet_pretrained_pc3_pmodule.pth": "a5a27d8288893a76975e053d632f1f43fed6c12866a71a6f948a3700134f8fdf",
+    "pvgg16_imagenet_pretrained_pc4_pmodule.pth": "b0c3ee8deb059def935292098eac7297349d4c8cc8f8f18b8bce2d69270e6ba1",
+    "pvgg16_imagenet_pretrained_pc5_pmodule.pth": "0280fab754482ebbc16fbea6ab083921fb7697fc6904334a0776583bd173599f"
+  },
+  "per_frame_row_count": 6400,
+  "primary_comparison": {
+    "dynamic_relative_improvement_percent": 0.019514421535531574,
+    "metric": "disturbance_mean_representation_normalized_l2",
+    "minimum_practical_improvement_percent": 5.0,
+    "passed": false,
+    "pc_dynamic_error": 0.7842969923228538,
+    "pc_no_error": 0.7844500732168771,
+    "per_drive_dynamic_lower_than_no_error": {
+      "2011_09_26/2011_09_26_drive_0011_sync": true,
+      "2011_09_26/2011_09_26_drive_0039_sync": true
+    }
+  },
+  "protocol": {
+    "baseline_frames": 40,
+    "beta": [
+      0.2,
+      0.4,
+      0.4,
+      0.5,
+      0.6
+    ],
+    "blur_kernel_size": 11,
+    "blur_sigma": 3.0,
+    "clean_reference": "condition-matched clean counterfactual on the identical raw frame",
+    "corruption": "persistent_gaussian_blur",
+    "cross_frame_state_detached": true,
+    "disturbance_frames": 80,
+    "dynamic_error": "epsilon_t=0.207*r_t+0.793*epsilon_(t-1)",
+    "feedforward": "reset every frame",
+    "fixed_dt_s": 0.1035,
+    "fixed_dt_tolerance_s": 0.001,
+    "future_predictor": false,
+    "lambda": [
+      0.05,
+      0.1,
+      0.1,
+      0.1,
+      0.0
+    ],
+    "network_training": false,
+    "online_learning": false,
+    "optimizer": false,
+    "parameter_frozen": true,
+    "pc_dynamic_error": "representation memory + feedback + dynamic error correction",
+    "pc_dynamic_error_alpha": 0.01,
+    "pc_no_error": "representation memory + feedback; alpha=0",
+    "pc_no_error_alpha": 0.0,
+    "recovery_frames": 40,
+    "representation_memory_only": "representation memory; feedback=0; alpha=0",
+    "seed": 0,
+    "segment_start_reset": true,
+    "updates_per_real_frame_per_layer": 1
+  },
+  "recovery_check": {
+    "distance_decreased": true,
+    "pc_dynamic_error_first_10": 0.42715684546977123,
+    "pc_dynamic_error_last_10": 0.0012050880215588628
+  },
+  "selected_raw_frames": {
+    "2011_09_26/2011_09_26_drive_0011_sync": {
+      "count": 160,
+      "start": 0,
+      "stop_inclusive": 159
+    },
+    "2011_09_26/2011_09_26_drive_0039_sync": {
+      "count": 160,
+      "start": 0,
+      "stop_inclusive": 159
+    }
+  },
+  "time_filter_stats": {
+    "2011_09_26/2011_09_26_drive_0011_sync": {
+      "candidate_samples": 232,
+      "contiguous_segment_lengths": [
+        232
+      ],
+      "dropped_samples": 0,
+      "dt_tolerance_s": 0.001,
+      "fixed_dt_s": 0.1035,
+      "max_horizon": 1,
+      "num_contiguous_segments": 1,
+      "valid_samples": 232
+    },
+    "2011_09_26/2011_09_26_drive_0039_sync": {
+      "candidate_samples": 394,
+      "contiguous_segment_lengths": [
+        394
+      ],
+      "dropped_samples": 0,
+      "dt_tolerance_s": 0.001,
+      "fixed_dt_s": 0.1035,
+      "max_horizon": 1,
+      "num_contiguous_segments": 1,
+      "valid_samples": 394
+    }
+  }
+}

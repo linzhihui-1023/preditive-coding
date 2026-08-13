@@ -936,6 +936,37 @@ Server-only log:
 /tmp/predify-storage/experiments/real_frame_pc_phase1_1d25877.log
 ```
 
+The strict four-condition decomposition then reran the identical protocol at
+evaluation revision `9a3d9bd`, adding only Representation-memory-only
+(`lambda=0`, `alpha=0`). The original Feedforward, PC-no-error, and
+PC-dynamic-error summaries were exactly unchanged.
+
+| Condition | Disturbance normalized L2 |
+| --- | ---: |
+| A Feedforward | 0.890284632 |
+| B Representation-memory only | 0.803649702 |
+| C Representation + Feedback | 0.784450073 |
+| D Representation + Feedback + Dynamic error | 0.784296992 |
+
+Adjacent relative improvements were A->B `9.731150%`, B->C `2.389054%`, and
+C->D `0.019514%`. The full A->C gain was `11.887722%`. By absolute reduction,
+representation memory contributed `81.8588%` and feedback `18.1412%` of that
+gain. Therefore the earlier approximately 11.9% result came mainly from
+representation memory, with a smaller feedback contribution; dynamic error
+remained negligible. The dynamic-error decision remains **NO-GO**.
+
+Four-condition artifacts:
+
+```text
+results/real_frame_pc_phase1_9a3d9bd/
+```
+
+Server-only log:
+
+```text
+/tmp/predify-storage/experiments/real_frame_pc_phase1_9a3d9bd.log
+```
+
 ## Frozen historical runners
 
 The commands below belong to completed predictor research. They remain for

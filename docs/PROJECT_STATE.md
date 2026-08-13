@@ -49,6 +49,15 @@ recover without lasting drift, reaching `0.001205088` over the last ten clean
 recovery frames. Frozen Test drives were not read. Auditable outputs are in
 `results/real_frame_pc_phase1_1d25877/`.
 
+The follow-up four-condition decomposition added only a representation-memory
+control. Disturbance normalized L2 was `0.890284632` (Feedforward),
+`0.803649702` (Representation-memory only), `0.784450073` (plus Feedback), and
+`0.784296992` (plus Dynamic error). Relative improvements were `9.731150%`,
+`2.389054%`, and `0.019514%` respectively. Representation memory accounts for
+`81.8588%` of the A-to-C absolute reduction, so the approximately 11.9% gain is
+mainly representation memory rather than feedback. Outputs are in
+`results/real_frame_pc_phase1_9a3d9bd/`.
+
 ## Current implementation
 
 - `predify2021/model_factory/pvgg16_targetflow.py`

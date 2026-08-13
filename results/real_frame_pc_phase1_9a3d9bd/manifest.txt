@@ -1,0 +1,9 @@
+git_revision=9a3d9bd8b64bd13fd846add5b04d6e0610a83834
+experiment=real_frame_predictive_coding_phase1
+drives=0011,0039
+frozen_test_read=false
+conditions=feedforward,representation_memory_only,pc_no_error,pc_dynamic_error
+trajectory=clean40,persistent_gaussian_blur80,clean_recovery40
+network_training=false
+online_learning=false
+future_predictor=false

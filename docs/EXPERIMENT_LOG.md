@@ -1279,6 +1279,33 @@ Server-only log:
 /tmp/predify-storage/experiments/real_frame_pc_phase1_1d25877.log
 ```
 
+### Four-condition mechanism decomposition
+
+Evaluation revision: `9a3d9bd8b64bd13fd846add5b04d6e0610a83834`
+
+The protocol was unchanged and added only Representation-memory-only, which
+retained `R_(t-1)` while setting feedback and error correction to zero. The
+three original condition summaries were exactly reproduced.
+
+| Condition | Disturbance normalized L2 | Relative improvement from previous |
+| --- | ---: | ---: |
+| A Feedforward | 0.890284632 | - |
+| B Representation-memory only | 0.803649702 | 9.731150% |
+| C Representation + Feedback | 0.784450073 | 2.389054% |
+| D Representation + Feedback + Dynamic error | 0.784296992 | 0.019514% |
+
+A-to-C improved by `11.887722%`. Representation memory supplied `0.086634929`
+of absolute reduction (`81.8588%`), while feedback supplied `0.019199629`
+(`18.1412%`). Thus the gain came mainly from representation memory. Dynamic
+error remained `NO-GO` under the unchanged Phase-1 criterion.
+
+Tracked artifacts and server-only log:
+
+```text
+results/real_frame_pc_phase1_9a3d9bd/
+/tmp/predify-storage/experiments/real_frame_pc_phase1_9a3d9bd.log
+```
+
 ## Earlier adjacent-pair result
 
 This older experiment reset model state each batch and therefore tested
