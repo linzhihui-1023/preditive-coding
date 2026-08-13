@@ -392,8 +392,12 @@ def summarize(rows, windows, drives, corruptions):
             field: max(auc, 1.0 - auc)
             for field, auc in directional_aurocs[scope].items()
         }
-        positives = [row for row in examples if row["classification_label"] == 1]
-        negatives = [row for row in examples if row["classification_label"] == 0]
+        positives = [
+            row for row in examples if int(row["classification_label"]) == 1
+        ]
+        negatives = [
+            row for row in examples if int(row["classification_label"]) == 0
+        ]
         score_contrasts[scope] = {
             field: (
                 sum(float(row[field]) for row in positives) / len(positives)

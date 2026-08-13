@@ -205,6 +205,41 @@ class DynamicErrorWindowTest(unittest.TestCase):
             primary["dynamic_strictly_better_than_both_primary_controls"]
         )
 
+    def test_summary_accepts_csv_string_labels(self):
+        windows = []
+        for condition, label, value in (
+            ("persistent", "1", "2.0"),
+            ("shuffled", "0", "1.0"),
+        ):
+            windows.append(
+                {
+                    "drive": "drive",
+                    "corruption": "blur",
+                    "condition": condition,
+                    "classification_label": label,
+                    **{field: value for field in SCORE_FIELDS},
+                }
+            )
+        frame_rows = [
+            {
+                "drive": "drive",
+                "corruption": "blur",
+                "condition": condition,
+                "phase": "disturbance",
+                "dynamic_formula_max_abs": "0.0",
+                "dynamic_minus_matched_tensor_ema_max_abs": "0.0",
+                **{field: "1.0" for field in SCORE_FIELDS},
+            }
+            for condition in CONDITIONS
+        ]
+        result = summarize(frame_rows, windows, ("drive",), ("blur",))
+        self.assertEqual(
+            result["primary_aggregate"]["higher_is_persistent_aurocs"][
+                "dynamic_error_state_rms"
+            ],
+            1.0,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
