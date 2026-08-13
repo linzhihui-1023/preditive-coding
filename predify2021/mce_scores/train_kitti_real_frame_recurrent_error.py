@@ -23,7 +23,13 @@ VAL_DRIVES = (
 FORBIDDEN_TEST_DRIVE_IDS = ("drive_0051_sync", "drive_0056_sync")
 
 
-def build_model(weights_path):
+TRAINED_CONDITIONS = {
+    "error_driven_recurrent": "dynamic",
+    "observation_driven_recurrent": "observation",
+}
+
+
+def build_model(weights_path, recurrent_input):
     model = get_model(
         "pvgg_tf",
         pretrained=True,
@@ -35,6 +41,7 @@ def build_model(weights_path):
         error_time_constant=(0.5,) * 5,
         error_gain=(1.0,) * 5,
         real_frame_transition_mode="convgru_error",
+        real_frame_recurrent_error_input=recurrent_input,
     ).to(DEVICE).eval()
     trainable = [
         parameter for parameter in model.parameters() if parameter.requires_grad
@@ -118,37 +125,25 @@ def run_epoch(model, datasets, optimizer=None):
     }
 
 
-def main():
-    if DEVICE.type != "cuda":
-        raise RuntimeError("Formal recurrent-error training requires GPU 0.")
-    revision = os.environ["PREDIFY_GIT_REVISION"]
-    output_dir = Path(os.environ["PREDIFY_RECURRENT_ERROR_TRAIN_OUTPUT_DIR"])
-    root = os.environ["PREDIFY_KITTI_ROOT"]
-    camera = os.environ.get("PREDIFY_KITTI_CAMERA", "image_02")
-    weights_path = os.environ["PREDIFY_PCODER_WEIGHTS"]
-    epochs = int(os.environ.get("PREDIFY_EPOCHS", "5"))
-    learning_rate = float(os.environ.get("PREDIFY_LR", "1e-4"))
-    seed = int(os.environ.get("PREDIFY_SEED", "0"))
-    fixed_dt_s = float(os.environ.get("PREDIFY_FIXED_TS_S", "0.1035"))
-    tolerance = float(os.environ.get("PREDIFY_FIXED_TS_TOL_S", "0.001"))
-
-    if any(
-        forbidden in drive
-        for forbidden in FORBIDDEN_TEST_DRIVE_IDS
-        for drive in (*TRAIN_DRIVES, *VAL_DRIVES)
-    ):
-        raise RuntimeError("Frozen Test drive entered the training protocol.")
+def train_condition(
+    condition,
+    recurrent_input,
+    weights_path,
+    train_datasets,
+    val_datasets,
+    output_dir,
+    revision,
+    epochs,
+    learning_rate,
+    seed,
+):
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    train_datasets = build_datasets(
-        root, TRAIN_DRIVES, camera, fixed_dt_s, tolerance
-    )
-    val_datasets = build_datasets(root, VAL_DRIVES, camera, fixed_dt_s, tolerance)
-    model = build_model(weights_path)
+    model = build_model(weights_path, recurrent_input)
     optimizer = torch.optim.Adam(
         model.recurrent_transition_modules.parameters(),
         lr=learning_rate,
@@ -160,15 +155,19 @@ def main():
         if not parameter.requires_grad
     }
 
-    output_dir.mkdir(parents=True, exist_ok=False)
     history = []
     best_val = float("inf")
     best_epoch = None
-    checkpoint_path = output_dir / "best_recurrent_transition.pt"
+    checkpoint_path = output_dir / f"best_{condition}.pt"
     for epoch in range(1, epochs + 1):
         train_metrics = run_epoch(model, train_datasets, optimizer=optimizer)
         val_metrics = run_epoch(model, val_datasets)
-        record = {"epoch": epoch, "train": train_metrics, "val": val_metrics}
+        record = {
+            "condition": condition,
+            "epoch": epoch,
+            "train": train_metrics,
+            "val": val_metrics,
+        }
         history.append(record)
         print(json.dumps(record, sort_keys=True), flush=True)
         if val_metrics["mean_prediction_mse"] < best_val:
@@ -179,9 +178,10 @@ def main():
                     "git_revision": revision,
                     "epoch": epoch,
                     "val_prediction_mse": best_val,
-                    "transition_mode": "prediction_error_driven_convgru",
+                    "condition": condition,
+                    "transition_mode": "matched_convgru",
                     "top_down_feedback": True,
-                    "recurrent_error_input": "dynamic",
+                    "recurrent_error_input": recurrent_input,
                     "current_feedforward_transition_input": False,
                     "dynamic_error": "epsilon_t=0.207*e_t+0.793*epsilon_(t-1)",
                     "instant_error": "e_t=F_t-Fhat_t",
@@ -203,7 +203,8 @@ def main():
         raise RuntimeError("A frozen Predify parameter changed during training.")
 
     summary = {
-        "experiment": "real_frame_learned_error_driven_training",
+        "experiment": f"real_frame_{condition}_training",
+        "condition": condition,
         "git_revision": revision,
         "device": str(DEVICE),
         "gpu_name": torch.cuda.get_device_name(DEVICE),
@@ -222,13 +223,79 @@ def main():
             for parameter in model.recurrent_transition_modules.parameters()
         ),
         "objective": "mean next-frame per-layer PCoder prediction MSE",
-        "transition": (
-            "ConvGRU(previous_state,current_dynamic_prediction_error,feedback)"
-        ),
+        "transition": f"ConvGRU(previous_state,{recurrent_input},feedback)",
+        "recurrent_input": recurrent_input,
         "current_feedforward_transition_input": False,
         "bptt": False,
         "cross_frame_state_detached": True,
         "history": history,
+    }
+    with (output_dir / f"training_summary_{condition}.json").open("w") as handle:
+        json.dump(summary, handle, indent=2, sort_keys=True)
+    return summary
+
+
+def main():
+    if DEVICE.type != "cuda":
+        raise RuntimeError("Formal recurrent-error training requires GPU 0.")
+    revision = os.environ["PREDIFY_GIT_REVISION"]
+    output_dir = Path(os.environ["PREDIFY_RECURRENT_ERROR_TRAIN_OUTPUT_DIR"])
+    root = os.environ["PREDIFY_KITTI_ROOT"]
+    camera = os.environ.get("PREDIFY_KITTI_CAMERA", "image_02")
+    weights_path = os.environ["PREDIFY_PCODER_WEIGHTS"]
+    epochs = int(os.environ.get("PREDIFY_EPOCHS", "5"))
+    learning_rate = float(os.environ.get("PREDIFY_LR", "1e-4"))
+    seed = int(os.environ.get("PREDIFY_SEED", "0"))
+    fixed_dt_s = float(os.environ.get("PREDIFY_FIXED_TS_S", "0.1035"))
+    tolerance = float(os.environ.get("PREDIFY_FIXED_TS_TOL_S", "0.001"))
+
+    if any(
+        forbidden in drive
+        for forbidden in FORBIDDEN_TEST_DRIVE_IDS
+        for drive in (*TRAIN_DRIVES, *VAL_DRIVES)
+    ):
+        raise RuntimeError("Frozen Test drive entered the training protocol.")
+
+    train_datasets = build_datasets(
+        root, TRAIN_DRIVES, camera, fixed_dt_s, tolerance
+    )
+    val_datasets = build_datasets(root, VAL_DRIVES, camera, fixed_dt_s, tolerance)
+    output_dir.mkdir(parents=True, exist_ok=False)
+    summaries = {}
+    for condition, recurrent_input in TRAINED_CONDITIONS.items():
+        summaries[condition] = train_condition(
+            condition,
+            recurrent_input,
+            weights_path,
+            train_datasets,
+            val_datasets,
+            output_dir,
+            revision,
+            epochs,
+            learning_rate,
+            seed,
+        )
+
+    legacy_checkpoint = output_dir / "best_recurrent_transition.pt"
+    legacy_checkpoint.write_bytes(
+        (output_dir / "best_error_driven_recurrent.pt").read_bytes()
+    )
+    summary = {
+        "experiment": "real_frame_matched_recurrent_training",
+        "git_revision": revision,
+        "device": str(DEVICE),
+        "gpu_name": torch.cuda.get_device_name(DEVICE),
+        "seed": seed,
+        "epochs": epochs,
+        "learning_rate": learning_rate,
+        "weight_decay": 0.0,
+        "train_drives": TRAIN_DRIVES,
+        "val_drives": VAL_DRIVES,
+        "frozen_test_drives_read": False,
+        "conditions": summaries,
+        "matched_transition_capacity": True,
+        "objective": "mean next-frame per-layer PCoder prediction MSE",
+        "legacy_error_driven_checkpoint": str(legacy_checkpoint),
     }
     with (output_dir / "training_summary.json").open("w") as handle:
         json.dump(summary, handle, indent=2, sort_keys=True)

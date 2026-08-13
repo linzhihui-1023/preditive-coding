@@ -90,7 +90,7 @@ def _make_input_prediction_module():
 
 
 class ConvGRUErrorTransition(nn.Module):
-    """One-cell state transition driven by prediction error and feedback."""
+    """One-cell state transition driven by a matched recurrent input and feedback."""
 
     def __init__(self, channels: int):
         super().__init__()
@@ -294,7 +294,11 @@ class PVGG16TargetFlow(nn.Module):
                 "real_frame_transition_mode is configurable only for real_frame_pc."
             )
         self.real_frame_transition_mode = real_frame_transition_mode
-        if real_frame_recurrent_error_input not in {"dynamic", "zeroed"}:
+        if real_frame_recurrent_error_input not in {
+            "dynamic",
+            "observation",
+            "zeroed",
+        }:
             raise ValueError(
                 "Unsupported real_frame_recurrent_error_input: "
                 f"{real_frame_recurrent_error_input}"
@@ -303,9 +307,7 @@ class PVGG16TargetFlow(nn.Module):
             real_frame_recurrent_error_input != "dynamic"
             and self.real_frame_transition_mode != "convgru_error"
         ):
-            raise ValueError(
-                "Zeroed recurrent error input requires convgru_error mode."
-            )
+            raise ValueError("Matched recurrent input modes require convgru_error mode.")
         self.real_frame_recurrent_error_input = real_frame_recurrent_error_input
         pc_ff_multipliers = _expand_per_layer_values(
             pc_ff_multiplier,
@@ -674,12 +676,15 @@ class PVGG16TargetFlow(nn.Module):
                             previous_feedback_prediction - previous_representation
                         )
                     with torch.no_grad():
-                        error_drive = stage(dynamic_error)
-                        if self.real_frame_recurrent_error_input == "zeroed":
-                            error_drive = torch.zeros_like(error_drive)
+                        if self.real_frame_recurrent_error_input == "observation":
+                            recurrent_drive = feedforward_drive
+                        else:
+                            recurrent_drive = stage(dynamic_error)
+                            if self.real_frame_recurrent_error_input == "zeroed":
+                                recurrent_drive = torch.zeros_like(recurrent_drive)
                     representation = self.recurrent_transition_modules[layer_index](
                         previous_representation,
-                        error_drive,
+                        recurrent_drive,
                         feedback_drive,
                         base_representation,
                     )

@@ -370,6 +370,59 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
         self.assertTrue(all(not memory.requires_grad for memory in memories))
         self.assertTrue(all(memory.grad_fn is None for memory in memories))
 
+    def test_observation_control_uses_current_observation_with_matched_capacity(self):
+        observation = copy.deepcopy(self.model)
+        observation.real_frame_recurrent_error_input = "observation"
+        error_parameter_count = sum(
+            parameter.numel()
+            for parameter in self.model.recurrent_transition_modules.parameters()
+        )
+        observation_parameter_count = sum(
+            parameter.numel()
+            for parameter in observation.recurrent_transition_modules.parameters()
+        )
+        self.assertEqual(error_parameter_count, observation_parameter_count)
+
+        with torch.no_grad():
+            for transition in self.model.recurrent_transition_modules:
+                channels = transition.candidate.out_channels
+                transition.candidate.weight[:, :channels].zero_()
+                diagonal = torch.arange(channels)
+                transition.candidate.weight[diagonal, diagonal, 0, 0] = 0.1
+            observation.recurrent_transition_modules.load_state_dict(
+                self.model.recurrent_transition_modules.state_dict()
+            )
+
+        self.model.reset()
+        observation.reset()
+        self.model.step_frame(self.frame1)
+        observation.step_frame(self.frame1)
+        self.model.step_frame(self.frame2)
+        observation.step_frame(self.frame2)
+
+        for error_state, observation_state in zip(
+            self.model.layer_states, observation.layer_states
+        ):
+            self.assertTrue(
+                torch.equal(
+                    error_state.previous_feedback_prediction,
+                    observation_state.previous_feedback_prediction,
+                )
+                if error_state.previous_feedback_prediction is not None
+                else observation_state.previous_feedback_prediction is None
+            )
+            self.assertTrue(
+                torch.equal(error_state.dynamic_error, observation_state.dynamic_error)
+            )
+        self.assertTrue(
+            any(
+                not torch.allclose(error_state.representation, observation_state.representation)
+                for error_state, observation_state in zip(
+                    self.model.layer_states, observation.layer_states
+                )
+            )
+        )
+
     def test_zeroed_control_changes_only_the_transition_error_input(self):
         zeroed = copy.deepcopy(self.model)
         zeroed.real_frame_recurrent_error_input = "zeroed"
