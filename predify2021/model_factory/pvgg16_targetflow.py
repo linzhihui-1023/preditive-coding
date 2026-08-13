@@ -5,6 +5,7 @@ import torch.nn as nn
 from torch.nn import ConvTranspose2d, ReLU
 
 from .targetflow import (
+    RealFramePCoderLayerState,
     TargetFlowDynamicErrorConfig,
     TargetFlowFeedbackModule,
     TargetFlowLayerState,
@@ -18,6 +19,7 @@ from .targetflow import (
     compute_module_grad_stats,
     estimate_local_displacement,
     forward_splat_discrete,
+    project_dynamic_error_to_representation,
     run_backward_target_flow,
 )
 
@@ -79,12 +81,20 @@ def _make_feedback_modules():
     )
 
 
+def _make_input_prediction_module():
+    """Original PVGG16 PCoder-1 decoder: Stage 1 -> image space."""
+    return TargetFlowFeedbackModule(
+        ConvTranspose2d(64, 3, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2))
+    )
+
+
 class PVGG16TargetFlow(nn.Module):
     """
-    Target-flow PVGG16 skeleton with separate Target Flow and prediction targets.
+    PVGG16 with a real-frame predictive-coding recurrence.
 
-    Target Flow always receives the next frame's Stage-5 feature. Future-feature
-    prediction can independently target Stage 3, 4, or 5.
+    ``task='real_frame_pc'`` performs one state update per observed video frame
+    and never resolves a future-frame target. Legacy motion/future-feature tasks
+    remain loadable only so previously versioned experiments stay reproducible.
     """
 
     def __init__(
@@ -97,13 +107,16 @@ class PVGG16TargetFlow(nn.Module):
         dynamic_error: bool = True,
         error_state_mode: str = None,
         local_loss_error_source: str = "instant",
-        error_sample_time: float = 1.0,
-        error_time_constant=1.0,
+        error_sample_time: float = 0.1035,
+        error_time_constant=0.5,
         error_gain=1.0,
         temporal_error_sample_time: float = 1.0,
         temporal_error_time_constant: float = 1.0,
         temporal_error_gain: float = 1.0,
-        task: str = "motion",
+        task: str = "real_frame_pc",
+        pc_ff_multiplier=(0.2, 0.4, 0.4, 0.5, 0.6),
+        pc_fb_multiplier=(0.05, 0.1, 0.1, 0.1, 0.0),
+        pc_error_multiplier=(0.01, 0.01, 0.01, 0.01, 0.01),
         future_feature_stage: int = 5,
         future_feature_history_mode: str = "none",
         future_feature_temporal_fusion_mode: str = "none",
@@ -199,7 +212,7 @@ class PVGG16TargetFlow(nn.Module):
         self.temporal_horizons = temporal_horizons
         self.num_temporal_horizons = len(self.temporal_horizons)
         self.stage_channels = (64, 128, 256, 512, 512)
-        if task not in {"motion", "future_feature"}:
+        if task not in {"real_frame_pc", "motion", "future_feature"}:
             raise ValueError(f"Unsupported task: {task}")
         future_feature_history_mode = {
             "instant": "latest",
@@ -219,6 +232,53 @@ class PVGG16TargetFlow(nn.Module):
                 f"{future_feature_history_mode}"
             )
         self.task = task
+        pc_ff_multipliers = _expand_per_layer_values(
+            pc_ff_multiplier,
+            self.number_of_layers,
+            "pc_ff_multiplier",
+        )
+        pc_fb_multipliers = _expand_per_layer_values(
+            pc_fb_multiplier,
+            self.number_of_layers,
+            "pc_fb_multiplier",
+        )
+        pc_error_multipliers = _expand_per_layer_values(
+            pc_error_multiplier,
+            self.number_of_layers,
+            "pc_error_multiplier",
+        )
+        if any(value < 0.0 for value in pc_ff_multipliers):
+            raise ValueError("pc_ff_multiplier values must be non-negative.")
+        if any(value < 0.0 for value in pc_fb_multipliers):
+            raise ValueError("pc_fb_multiplier values must be non-negative.")
+        if any(value < 0.0 for value in pc_error_multipliers):
+            raise ValueError("pc_error_multiplier values must be non-negative.")
+        if any(
+            ff_value + fb_value > 1.0
+            for ff_value, fb_value in zip(pc_ff_multipliers, pc_fb_multipliers)
+        ):
+            raise ValueError(
+                "Each pc_ff_multiplier + pc_fb_multiplier must be at most 1."
+            )
+        if pc_fb_multipliers[-1] != 0.0:
+            raise ValueError("The highest PCoder layer cannot receive feedback.")
+        self.register_buffer(
+            "pc_ff_multipliers",
+            torch.tensor(pc_ff_multipliers, dtype=torch.float32),
+        )
+        self.register_buffer(
+            "pc_fb_multipliers",
+            torch.tensor(pc_fb_multipliers, dtype=torch.float32),
+        )
+        self.register_buffer(
+            "pc_error_multipliers",
+            torch.tensor(pc_error_multipliers, dtype=torch.float32),
+        )
+        if self.task == "real_frame_pc" and self.error_state_mode != "ema":
+            raise ValueError(
+                "real_frame_pc requires error_state_mode='ema' so there is one "
+                "dynamic Target Flow error chain."
+            )
         self.future_feature_stage = int(future_feature_stage)
         if self.future_feature_stage not in {3, 4, 5}:
             raise ValueError(
@@ -250,6 +310,13 @@ class PVGG16TargetFlow(nn.Module):
         self.future_feature_temporal_fusion_mode = (
             future_feature_temporal_fusion_mode
         )
+        if self.task == "real_frame_pc" and (
+            self.future_feature_history_mode != "none"
+            or self.future_feature_temporal_fusion_mode != "none"
+        ):
+            raise ValueError(
+                "real_frame_pc does not use future-feature history or fusion modules."
+            )
         if future_feature_predictor_kernel_size not in {1, 3}:
             raise ValueError(
                 "future_feature_predictor_kernel_size must be 1 or 3, got "
@@ -292,26 +359,32 @@ class PVGG16TargetFlow(nn.Module):
         self.future_motion_radius = int(future_motion_radius)
         self.future_motion_patch_size = int(future_motion_patch_size)
         self.temporal_target_dim = 2 if self.temporal_target_mode == "ego_motion" else self.stage_channels[-1]
-        temporal_context_dim = self.stage_channels[-1] + 2 * sum(self.stage_channels)
-        self.temporal_predictor = nn.Sequential(
-            nn.Linear(temporal_context_dim, 1024),
-            nn.ReLU(inplace=False),
-            nn.Linear(1024, self.temporal_target_dim * self.num_temporal_horizons),
-        )
-        self.future_feature_predictor = nn.Sequential(
-            nn.Conv2d(
-                2 * self.future_feature_channels,
-                2 * self.future_feature_channels,
-                kernel_size=future_feature_predictor_kernel_size,
-                padding=future_feature_predictor_kernel_size // 2,
-            ),
-            nn.ReLU(inplace=False),
-            nn.Conv2d(
-                2 * self.future_feature_channels,
-                self.future_feature_channels,
-                kernel_size=1,
-            ),
-        )
+        self.input_prediction_module = None
+        self.temporal_predictor = None
+        self.future_feature_predictor = None
+        if self.task == "real_frame_pc":
+            self.input_prediction_module = _make_input_prediction_module()
+        else:
+            temporal_context_dim = self.stage_channels[-1] + 2 * sum(self.stage_channels)
+            self.temporal_predictor = nn.Sequential(
+                nn.Linear(temporal_context_dim, 1024),
+                nn.ReLU(inplace=False),
+                nn.Linear(1024, self.temporal_target_dim * self.num_temporal_horizons),
+            )
+            self.future_feature_predictor = nn.Sequential(
+                nn.Conv2d(
+                    2 * self.future_feature_channels,
+                    2 * self.future_feature_channels,
+                    kernel_size=future_feature_predictor_kernel_size,
+                    padding=future_feature_predictor_kernel_size // 2,
+                ),
+                nn.ReLU(inplace=False),
+                nn.Conv2d(
+                    2 * self.future_feature_channels,
+                    self.future_feature_channels,
+                    kernel_size=1,
+                ),
+            )
         self.temporal_fusion_module = None
         if self.future_feature_temporal_fusion_mode in {
             "two_frame_residual",
@@ -333,6 +406,9 @@ class PVGG16TargetFlow(nn.Module):
             nn.init.zeros_(self.temporal_fusion_module[-1].weight)
             nn.init.zeros_(self.temporal_fusion_module[-1].bias)
         self.layer_states = []
+        self.representation_state_memory = [
+            None for _ in range(self.number_of_layers)
+        ]
         self.error_state_memory = [None for _ in range(self.number_of_layers)]
         self.instant_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.recursive_error_state_memory = [None for _ in range(self.number_of_layers)]
@@ -346,9 +422,18 @@ class PVGG16TargetFlow(nn.Module):
         self.temporal_prediction = None
         self.temporal_target = None
         self.future_prediction_outputs = None
+        self.real_frame_update_count = 0
+        self.recurrence_outputs = None
+
+        if self.task == "real_frame_pc":
+            for parameter in self.parameters():
+                parameter.requires_grad_(False)
 
     def reset(self):
         self.layer_states = []
+        self.representation_state_memory = [
+            None for _ in range(self.number_of_layers)
+        ]
         self.error_state_memory = [None for _ in range(self.number_of_layers)]
         self.instant_error_state_memory = [None for _ in range(self.number_of_layers)]
         self.recursive_error_state_memory = [None for _ in range(self.number_of_layers)]
@@ -362,6 +447,8 @@ class PVGG16TargetFlow(nn.Module):
         self.temporal_prediction = None
         self.temporal_target = None
         self.future_prediction_outputs = None
+        self.real_frame_update_count = 0
+        self.recurrence_outputs = None
 
     @staticmethod
     def _resolve_memory(memory, reference_tensor: torch.Tensor):
@@ -387,6 +474,166 @@ class PVGG16TargetFlow(nn.Module):
             self.prediction_state_memory[layer_index],
             reference_tensor,
         )
+
+    def _prediction_module_for_layer(self, layer_index: int):
+        if layer_index == 0:
+            return self.input_prediction_module
+        return self.feedback_modules[layer_index - 1]
+
+    def _step_real_frame_recurrence(self, x: torch.Tensor):
+        """Advance every PCoder exactly once using only the observed frame."""
+        if self.task != "real_frame_pc":
+            raise RuntimeError("Real-frame recurrence requires task='real_frame_pc'.")
+
+        previous_representations = tuple(self.representation_state_memory)
+        previous_predictions = tuple(self.prediction_state_memory)
+        previous_dynamic_errors = tuple(self.error_state_memory)
+        frame_index = self.real_frame_update_count + 1
+        current_input = x
+        states = []
+
+        for layer_index, stage in enumerate(self.forward_stages):
+            with torch.no_grad():
+                feedforward_drive = stage(current_input)
+
+            previous_representation = self._resolve_memory(
+                previous_representations[layer_index],
+                feedforward_drive,
+            )
+            prediction_target = x if layer_index == 0 else states[-1].representation
+            previous_prediction = self._resolve_memory(
+                previous_predictions[layer_index],
+                prediction_target,
+            )
+            previous_dynamic_error = self._resolve_memory(
+                previous_dynamic_errors[layer_index],
+                prediction_target,
+            )
+            previous_feedback_prediction = None
+            if layer_index + 1 < self.number_of_layers:
+                previous_feedback_prediction = self._resolve_memory(
+                    previous_predictions[layer_index + 1],
+                    feedforward_drive,
+                )
+
+            prediction_module = self._prediction_module_for_layer(layer_index)
+            error_correction = project_dynamic_error_to_representation(
+                prediction_module,
+                previous_representation,
+                previous_prediction,
+                previous_dynamic_error,
+            )
+
+            if previous_representation is None:
+                representation = feedforward_drive
+            else:
+                ff_multiplier = self.pc_ff_multipliers[layer_index].to(
+                    feedforward_drive
+                )
+                fb_multiplier = self.pc_fb_multipliers[layer_index].to(
+                    feedforward_drive
+                )
+                error_multiplier = self.pc_error_multipliers[layer_index].to(
+                    feedforward_drive
+                )
+                representation = previous_representation + ff_multiplier * (
+                    feedforward_drive - previous_representation
+                )
+                if previous_feedback_prediction is not None:
+                    representation = representation + fb_multiplier * (
+                        previous_feedback_prediction - previous_representation
+                    )
+                if error_correction is not None:
+                    representation = representation - error_multiplier * error_correction
+
+            with torch.no_grad():
+                module_output = prediction_module(representation)
+                prediction = (
+                    module_output[-1]
+                    if isinstance(module_output, tuple)
+                    else module_output
+                )
+                instant_error = build_targetflow_instant_error(
+                    prediction,
+                    prediction_target,
+                )
+                dynamic_error = build_targetflow_error(
+                    prediction,
+                    prediction_target,
+                    previous_error=self._resolve_memory(
+                        previous_dynamic_error,
+                        instant_error,
+                    ),
+                    sample_time=self.dynamic_error_config.sample_time,
+                    time_constant=float(
+                        self.error_time_constants[layer_index].item()
+                    ),
+                    error_gain=float(self.error_gains[layer_index].item()),
+                    mode="ema",
+                )
+
+            state = RealFramePCoderLayerState(
+                layer_index=layer_index + 1,
+                frame_index=frame_index,
+                feedforward_drive=feedforward_drive.detach(),
+                previous_representation=(
+                    None
+                    if previous_representation is None
+                    else previous_representation.detach()
+                ),
+                previous_prediction=(
+                    None
+                    if previous_prediction is None
+                    else previous_prediction.detach()
+                ),
+                previous_feedback_prediction=(
+                    None
+                    if previous_feedback_prediction is None
+                    else previous_feedback_prediction.detach()
+                ),
+                previous_dynamic_error=(
+                    None
+                    if previous_dynamic_error is None
+                    else previous_dynamic_error.detach()
+                ),
+                error_correction=(
+                    None if error_correction is None else error_correction.detach()
+                ),
+                representation=representation.detach(),
+                prediction_target=prediction_target.detach(),
+                prediction=prediction.detach(),
+                instant_error=instant_error.detach(),
+                dynamic_error=dynamic_error.detach(),
+            )
+            states.append(state)
+            current_input = state.representation
+
+        self.layer_states = states
+        for layer_index, state in enumerate(states):
+            self.representation_state_memory[layer_index] = (
+                state.representation.detach()
+            )
+            self.prediction_state_memory[layer_index] = state.prediction.detach()
+            self.instant_error_state_memory[layer_index] = (
+                state.instant_error.detach()
+            )
+            self.error_state_memory[layer_index] = state.dynamic_error.detach()
+
+        self.real_frame_update_count = frame_index
+        self.recurrence_outputs = {
+            "frame_index": frame_index,
+            "updates_per_layer": tuple(1 for _ in states),
+            "used_future_frame": False,
+            "parameter_update": False,
+            "online_adaptation": False,
+            "layer_states": tuple(states),
+        }
+
+        current = self.forward_tail(states[-1].representation)
+        current = self.avgpool(current)
+        current = torch.flatten(current, 1)
+        with torch.no_grad():
+            return self.classifier(current)
 
     def _resolve_future_feature_history(self, current_top: torch.Tensor):
         mode = self.future_feature_history_mode
@@ -815,6 +1062,28 @@ class PVGG16TargetFlow(nn.Module):
         future_feature_target: torch.Tensor = None,
         future_feature_target_provider=None,
     ):
+        if self.task == "real_frame_pc":
+            forbidden_inputs = {
+                "top_target": top_target,
+                "next_x": next_x,
+                "temporal_top_targets": temporal_top_targets,
+                "future_x": future_x,
+                "temporal_target_override": temporal_target_override,
+                "top_target_provider": top_target_provider,
+                "future_feature_target": future_feature_target,
+                "future_feature_target_provider": future_feature_target_provider,
+            }
+            provided = [name for name, value in forbidden_inputs.items() if value is not None]
+            if duplicate_current_top_context:
+                provided.append("duplicate_current_top_context")
+            if provided:
+                raise ValueError(
+                    "real_frame_pc accepts only the current observed frame; received "
+                    + ", ".join(provided)
+                    + "."
+                )
+            return self._step_real_frame_recurrence(x)
+
         if top_target_provider is not None and any(
             value is not None
             for value in (top_target, next_x, temporal_top_targets, future_x)
@@ -1119,6 +1388,8 @@ class PVGG16TargetFlow(nn.Module):
         return self.classifier(current)
 
     def collect_learn_flow_losses(self):
+        if self.task == "real_frame_pc":
+            return [None for _ in self.layer_states], None
         per_layer = []
         total = None
         for state in self.layer_states:

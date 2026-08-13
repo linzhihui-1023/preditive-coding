@@ -51,6 +51,23 @@ The local checkouts are also separated. The frozen baseline remains at
 `/home/lin/predify2021_selective_adaptation`. Run new experiments and make all
 new edits only from the latter directory.
 
+As of 2026-08-13, the Stage-4 next-frame predictor route is closed to further
+extension. The active branch now defaults `PVGG16TargetFlow` to
+`task="real_frame_pc"`: one observed video frame advances each of the five
+original Predify PCoder states exactly once. No future-feature predictor or
+motion head is created in this mode, no future frame is accepted by its API,
+all network parameters are frozen, and every cross-frame state is detached.
+
+At frame `t`, layer `i` inherits the previous real frame's representation,
+prediction, and dynamic Target Flow error. The saved higher-layer prediction
+enters the original feedback term; the saved same-layer prediction and dynamic
+error define the original representation-space error-correction term. After
+that single update, the current prediction produces
+`r_t = target_t - prediction_t`, followed by the formal recurrence
+`epsilon_t = 0.207 r_t + 0.793 epsilon_(t-1)`. A segment reset clears all three
+hierarchical memories. The implementation is intentionally awaiting a causal
+chain review before any new KITTI experiment is run.
+
 The first experiment on the new branch is an inference-only persistence gate.
 It compares long-dwell and temporally shuffled Gaussian blur while exactly
 matching blur type, sigma multiset, occupancy, raw frames, and checkpoint.

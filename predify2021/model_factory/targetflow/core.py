@@ -54,6 +54,72 @@ class TargetFlowLayerState:
     parameter_grad_stats: Optional[dict] = None
 
 
+@dataclass
+class RealFramePCoderLayerState:
+    """One layer's immutable audit record for a single real-frame update."""
+
+    layer_index: int
+    frame_index: int
+    feedforward_drive: torch.Tensor
+    previous_representation: Optional[torch.Tensor] = None
+    previous_prediction: Optional[torch.Tensor] = None
+    previous_feedback_prediction: Optional[torch.Tensor] = None
+    previous_dynamic_error: Optional[torch.Tensor] = None
+    error_correction: Optional[torch.Tensor] = None
+    representation: Optional[torch.Tensor] = None
+    prediction_target: Optional[torch.Tensor] = None
+    prediction: Optional[torch.Tensor] = None
+    instant_error: Optional[torch.Tensor] = None
+    dynamic_error: Optional[torch.Tensor] = None
+
+
+def project_dynamic_error_to_representation(
+    prediction_module: nn.Module,
+    previous_representation: Optional[torch.Tensor],
+    previous_prediction: Optional[torch.Tensor],
+    previous_dynamic_error: Optional[torch.Tensor],
+):
+    """Project a detached output-space error through a frozen PCoder decoder.
+
+    The pseudo-target makes ``previous_dynamic_error`` the exact residual used
+    by an ordinary MSE error-correction gradient, while preventing gradients
+    from reaching model parameters or earlier video frames.
+    """
+    if (
+        previous_representation is None
+        or previous_prediction is None
+        or previous_dynamic_error is None
+    ):
+        return None
+
+    representation = previous_representation.detach().requires_grad_(True)
+    with torch.enable_grad():
+        module_output = prediction_module(representation)
+        prediction = module_output[-1] if isinstance(module_output, tuple) else module_output
+        dynamic_error = previous_dynamic_error.to(
+            device=prediction.device,
+            dtype=prediction.dtype,
+        )
+        historical_prediction = previous_prediction.to(
+            device=prediction.device,
+            dtype=prediction.dtype,
+        )
+        if (
+            dynamic_error.shape != prediction.shape
+            or historical_prediction.shape != prediction.shape
+        ):
+            return None
+        pseudo_target = historical_prediction + dynamic_error
+        correction_loss = nn.functional.mse_loss(prediction, pseudo_target)
+        correction = torch.autograd.grad(
+            correction_loss,
+            representation,
+            retain_graph=False,
+            create_graph=False,
+        )[0]
+    return correction.detach()
+
+
 def run_backward_target_flow(
     layer_states: Sequence[TargetFlowLayerState],
     feedback_modules,

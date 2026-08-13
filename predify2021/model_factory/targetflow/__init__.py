@@ -2,6 +2,7 @@ from .core import (
     TargetFlowDynamicErrorConfig,
     TargetFlowFeedbackModule,
     TargetFlowLayerState,
+    RealFramePCoderLayerState,
     TemporalPredictionErrorConfig,
     build_targetflow_error,
     build_targetflow_instant_error,
@@ -12,6 +13,7 @@ from .core import (
     build_targetflow_local_loss,
     build_targetflow_local_loss_from_error,
     compute_module_grad_stats,
+    project_dynamic_error_to_representation,
     run_backward_target_flow,
 )
 from .spatial_motion import (

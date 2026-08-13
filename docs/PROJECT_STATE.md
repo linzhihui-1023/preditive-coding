@@ -4,51 +4,65 @@ Last updated: 2026-08-13
 
 ## Active research direction
 
-The primary task is next-frame feature prediction, not the completed 2-DoF
-motion proxy. The intended outcome is a video representation that is more
-consistent across adjacent frames, robust to noise and blur, and able to adapt
-online when the environment changes.
+Stage-4 next-frame feature prediction is closed to further extension. Its
+completed results remain versioned below, but it is no longer the active model
+or the next experiment.
 
-The active model operates on a real video-frame stream:
+The active model is the inference-only `PVGG16TargetFlow` real-frame
+predictive-coding recurrence:
 
-1. The first frame initializes five layer states.
-2. Each later frame executes the model exactly once.
-3. Each frame inherits the previous five layer states, predictions, and dynamic
-   errors.
-4. The current feature and state completed at the previous transition predict
-   the next-frame feature.
-5. Training and validation preserve drive and frame order. Stream mode requires
-   batch size 1 and rejects shuffled pair loaders.
+1. A segment starts with `reset`; its first frame initializes five PCoder
+   representations from current feedforward drives.
+2. Each observed frame advances every PCoder exactly once. There are no
+   same-frame iterations.
+3. Frame `t` inherits only detached representations, predictions, and dynamic
+   Target Flow errors completed on frame `t-1`.
+4. Previous higher-layer predictions enter the original feedback terms.
+   Previous same-layer prediction errors are projected through frozen PCoder
+   decoders into the original error-correction terms.
+5. Current hierarchical residuals and dynamic errors are formed only after the
+   current representations and predictions exist, then detached for frame
+   `t+1`.
+6. The recurrence accepts no future frame or future target, creates no future
+   predictor, exposes no training loss, and performs no parameter or online
+   update.
 
-The earlier route that repeatedly ran multiple timesteps on the same image is
-cancelled and is not part of the active experiment design.
+The causal state chain awaiting review is:
 
-The completed experiment order is:
+```text
+Frame 1 -> r_1 -> epsilon_1 -> Frame 2 update -> r_2 -> epsilon_2
+```
 
-1. Keep the existing Target Flow residual and dynamic recurrence.
-2. Use next-frame feature prediction as the primary task.
-3. Add a separate, strict top-layer Temporal Prediction Error state without
-   changing the historical Target Flow residual recurrence.
-4. Test Copy-current, Current-only, and Temporal Error under matched causal
-   controls before tuning the new error state.
-5. Use same-drive controlled corruption only as a mechanistic transient test;
-   broader robustness and online-adaptation claims require a viable held-out
-   predictor first.
-6. Diagnose local future matching, then causal motion estimated from
-   `F_(t-1),F_t`; only after the causal warp passed Copy-current, use it as the
-   predictor base.
-7. Predict only the post-warp residual and keep deterministic warp as an
-   independent baseline.
+No formal experiment may start until this chain is inspected and accepted.
+The earlier same-image repeated-timestep route and all Stage-4 predictor
+variants are inactive.
 
-For transition `t -> t+1`, prediction must use `F_t` and history completed at
-`t-1`, such as `epsilon_(t-1)`. The current residual `r_t` and dynamic state
-`epsilon_t` are formed only after `I_(t+1)` arrives and are available for the
-next transition.
+For the formal dynamic Target Flow state, `Ts=0.1035`, `tau=0.5`, and `K=1`,
+so `epsilon_t = 0.207 r_t + 0.793 epsilon_(t-1)`.
 
 ## Current implementation
 
 - `predify2021/model_factory/pvgg16_targetflow.py`
-  - Implements five target-flow stages.
+  - Defaults to `task=real_frame_pc` and implements five real-frame PCoder
+    stages using the original PVGG16 feedforward boundaries and decoders.
+  - Snapshots every layer's previous state before processing the current frame,
+    preventing current-frame higher-layer predictions from leaking into the
+    historical feedback slots.
+  - Uses the original update coefficients
+    `beta=(0.2,0.4,0.4,0.5,0.6)`,
+    `lambda=(0.05,0.1,0.1,0.1,0)`, and
+    `alpha=(0.01,0.01,0.01,0.01,0.01)`.
+  - Creates the original Stage-1-to-image decoder in addition to the existing
+    Stage-2-through-Stage-5 decoders. It does not create the temporal motion
+    head, future-feature predictor, or temporal fusion module in real-frame
+    mode.
+  - Freezes every parameter and stores detached representation, prediction,
+    instantaneous residual, and dynamic-error memories per layer.
+  - Rejects every future-frame/target argument before any layer update and
+    resets all state at segment boundaries.
+  - Retains the older motion/future-feature tasks only to reproduce completed
+    versioned experiments; they are not the active direction.
+  - Historical implementation notes follow.
   - Defaults to recursive target flow: the detached future top feature is
     propagated through `T5 -> T4 -> T3 -> T2 -> T1`.
   - Separates the cross-frame error state (`instant`, `ema`, or `two_tap`) from the

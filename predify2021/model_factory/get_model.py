@@ -115,9 +115,16 @@ def _load_pcoder_weights(net, checkpoint_paths):
 
 
 def _load_targetflow_feedback_weights(net, checkpoint_paths):
-    # The target-flow skeleton uses stage-to-stage target modules aligned with
-    # legacy PCoders 2..5. PCoder 1 predicts the image and has no direct stage
-    # analogue here.
+    if net.input_prediction_module is not None:
+        checkpoint = torch.load(checkpoint_paths[0], map_location="cpu")
+        projector = net.input_prediction_module.projector
+        state_dict = _normalize_state_dict_for_module(
+            projector,
+            _extract_pmodule_state_dict(checkpoint),
+        )
+        projector.load_state_dict(state_dict)
+
+    # Stage-to-stage decoders correspond to legacy PCoders 2..5.
     for module_idx, checkpoint_path in enumerate(checkpoint_paths[1:], 0):
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         module = net.feedback_modules[module_idx]
@@ -151,13 +158,16 @@ def get_model(
     dynamic_error=True,
     error_state_mode=None,
     local_loss_error_source="instant",
-    error_sample_time=1.0,
-    error_time_constant=1.0,
+    error_sample_time=0.1035,
+    error_time_constant=0.5,
     error_gain=1.0,
     temporal_error_sample_time=1.0,
     temporal_error_time_constant=1.0,
     temporal_error_gain=1.0,
-    task="motion",
+    task="real_frame_pc",
+    pc_ff_multiplier=(0.2, 0.4, 0.4, 0.5, 0.6),
+    pc_fb_multiplier=(0.05, 0.1, 0.1, 0.1, 0.0),
+    pc_error_multiplier=(0.01, 0.01, 0.01, 0.01, 0.01),
     future_feature_stage=5,
     future_feature_history_mode="none",
     future_feature_temporal_fusion_mode="none",
@@ -217,6 +227,9 @@ def get_model(
             temporal_error_time_constant=temporal_error_time_constant,
             temporal_error_gain=temporal_error_gain,
             task=task,
+            pc_ff_multiplier=pc_ff_multiplier,
+            pc_fb_multiplier=pc_fb_multiplier,
+            pc_error_multiplier=pc_error_multiplier,
             future_feature_stage=future_feature_stage,
             future_feature_history_mode=future_feature_history_mode,
             future_feature_temporal_fusion_mode=(

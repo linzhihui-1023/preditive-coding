@@ -829,6 +829,74 @@ results/stage4_dynamic_error_state_phase1_eaf29a0/
 /tmp/predify-storage/experiments/stage4_dynamic_error_state_phase1_eaf29a0*
 ```
 
+## Real-frame predictive-coding recurrence (awaiting causal review)
+
+The Stage-4 future-prediction route is now stopped. Do not add another future
+predictor, fusion module, online update, or Stage-4 training variant. The new
+default `PVGG16TargetFlow` task is `real_frame_pc`, which uses the original
+five PVGG16 PCoder decoders and performs one update per observed video frame.
+
+For layer `i`, the complete frame-`t-1` snapshot is taken before any layer is
+advanced:
+
+```text
+R_(t-1)^i              previous representation
+p_(t-1)^i              previous same-layer prediction
+p_(t-1)^(i+1)          previous higher-layer prediction / feedback
+epsilon_(t-1)^i        previous dynamic Target Flow error
+```
+
+The current update is the original Predify location and ordering:
+
+```text
+g_(t-1)^i = grad_R MSE(
+    P_i(R_(t-1)^i),
+    stopgrad(p_(t-1)^i + epsilon_(t-1)^i)
+)
+
+R_t^i = beta_i ff_t^i
+      + lambda_i p_(t-1)^(i+1)
+      + (1 - beta_i - lambda_i) R_(t-1)^i
+      - alpha_i g_(t-1)^i
+```
+
+The highest layer has no feedback term. On a segment's first frame,
+`R_1^i = ff_1^i`. Current lower-layer representations remain the targets of
+their current higher-layer predictions, exactly as in the original hook
+schedule. Once the single update is complete:
+
+```text
+p_t^i       = P_i(R_t^i)
+r_t^i       = target_t^i - p_t^i
+epsilon_t^i = 0.207 r_t^i + 0.793 epsilon_(t-1)^i
+```
+
+The current `R_t`, `p_t`, `r_t`, and `epsilon_t` are detached before storage.
+The entire causal chain is therefore:
+
+```text
+Frame 1 -> r_1 -> epsilon_1
+                    |
+                    v
+Frame 2 state update -> r_2 -> epsilon_2
+```
+
+`real_frame_pc` rejects `next_x`, `future_x`, all future-target providers, and
+all target overrides before executing a layer. It creates neither
+`temporal_predictor` nor `future_feature_predictor`; all parameters have
+`requires_grad=False`, no local training loss is exposed, and reset clears the
+segment state and frame counter. Unit tests audit the exact second-frame update
+equation, historical feedback identity, dynamic formula, one update per layer,
+detachment, reset, future-input rejection, and parameter immutability.
+
+Do not run a formal experiment until the user has inspected and accepted this
+causal chain.
+
+## Frozen historical runners
+
+The commands below belong to completed predictor research. They remain for
+reproducibility and are not the next experiment on this branch.
+
 Run the three-condition 1x1 Temporal Error matrix:
 
 ```bash

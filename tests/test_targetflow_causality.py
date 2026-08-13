@@ -15,6 +15,7 @@ class TargetFlowCausalityTest(unittest.TestCase):
         torch.manual_seed(0)
         cls.model = PVGG16TargetFlow(
             backbone=vgg16(weights=None),
+            task="motion",
             temporal_target_mode="ego_motion",
             dynamic_error=True,
             error_sample_time=0.1,
