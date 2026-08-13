@@ -24,6 +24,7 @@ frozen baseline tag: predify-temporal-v1
 frozen baseline commit: 4cc7a21280881813dbb972415a74dc400843fcc6
 remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
 latest Gate 3 evaluation revision: 80c4aee
+latest Stage-4 prediction training revision: fdc4743
 ```
 
 All selective-online-adaptation work must stay on
@@ -699,6 +700,27 @@ Judge MSE, cosine, and normalized error against that same-stage reference;
 never compare Stage-4 and Stage-5 absolute MSE as if they shared a feature
 space. Radius 1 means one prediction-stage feature cell and is deliberately
 not auto-rescaled across stages.
+
+The formal Stage-4 run completed at revision `fdc4743`. Best-checkpoint replay
+selected epoch 1. On held-out drive 0011, aligned temporal difference had MSE
+`0.74586091` versus Stage-4 Copy-current `0.74053836`, cosine `0.85806100`
+versus `0.86544334`, and normalized error `0.49728997` versus `0.48848719`.
+All three same-stage checks failed. Train replay improved MSE by `6.815535%`,
+while the held-out change was `-0.718741%`. Treat this narrowly as a
+cross-drive generalization failure for the tested predictor, not as a
+cross-stage MSE comparison or evidence that Stage-4 lacks motion signal.
+
+Versioned audit artifacts:
+
+```text
+results/stage4_aligned_temporal_difference_fdc4743/
+```
+
+Server-only checkpoint and logs:
+
+```text
+/tmp/predify-storage/experiments/seed0_stage4_aligned_temporal_difference_fdc4743/
+```
 
 Run the three-condition 1x1 Temporal Error matrix:
 

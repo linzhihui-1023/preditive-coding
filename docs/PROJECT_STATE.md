@@ -161,6 +161,16 @@ next transition.
 - `predify2021/mce_scores/evaluate_kitti_warp_residual_matrix.py`
   - Rejects mismatched checkpoint forms or revisions and records Copy/base/final
     MSE, residual scale, frame provenance, warp coverage, and collisions.
+- `scripts/run_kitti_seed0_stage4_aligned_temporal_difference.sh`
+  - Runs the one-condition Stage-4 aligned temporal-difference follow-up from
+    a clean revision while retaining the Stage-5 Target Flow top.
+  - Fixes radius 1 in Stage-4 feature cells and evaluates only against
+    same-stage Copy-current over the same frames.
+- `predify2021/mce_scores/evaluate_kitti_aligned_temporal_difference.py`
+  - Enforces prediction-stage/Target-Flow-stage checkpoint separation and
+    replays both train and held-out drives into one per-frame schema.
+  - Records Stage, feature shape, MSE/cosine/normalized error, and signed and
+    relative improvements against same-stage Copy-current.
 - `predify2021/mce_scores/diagnose_kitti_future_feature_delta.py`
   - Re-evaluates a Current-only best checkpoint on ordered train and validation
     pairs and reports true/predicted delta scale, L2/RMS quantiles, norm ratio,
@@ -193,6 +203,15 @@ next transition.
   - Pins the public base `predify` dependency by commit and uses CPU PyTorch.
 
 ## Future-feature implementation status
+
+The Stage-4 aligned temporal-difference run completed at revision `fdc4743`.
+Its epoch-1 checkpoint improved fixed replay MSE by `6.815535%` on train drive
+0005 but changed held-out drive-0011 MSE by `-0.718741%` relative to Stage-4
+Copy-current. Cosine and normalized error also worsened, so all three
+same-stage checks failed. Audited artifacts are under
+`results/stage4_aligned_temporal_difference_fdc4743/`. This is a narrow
+cross-drive generalization result and must not be turned into an absolute
+Stage-4 versus Stage-5 MSE ranking.
 
 The causal future-feature path is implemented and unit tested. An initial
 two-pair train/two-pair validation GPU smoke run completed on `cuda:0` with

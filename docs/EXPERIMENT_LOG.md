@@ -1,5 +1,38 @@
 # Experiment Log
 
+## Stage-4 aligned temporal-difference predictor
+
+Date: 2026-08-13
+
+Git revision: `fdc47437931e03f1284a852b997952b29b963910`
+
+This single-condition run changed the future prediction space from VGG Stage 5
+to Stage 4 while keeping the Predify Target Flow top target at Stage 5. It
+trained only the Future Predictor on 153 ordered drive-0005 transitions and
+selected by MSE over 232 held-out drive-0011 transitions. The temporal input
+was `D_t=F_t^4-align(F_(t-1)^4,F_t^4)` with radius 1 in Stage-4 cells and a 3x3
+descriptor. All other aligned-difference controls remained fixed.
+
+Best-checkpoint replay selected epoch 1:
+
+| Split | Method MSE | Stage-4 Copy MSE | Aggregate gain |
+| --- | ---: | ---: | ---: |
+| Drive 0005 train | 2.01633201 | 2.16380702 | +6.815535% |
+| Drive 0011 held-out | 0.74586091 | 0.74053836 | -0.718741% |
+
+Held-out cosine was `0.85806100` versus Copy `0.86544334`; normalized error
+was `0.49728997` versus Copy `0.48848719`. All three same-stage checks failed.
+Training MSE decreased over all ten epochs while held-out MSE increased after
+epoch 1. This supports only a configuration-specific held-out generalization
+failure; Stage-4 and Stage-5 absolute MSE are not compared.
+
+The audit verified all 385 replay rows, summary aggregation, stage separation,
+feature shape, target/memory configuration, and checkpoint parameter shapes.
+Lightweight artifacts are under
+`results/stage4_aligned_temporal_difference_fdc4743/`; the 1.41 GB checkpoint
+and logs remain at
+`/tmp/predify-storage/experiments/seed0_stage4_aligned_temporal_difference_fdc4743/`.
+
 ## Gate 3: frozen persistence score versus 2-DoF degradation
 
 Date: 2026-08-12

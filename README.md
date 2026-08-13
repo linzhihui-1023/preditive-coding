@@ -136,6 +136,13 @@ with:
 scripts/run_kitti_seed0_stage4_aligned_temporal_difference.sh
 ```
 
+The formal seed-0 run at revision `fdc4743` selected epoch 1 and did not clear
+its same-stage held-out Copy-current gate. MSE was `0.74586091` versus
+`0.74053836`, cosine was `0.85806100` versus `0.86544334`, and normalized
+error was `0.49728997` versus `0.48848719`. Auditable lightweight outputs are
+under `results/stage4_aligned_temporal_difference_fdc4743/`; checkpoint and
+logs remain server-side.
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

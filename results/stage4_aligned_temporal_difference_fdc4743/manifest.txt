@@ -1,0 +1,10 @@
+git_revision=fdc47437931e03f1284a852b997952b29b963910
+output_root=/tmp/predify-storage/experiments/seed0_stage4_aligned_temporal_difference_fdc4743
+condition=stage4_aligned_temporal_difference
+future_feature_stage=4
+target_flow_top_stage=5
+train_drive=0005
+val_drive=0011
+motion_radius_stage4_cells=1
+metric_gate=same-stage-copy-current
+cross-stage-absolute-metric-comparison=forbidden

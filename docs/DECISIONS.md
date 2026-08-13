@@ -1,5 +1,23 @@
 # Research Decisions
 
+## 2026-08-13: Stage-4 aligned difference does not clear its same-stage gate
+
+Status: accepted
+
+The formal revision `fdc4743` run selected epoch 1. On held-out drive 0011,
+Stage-4 aligned temporal difference was worse than Stage-4 Copy-current in all
+three metrics: MSE `0.74586091` versus `0.74053836`, cosine `0.85806100`
+versus `0.86544334`, and normalized error `0.49728997` versus `0.48848719`.
+The MSE change was `-0.718741%`. The fixed-checkpoint train replay improved MSE
+by `6.815535%`, and the ten-epoch curve showed continued train improvement
+with monotonically worsening held-out MSE.
+
+Do not compare these absolute values with Stage-5 MSE. The result is limited to
+one seed, drive 0005 to 0011, radius 1 in Stage-4 feature cells, and the tested
+aligned-difference residual predictor. It records a held-out generalization
+failure for that configuration; it does not overturn the earlier causal
+Stage-4 warp diagnostic or establish that Stage-4 motion information is absent.
+
 ## 2026-08-13: Separate prediction stage from the Target Flow top
 
 Status: accepted
