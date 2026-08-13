@@ -274,7 +274,7 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
         self.model.reset()
         self.model.zero_grad(set_to_none=True)
 
-    def test_convgru_replaces_gradient_projection_and_uses_previous_error(self):
+    def test_convgru_replaces_gradient_projection_and_keeps_feedback_update(self):
         self.model.step_frame(self.frame1)
         first_states = RealFramePredictiveCodingTest._clone_states(
             self.model.layer_states
@@ -286,16 +286,35 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
             "convgru_error",
         )
         for layer_index, state in enumerate(self.model.layer_states):
+            previous_representation = first_states[layer_index]["representation"]
+            base_representation = previous_representation + (
+                self.model.pc_ff_multipliers[layer_index]
+                * (state.feedforward_drive - previous_representation)
+            )
+            feedback_drive = torch.zeros_like(state.feedforward_drive)
+            if layer_index + 1 < self.model.number_of_layers:
+                expected_feedback = first_states[layer_index + 1]["prediction"]
+                self.assertTrue(
+                    torch.equal(state.previous_feedback_prediction, expected_feedback)
+                )
+                feedback_drive = expected_feedback
+                base_representation = base_representation + (
+                    self.model.pc_fb_multipliers[layer_index]
+                    * (expected_feedback - previous_representation)
+                )
+            else:
+                self.assertIsNone(state.previous_feedback_prediction)
             with torch.no_grad():
                 error_drive = self.model.forward_stages[layer_index](
                     first_states[layer_index]["dynamic_error"]
                 )
                 expected = self.model.recurrent_transition_modules[layer_index](
-                    first_states[layer_index]["representation"],
+                    previous_representation,
                     state.feedforward_drive,
                     error_drive,
+                    feedback_drive,
+                    base_representation,
                 )
-            self.assertIsNone(state.previous_feedback_prediction)
             self.assertIsNone(state.error_correction)
             self.assertIsNone(state.error_scale)
             self.assertIsNone(state.c_sqrt)
@@ -339,6 +358,52 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
         )
         self.assertTrue(all(not memory.requires_grad for memory in memories))
         self.assertTrue(all(memory.grad_fn is None for memory in memories))
+
+    def test_zeroed_control_changes_only_the_transition_error_input(self):
+        zeroed = copy.deepcopy(self.model)
+        zeroed.real_frame_recurrent_error_input = "zeroed"
+        with torch.no_grad():
+            for transition in self.model.recurrent_transition_modules:
+                channels = transition.candidate.out_channels
+                transition.candidate.weight[:, channels : 2 * channels].zero_()
+                diagonal = torch.arange(channels)
+                transition.candidate.weight[diagonal, channels + diagonal, 0, 0] = 0.1
+            zeroed.recurrent_transition_modules.load_state_dict(
+                self.model.recurrent_transition_modules.state_dict()
+            )
+
+        self.model.reset()
+        zeroed.reset()
+        self.model.step_frame(self.frame1)
+        zeroed.step_frame(self.frame1)
+        self.model.step_frame(self.frame2)
+        zeroed.step_frame(self.frame2)
+
+        for dynamic_state, zeroed_state in zip(
+            self.model.layer_states, zeroed.layer_states
+        ):
+            self.assertTrue(
+                torch.equal(
+                    dynamic_state.previous_dynamic_error,
+                    zeroed_state.previous_dynamic_error,
+                )
+            )
+            self.assertTrue(
+                torch.equal(
+                    dynamic_state.previous_feedback_prediction,
+                    zeroed_state.previous_feedback_prediction,
+                )
+                if dynamic_state.previous_feedback_prediction is not None
+                else zeroed_state.previous_feedback_prediction is None
+            )
+        self.assertTrue(
+            any(
+                not torch.allclose(dynamic_state.representation, zeroed_state.representation)
+                for dynamic_state, zeroed_state in zip(
+                    self.model.layer_states, zeroed.layer_states
+                )
+            )
+        )
 
 
 if __name__ == "__main__":

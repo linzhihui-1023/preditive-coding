@@ -25,10 +25,19 @@ from predify2021.model_factory import get_model
 
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-CONDITIONS = ("current_stateful", "learned_recurrent_error")
+CONDITIONS = (
+    "current_stateful",
+    "learned_recurrent_error",
+    "learned_recurrent_error_zeroed",
+)
 
 
-def build_model(weights_path, transition_mode, checkpoint=None):
+def build_model(
+    weights_path,
+    transition_mode,
+    checkpoint=None,
+    recurrent_error_input="dynamic",
+):
     model = get_model(
         "pvgg_tf",
         pretrained=True,
@@ -40,6 +49,7 @@ def build_model(weights_path, transition_mode, checkpoint=None):
         error_time_constant=(0.5,) * 5,
         error_gain=(1.0,) * 5,
         real_frame_transition_mode=transition_mode,
+        real_frame_recurrent_error_input=recurrent_error_input,
     ).eval()
     if checkpoint is not None:
         payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
@@ -203,6 +213,7 @@ def sha256_file(path):
 def write_readme(path, summary):
     baseline = summary["conditions"]["current_stateful"]
     learned = summary["conditions"]["learned_recurrent_error"]
+    zeroed = summary["conditions"]["learned_recurrent_error_zeroed"]
     lines = [
         "# Learned Recurrent-error Validation",
         "",
@@ -215,9 +226,11 @@ def write_readme(path, summary):
         "| --- | ---: | ---: | ---: |",
         f"| Current stateful | {baseline['disturbance_mean_representation_normalized_l2']:.9f} | {baseline['recovery_first_10_mean_representation_normalized_l2']:.9f} | {baseline['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
         f"| Learned recurrent-error | {learned['disturbance_mean_representation_normalized_l2']:.9f} | {learned['recovery_first_10_mean_representation_normalized_l2']:.9f} | {learned['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
+        f"| Learned recurrent-error zeroed | {zeroed['disturbance_mean_representation_normalized_l2']:.9f} | {zeroed['recovery_first_10_mean_representation_normalized_l2']:.9f} | {zeroed['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
         "",
-        f"Disturbance relative improvement: {summary['comparison']['disturbance_relative_improvement_percent']:.6f}%.",
-        f"Direction: {summary['comparison']['direction']}.",
+        f"Learned vs current disturbance improvement: {summary['comparison']['learned_vs_current_improvement_percent']:.6f}%.",
+        f"Learned vs zeroed disturbance improvement: {summary['comparison']['learned_vs_zeroed_improvement_percent']:.6f}%.",
+        f"Conclusion: {summary['comparison']['conclusion']}.",
         "",
     ]
     Path(path).write_text("\n".join(lines), encoding="ascii")
@@ -261,6 +274,12 @@ def main():
         "learned_recurrent_error": build_model(
             weights_path, "convgru_error", checkpoint
         ),
+        "learned_recurrent_error_zeroed": build_model(
+            weights_path,
+            "convgru_error",
+            checkpoint,
+            recurrent_error_input="zeroed",
+        ),
     }
     rows = []
     for condition in CONDITIONS:
@@ -282,7 +301,19 @@ def main():
     learned_value = metrics["learned_recurrent_error"][
         "disturbance_mean_representation_normalized_l2"
     ]
-    relative_improvement = 100.0 * (baseline_value - learned_value) / baseline_value
+    zeroed_value = metrics["learned_recurrent_error_zeroed"][
+        "disturbance_mean_representation_normalized_l2"
+    ]
+    learned_vs_current = 100.0 * (
+        baseline_value - learned_value
+    ) / baseline_value
+    learned_vs_zeroed = 100.0 * (zeroed_value - learned_value) / zeroed_value
+    if learned_vs_current > 0.0 and learned_vs_zeroed > 0.0:
+        conclusion = "recurrent_transition_and_dynamic_error_both_help"
+    elif learned_vs_current > 0.0:
+        conclusion = "recurrent_transition_helps_without_dynamic_error_evidence"
+    else:
+        conclusion = "learned_recurrent_transition_does_not_beat_current_stateful"
     with (training_dir / "training_summary.json").open() as handle:
         training_summary = json.load(handle)
     summary = {
@@ -295,8 +326,10 @@ def main():
             "metric": "disturbance_mean_representation_normalized_l2",
             "current_stateful": baseline_value,
             "learned_recurrent_error": learned_value,
-            "disturbance_relative_improvement_percent": relative_improvement,
-            "direction": "improved" if relative_improvement > 0.0 else "worsened",
+            "learned_recurrent_error_zeroed": zeroed_value,
+            "learned_vs_current_improvement_percent": learned_vs_current,
+            "learned_vs_zeroed_improvement_percent": learned_vs_zeroed,
+            "conclusion": conclusion,
         },
         "protocol": {
             "train_drives": training_summary["train_drives"],
@@ -308,6 +341,9 @@ def main():
             "blur_kernel_size": BLUR_KERNEL_SIZE,
             "blur_sigma": BLUR_SIGMA,
             "dynamic_error": "epsilon_t=0.207*e_t+0.793*epsilon_(t-1)",
+            "learned_top_down_feedback": True,
+            "learned_and_zeroed_share_checkpoint": True,
+            "zeroed_control": "only recurrent transition error drive is zero",
             "cross_frame_state_detached": True,
             "future_predictor": False,
             "online_learning_during_validation": False,

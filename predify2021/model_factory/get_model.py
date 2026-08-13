@@ -169,6 +169,7 @@ def get_model(
     pc_fb_multiplier=(0.05, 0.1, 0.1, 0.1, 0.0),
     pc_error_multiplier=(0.01, 0.01, 0.01, 0.01, 0.01),
     real_frame_transition_mode="predify",
+    real_frame_recurrent_error_input="dynamic",
     future_feature_stage=5,
     future_feature_history_mode="none",
     future_feature_temporal_fusion_mode="none",
@@ -232,6 +233,7 @@ def get_model(
             pc_fb_multiplier=pc_fb_multiplier,
             pc_error_multiplier=pc_error_multiplier,
             real_frame_transition_mode=real_frame_transition_mode,
+            real_frame_recurrent_error_input=real_frame_recurrent_error_input,
             future_feature_stage=future_feature_stage,
             future_feature_history_mode=future_feature_history_mode,
             future_feature_temporal_fusion_mode=(

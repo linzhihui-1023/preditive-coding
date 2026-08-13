@@ -178,6 +178,8 @@ def main():
                     "epoch": epoch,
                     "val_prediction_mse": best_val,
                     "transition_mode": "convgru_error",
+                    "top_down_feedback": True,
+                    "recurrent_error_input": "dynamic",
                     "dynamic_error": "epsilon_t=0.207*e_t+0.793*epsilon_(t-1)",
                     "train_drives": TRAIN_DRIVES,
                     "val_drives": VAL_DRIVES,
@@ -215,6 +217,9 @@ def main():
             for parameter in model.recurrent_transition_modules.parameters()
         ),
         "objective": "mean existing per-layer PCoder prediction MSE",
+        "transition": (
+            "original feedforward+feedback base plus ConvGRU error correction"
+        ),
         "bptt": False,
         "cross_frame_state_detached": True,
         "history": history,

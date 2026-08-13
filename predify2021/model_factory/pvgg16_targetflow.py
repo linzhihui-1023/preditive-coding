@@ -94,7 +94,7 @@ class ConvGRUErrorTransition(nn.Module):
 
     def __init__(self, channels: int):
         super().__init__()
-        combined_channels = 3 * channels
+        combined_channels = 4 * channels
         self.gates = nn.Conv2d(combined_channels, 2 * channels, kernel_size=1)
         self.candidate = nn.Conv2d(combined_channels, channels, kernel_size=1)
 
@@ -109,10 +109,17 @@ class ConvGRUErrorTransition(nn.Module):
         previous_representation: torch.Tensor,
         feedforward_drive: torch.Tensor,
         error_drive: torch.Tensor,
+        feedback_drive: torch.Tensor,
+        base_representation: torch.Tensor,
     ):
         reset_gate, update_gate = self.gates(
             torch.cat(
-                (previous_representation, feedforward_drive, error_drive),
+                (
+                    previous_representation,
+                    feedforward_drive,
+                    error_drive,
+                    feedback_drive,
+                ),
                 dim=1,
             )
         ).chunk(2, dim=1)
@@ -121,16 +128,17 @@ class ConvGRUErrorTransition(nn.Module):
         candidate_delta = torch.tanh(
             self.candidate(
                 torch.cat(
-                    (feedforward_drive, error_drive, reset_gate * previous_representation),
+                    (
+                        feedforward_drive,
+                        error_drive,
+                        feedback_drive,
+                        reset_gate * previous_representation,
+                    ),
                     dim=1,
                 )
             )
         )
-        candidate_representation = feedforward_drive + candidate_delta
-        return (
-            (1.0 - update_gate) * previous_representation
-            + update_gate * candidate_representation
-        )
+        return base_representation + update_gate * candidate_delta
 
 
 class PVGG16TargetFlow(nn.Module):
@@ -163,6 +171,7 @@ class PVGG16TargetFlow(nn.Module):
         pc_fb_multiplier=(0.05, 0.1, 0.1, 0.1, 0.0),
         pc_error_multiplier=(0.01, 0.01, 0.01, 0.01, 0.01),
         real_frame_transition_mode: str = "predify",
+        real_frame_recurrent_error_input: str = "dynamic",
         future_feature_stage: int = 5,
         future_feature_history_mode: str = "none",
         future_feature_temporal_fusion_mode: str = "none",
@@ -288,6 +297,19 @@ class PVGG16TargetFlow(nn.Module):
                 "real_frame_transition_mode is configurable only for real_frame_pc."
             )
         self.real_frame_transition_mode = real_frame_transition_mode
+        if real_frame_recurrent_error_input not in {"dynamic", "zeroed"}:
+            raise ValueError(
+                "Unsupported real_frame_recurrent_error_input: "
+                f"{real_frame_recurrent_error_input}"
+            )
+        if (
+            real_frame_recurrent_error_input != "dynamic"
+            and self.real_frame_transition_mode != "convgru_error"
+        ):
+            raise ValueError(
+                "Zeroed recurrent error input requires convgru_error mode."
+            )
+        self.real_frame_recurrent_error_input = real_frame_recurrent_error_input
         pc_ff_multipliers = _expand_per_layer_values(
             pc_ff_multiplier,
             self.number_of_layers,
@@ -596,16 +618,34 @@ class PVGG16TargetFlow(nn.Module):
             error_scale = None
             c_sqrt = None
             if self.real_frame_transition_mode == "convgru_error":
-                previous_feedback_prediction = None
                 if previous_representation is None:
                     representation = feedforward_drive
                 else:
+                    ff_multiplier = self.pc_ff_multipliers[layer_index].to(
+                        feedforward_drive
+                    )
+                    fb_multiplier = self.pc_fb_multipliers[layer_index].to(
+                        feedforward_drive
+                    )
+                    base_representation = previous_representation + ff_multiplier * (
+                        feedforward_drive - previous_representation
+                    )
+                    feedback_drive = torch.zeros_like(feedforward_drive)
+                    if previous_feedback_prediction is not None:
+                        feedback_drive = previous_feedback_prediction
+                        base_representation = base_representation + fb_multiplier * (
+                            previous_feedback_prediction - previous_representation
+                        )
                     with torch.no_grad():
                         error_drive = stage(previous_dynamic_error)
+                        if self.real_frame_recurrent_error_input == "zeroed":
+                            error_drive = torch.zeros_like(error_drive)
                     representation = self.recurrent_transition_modules[layer_index](
                         previous_representation,
                         feedforward_drive,
                         error_drive,
+                        feedback_drive,
+                        base_representation,
                     )
                 module_output = prediction_module(representation)
                 prediction = (
