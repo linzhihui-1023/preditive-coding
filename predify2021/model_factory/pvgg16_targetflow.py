@@ -90,11 +90,11 @@ def _make_input_prediction_module():
 
 
 class ConvGRUErrorTransition(nn.Module):
-    """One-cell state transition driven by a matched recurrent input and feedback."""
+    """One-cell state transition driven by observation, error memory, and feedback."""
 
     def __init__(self, channels: int):
         super().__init__()
-        combined_channels = 3 * channels
+        combined_channels = 4 * channels
         self.gates = nn.Conv2d(combined_channels, 2 * channels, kernel_size=1)
         self.candidate = nn.Conv2d(combined_channels, channels, kernel_size=1)
 
@@ -107,6 +107,7 @@ class ConvGRUErrorTransition(nn.Module):
     def forward(
         self,
         previous_representation: torch.Tensor,
+        observation_drive: torch.Tensor,
         error_drive: torch.Tensor,
         feedback_drive: torch.Tensor,
         base_representation: torch.Tensor,
@@ -115,6 +116,7 @@ class ConvGRUErrorTransition(nn.Module):
             torch.cat(
                 (
                     previous_representation,
+                    observation_drive,
                     error_drive,
                     feedback_drive,
                 ),
@@ -127,6 +129,7 @@ class ConvGRUErrorTransition(nn.Module):
             self.candidate(
                 torch.cat(
                     (
+                        observation_drive,
                         error_drive,
                         feedback_drive,
                         reset_gate * previous_representation,
@@ -318,6 +321,9 @@ class PVGG16TargetFlow(nn.Module):
             )
         self.real_frame_transition_mode = real_frame_transition_mode
         if real_frame_recurrent_error_input not in {
+            "temporal_only",
+            "instant",
+            "memory",
             "dynamic",
             "observation",
             "zeroed",
@@ -327,7 +333,7 @@ class PVGG16TargetFlow(nn.Module):
                 f"{real_frame_recurrent_error_input}"
             )
         if (
-            real_frame_recurrent_error_input != "dynamic"
+            real_frame_recurrent_error_input not in {"temporal_only", "instant", "memory", "dynamic"}
             and self.real_frame_transition_mode != "convgru_error"
         ):
             raise ValueError("Matched recurrent input modes require convgru_error mode.")
@@ -558,12 +564,6 @@ class PVGG16TargetFlow(nn.Module):
             if self.recurrent_error_encoder_modules is not None:
                 for parameter in self.recurrent_error_encoder_modules.parameters():
                     parameter.requires_grad_(True)
-                for module in (
-                    self.input_prediction_module,
-                    *self.feedback_modules,
-                ):
-                    for parameter in module.parameters():
-                        parameter.requires_grad_(True)
 
     def reset(self):
         self.layer_states = []
@@ -744,18 +744,25 @@ class PVGG16TargetFlow(nn.Module):
                         base_representation = base_representation + fb_multiplier * (
                             previous_feedback_prediction - previous_representation
                         )
-                    with torch.no_grad():
-                        if self.real_frame_recurrent_error_input == "observation":
-                            recurrent_drive = feedforward_drive
-                    if self.real_frame_recurrent_error_input == "dynamic":
-                        recurrent_drive = self.recurrent_error_encoder_modules[
+                    if self.real_frame_recurrent_error_input in {
+                        "instant",
+                        "memory",
+                        "dynamic",
+                    }:
+                        error_source = (
+                            instant_error
+                            if self.real_frame_recurrent_error_input == "instant"
+                            else dynamic_error
+                        )
+                        error_drive = self.recurrent_error_encoder_modules[
                             layer_index
-                        ](instant_error, feedforward_drive.shape[-2:])
-                    elif self.real_frame_recurrent_error_input == "zeroed":
-                        recurrent_drive = torch.zeros_like(feedforward_drive)
+                        ](error_source, feedforward_drive.shape[-2:])
+                    else:
+                        error_drive = torch.zeros_like(feedforward_drive)
                     representation = self.recurrent_transition_modules[layer_index](
                         previous_representation,
-                        recurrent_drive,
+                        feedforward_drive.detach(),
+                        error_drive,
                         feedback_drive,
                         base_representation,
                     )

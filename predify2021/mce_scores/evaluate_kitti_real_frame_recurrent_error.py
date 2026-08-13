@@ -11,15 +11,17 @@ import torch
 from predify2021.mce_scores.evaluate_kitti_real_frame_pc_phase1 import (
     ALLOWED_DRIVES,
     BASELINE_FRAMES,
-    BLUR_KERNEL_SIZE,
-    BLUR_SIGMA,
     DISTURBANCE_FRAMES,
     FORBIDDEN_TEST_DRIVE_IDS,
     RECOVERY_FRAMES,
-    build_drive_datasets,
     normalized_representation_distance,
     phase_for_frame,
     tensor_rms,
+)
+from predify2021.mce_scores.kitti_controlled_corruption import (
+    ControlledCorruptionConfig,
+    ControlledCorruptionKITTIDataset,
+    ExplicitSeveritySchedule,
 )
 from predify2021.model_factory import get_model
 
@@ -27,14 +29,27 @@ from predify2021.model_factory import get_model
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 CONDITIONS = (
     "current_stateful",
-    "observation_driven_recurrent",
-    "error_driven_recurrent_v2",
+    "temporal_only",
+    "instant_error",
+    "error_memory",
 )
 CORE_CONDITIONS = (
     "current_stateful",
-    "observation_driven_recurrent",
-    "error_driven_recurrent_v2",
+    "temporal_only",
+    "instant_error",
+    "error_memory",
 )
+CORRUPTIONS = {
+    "gaussian_blur": ControlledCorruptionConfig(
+        corruption_type="gaussian_blur",
+        blur_kernel_size=11,
+        blur_sigma=3.0,
+    ),
+    "brightness_overexposure": ControlledCorruptionConfig(
+        corruption_type="bias",
+        bias_rgb=(0.15, 0.15, 0.15),
+    ),
+}
 
 
 def build_model(
@@ -65,20 +80,77 @@ def build_model(
             model.recurrent_error_encoder_modules.load_state_dict(
                 payload["recurrent_error_encoder_state_dict"]
             )
-        prediction_state = payload.get("prediction_state_dict")
-        if prediction_state is not None:
-            model.input_prediction_module.load_state_dict(
-                prediction_state["input_prediction_module"]
-            )
-            model.feedback_modules.load_state_dict(
-                prediction_state["feedback_modules"]
-            )
     model.requires_grad_(False)
     return model
 
 
 def checkpoint_for(training_dir, condition):
     return training_dir / f"best_{condition}.pt"
+
+
+def select_protocol_raw_frames(dataset):
+    total_frames = BASELINE_FRAMES + DISTURBANCE_FRAMES + RECOVERY_FRAMES
+    for sample_segment in dataset.valid_sample_segments:
+        starts = tuple(
+            int(dataset.valid_start_indices[index]) for index in sample_segment
+        )
+        raw_frames = (*starts, starts[-1] + 1)
+        if len(raw_frames) >= total_frames:
+            return tuple(raw_frames[:total_frames])
+    raise ValueError(f"No contiguous KITTI segment contains {total_frames} frames.")
+
+
+def build_corruption_drive_datasets(
+    root,
+    drive,
+    camera,
+    fixed_dt_s,
+    tolerance,
+    config,
+):
+    schedule = ExplicitSeveritySchedule(
+        baseline_frames=BASELINE_FRAMES,
+        disturbance_severities=(1.0,) * DISTURBANCE_FRAMES,
+        recovery_frames=RECOVERY_FRAMES,
+    )
+    probe = ControlledCorruptionKITTIDataset(
+        root,
+        drive,
+        camera=camera,
+        horizons=(1,),
+        fixed_dt_s=fixed_dt_s,
+        dt_tolerance_s=tolerance,
+        schedule=schedule,
+        corruption_config=config,
+        corruption_enabled=False,
+    )
+    raw_frames = select_protocol_raw_frames(probe)
+    schedule_start = raw_frames[0]
+    clean = ControlledCorruptionKITTIDataset(
+        root,
+        drive,
+        camera=camera,
+        horizons=(1,),
+        fixed_dt_s=fixed_dt_s,
+        dt_tolerance_s=tolerance,
+        schedule=schedule,
+        corruption_config=config,
+        schedule_start_raw_index=schedule_start,
+        corruption_enabled=False,
+    )
+    corrupted = ControlledCorruptionKITTIDataset(
+        root,
+        drive,
+        camera=camera,
+        horizons=(1,),
+        fixed_dt_s=fixed_dt_s,
+        dt_tolerance_s=tolerance,
+        schedule=schedule,
+        corruption_config=config,
+        schedule_start_raw_index=schedule_start,
+        corruption_enabled=True,
+    )
+    return clean, corrupted, raw_frames
 
 
 def assert_state(model, expected_frame_index):
@@ -105,7 +177,7 @@ def assert_state(model, expected_frame_index):
             raise RuntimeError("Dynamic-error recurrence changed.")
 
 
-def evaluate_condition(base_model, condition, datasets, seed):
+def evaluate_condition(base_model, condition, corruption_name, datasets, seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     clean_model = copy.deepcopy(base_model).to(DEVICE).eval()
@@ -160,6 +232,7 @@ def evaluate_condition(base_model, condition, datasets, seed):
                 rows.append(
                     {
                         "condition": condition,
+                        "corruption": corruption_name,
                         "drive": drive,
                         "frame_offset": frame_offset,
                         "phase": phase,
@@ -266,59 +339,103 @@ def sha256_file(path):
 
 
 def write_readme(path, summary):
-    baseline = summary["conditions"]["current_stateful"]
-    observation = summary["conditions"]["observation_driven_recurrent"]
-    learned = summary["conditions"]["error_driven_recurrent_v2"]
     lines = [
-        "# Prediction-error-driven Recurrent V2 Validation",
+        "# Error-memory Recurrent Validation",
         "",
-        "Frozen backbone and non-recurrent Predify body. The recurrent transition, "
-        "temporal predictor, and dedicated signed-error encoder were trained on "
-        "drives 0005/0013/0014/0036. "
-        "Validation uses drives 0011/0039 and the unchanged 40 clean / 80 blur / "
-        "40 recovery protocol. Frozen Test drives 0051/0056 were not read.",
-        "",
-        "| Condition | Next-frame MSE | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |",
-        "| --- | ---: | ---: | ---: | ---: |",
-        f"| Current stateful | {baseline['mean_next_frame_prediction_mse']:.9f} | {baseline['disturbance_mean_representation_normalized_l2']:.9f} | {baseline['recovery_first_10_mean_representation_normalized_l2']:.9f} | {baseline['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
-        f"| Observation-driven recurrent | {observation['mean_next_frame_prediction_mse']:.9f} | {observation['disturbance_mean_representation_normalized_l2']:.9f} | {observation['recovery_first_10_mean_representation_normalized_l2']:.9f} | {observation['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
-        f"| Error-driven recurrent v2 | {learned['mean_next_frame_prediction_mse']:.9f} | {learned['disturbance_mean_representation_normalized_l2']:.9f} | {learned['recovery_first_10_mean_representation_normalized_l2']:.9f} | {learned['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
-        "",
-        f"Error-driven vs current disturbance improvement: {summary['comparison']['error_vs_current_improvement_percent']:.6f}%.",
-        f"Error-driven vs observation disturbance improvement: {summary['comparison']['error_vs_observation_improvement_percent']:.6f}%.",
-        f"Conclusion: {summary['comparison']['conclusion']}.",
-        "",
-        "## Per Drive",
-        "",
-        "| Drive | Current | Observation | Error |",
-        "| --- | ---: | ---: | ---: |",
+        "VGG, original Predify, and feedback decoders are frozen. Only the "
+        "observation/error recurrent transition and signed-error encoder train. "
+        "Validation uses drives 0011/0039 and the unchanged 40 clean / 80 "
+        "corruption / 40 recovery protocol. Frozen Test drives 0051/0056 were "
+        "not read.",
     ]
-    for drive in summary["protocol"]["val_drives"]:
-        lines.append(
-            f"| {drive.split('_drive_')[-1].split('_sync')[0]} | "
-            f"{baseline['per_drive'][drive]['disturbance_mean_representation_normalized_l2']:.9f} | "
-            f"{observation['per_drive'][drive]['disturbance_mean_representation_normalized_l2']:.9f} | "
-            f"{learned['per_drive'][drive]['disturbance_mean_representation_normalized_l2']:.9f} |"
-        )
-    lines.extend(
-        [
+    for corruption, result in summary["corruptions"].items():
+        conditions = result["conditions"]
+        lines.extend([
             "",
-            "## Per Layer",
+            f"## {corruption}",
             "",
-            "| Layer | Current | Observation | Error |",
-            "| ---: | ---: | ---: | ---: |",
-        ]
-    )
-    for layer in range(1, 6):
-        key = str(layer)
-        lines.append(
-            f"| {layer} | "
-            f"{baseline['per_layer'][key]['disturbance_mean_representation_normalized_l2']:.9f} | "
-            f"{observation['per_layer'][key]['disturbance_mean_representation_normalized_l2']:.9f} | "
-            f"{learned['per_layer'][key]['disturbance_mean_representation_normalized_l2']:.9f} |"
-        )
+            "| Condition | Next-frame MSE | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |",
+            "| --- | ---: | ---: | ---: | ---: |",
+        ])
+        for condition in CONDITIONS:
+            metric = conditions[condition]
+            lines.append(
+                f"| {condition} | {metric['mean_next_frame_prediction_mse']:.9f} | "
+                f"{metric['disturbance_mean_representation_normalized_l2']:.9f} | "
+                f"{metric['recovery_first_10_mean_representation_normalized_l2']:.9f} | "
+                f"{metric['recovery_last_10_mean_representation_normalized_l2']:.9f} |"
+            )
+        lines.extend([
+            "",
+            f"Conclusion: {result['comparison']['conclusion']}.",
+            "",
+            "| Drive | temporal_only | instant_error | error_memory |",
+            "| --- | ---: | ---: | ---: |",
+        ])
+        for drive in summary["protocol"]["val_drives"]:
+            lines.append(
+                f"| {drive.split('_drive_')[-1].split('_sync')[0]} | "
+                f"{conditions['temporal_only']['per_drive'][drive]['disturbance_mean_representation_normalized_l2']:.9f} | "
+                f"{conditions['instant_error']['per_drive'][drive]['disturbance_mean_representation_normalized_l2']:.9f} | "
+                f"{conditions['error_memory']['per_drive'][drive]['disturbance_mean_representation_normalized_l2']:.9f} |"
+            )
+    lines.extend(["", f"Overall conclusion: {summary['overall_conclusion']}."])
     lines.append("")
     Path(path).write_text("\n".join(lines), encoding="ascii")
+
+
+def compare_conditions(metrics):
+    temporal = metrics["temporal_only"]["disturbance_mean_representation_normalized_l2"]
+    instant = metrics["instant_error"]["disturbance_mean_representation_normalized_l2"]
+    memory = metrics["error_memory"]["disturbance_mean_representation_normalized_l2"]
+    per_drive = {}
+    for drive in metrics["temporal_only"]["per_drive"]:
+        drive_temporal = metrics["temporal_only"]["per_drive"][drive][
+            "disturbance_mean_representation_normalized_l2"
+        ]
+        drive_instant = metrics["instant_error"]["per_drive"][drive][
+            "disturbance_mean_representation_normalized_l2"
+        ]
+        drive_memory = metrics["error_memory"]["per_drive"][drive][
+            "disturbance_mean_representation_normalized_l2"
+        ]
+        per_drive[drive] = {
+            "temporal_only": drive_temporal,
+            "instant_error": drive_instant,
+            "error_memory": drive_memory,
+            "memory_lt_instant_lt_temporal": (
+                drive_memory < drive_instant < drive_temporal
+            ),
+            "memory_approximately_instant_both_lt_temporal": (
+                abs(drive_memory - drive_instant) <= 0.01 * max(drive_instant, 1e-12)
+                and drive_memory < drive_temporal
+                and drive_instant < drive_temporal
+            ),
+        }
+    if memory < instant < temporal and all(
+        item["memory_lt_instant_lt_temporal"] for item in per_drive.values()
+    ):
+        conclusion = "supports_accumulated_prediction_error_memory"
+    elif (
+        abs(memory - instant) <= 0.01 * max(instant, 1e-12)
+        and memory < temporal
+        and instant < temporal
+    ):
+        conclusion = "error_useful_but_accumulated_memory_has_no_extra_value"
+    elif memory >= temporal and instant >= temporal:
+        conclusion = "benefit_mainly_from_temporal_recurrence"
+    else:
+        conclusion = "mixed_drive_or_metric_direction"
+    return {
+        "metric": "disturbance_mean_representation_normalized_l2",
+        "temporal_only": temporal,
+        "instant_error": instant,
+        "error_memory": memory,
+        "memory_vs_temporal_improvement_percent": 100.0 * (temporal - memory) / temporal,
+        "memory_vs_instant_improvement_percent": 100.0 * (instant - memory) / instant,
+        "per_drive": per_drive,
+        "conclusion": conclusion,
+    }
 
 
 def main():
@@ -327,10 +444,10 @@ def main():
     revision = os.environ["PREDIFY_GIT_REVISION"]
     output_dir = Path(os.environ["PREDIFY_RECURRENT_ERROR_EVAL_OUTPUT_DIR"])
     training_dir = Path(os.environ["PREDIFY_RECURRENT_ERROR_TRAIN_OUTPUT_DIR"])
-    error_checkpoint = checkpoint_for(training_dir, "error_driven_recurrent_v2")
-    observation_checkpoint = checkpoint_for(
-        training_dir, "observation_driven_recurrent"
-    )
+    checkpoints = {
+        condition: checkpoint_for(training_dir, condition)
+        for condition in ("temporal_only", "instant_error", "error_memory")
+    }
     weights_path = os.environ["PREDIFY_PCODER_WEIGHTS"]
     root = os.environ["PREDIFY_KITTI_ROOT"]
     camera = os.environ.get("PREDIFY_KITTI_CAMERA", "image_02")
@@ -353,79 +470,96 @@ def main():
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    datasets = {
-        drive: build_drive_datasets(root, drive, camera, fixed_dt_s, tolerance)
-        for drive in drives
-    }
     models = {
         "current_stateful": build_model(weights_path, "predify"),
-        "observation_driven_recurrent": build_model(
+        "temporal_only": build_model(
             weights_path,
             "convgru_error",
-            observation_checkpoint,
-            recurrent_input="observation",
+            checkpoints["temporal_only"],
+            recurrent_input="temporal_only",
         ),
-        "error_driven_recurrent_v2": build_model(
-            weights_path, "convgru_error", error_checkpoint
+        "instant_error": build_model(
+            weights_path,
+            "convgru_error",
+            checkpoints["instant_error"],
+            recurrent_input="instant",
+        ),
+        "error_memory": build_model(
+            weights_path,
+            "convgru_error",
+            checkpoints["error_memory"],
+            recurrent_input="memory",
         ),
     }
     rows = []
-    for condition in CONDITIONS:
-        print(f"Evaluating {condition} on {DEVICE}...", flush=True)
-        rows.extend(
-            evaluate_condition(models[condition], condition, datasets, seed)
-        )
-        del models[condition]
-
-    metrics = {
-        condition: condition_metrics(
-            [row for row in rows if row["condition"] == condition]
-        )
-        for condition in CONDITIONS
-    }
-    baseline_value = metrics["current_stateful"][
-        "disturbance_mean_representation_normalized_l2"
-    ]
-    observation_value = metrics["observation_driven_recurrent"][
-        "disturbance_mean_representation_normalized_l2"
-    ]
-    learned_value = metrics["error_driven_recurrent_v2"][
-        "disturbance_mean_representation_normalized_l2"
-    ]
-    error_vs_current = 100.0 * (
-        baseline_value - learned_value
-    ) / baseline_value
-    error_vs_observation = 100.0 * (
-        observation_value - learned_value
-    ) / observation_value
-    if error_vs_current > 0.0 and error_vs_observation > 5.0:
-        conclusion = "prediction_error_has_independent_value"
-    elif error_vs_current > 0.0 and abs(error_vs_observation) <= 5.0:
-        conclusion = "benefit_mainly_from_recurrent_temporal_modeling"
-    elif observation_value < learned_value:
-        conclusion = "strict_error_driven_mechanism_not_supported"
-    elif error_vs_current > 0.0:
-        conclusion = "weak_error_advantage_over_observation"
+    corruption_results = {}
+    for corruption_name, config in CORRUPTIONS.items():
+        datasets = {
+            drive: build_corruption_drive_datasets(
+                root,
+                drive,
+                camera,
+                fixed_dt_s,
+                tolerance,
+                config,
+            )
+            for drive in drives
+        }
+        for condition in CONDITIONS:
+            print(f"Evaluating {condition} on {corruption_name}...", flush=True)
+            rows.extend(
+                evaluate_condition(
+                    models[condition],
+                    condition,
+                    corruption_name,
+                    datasets,
+                    seed,
+                )
+            )
+        metrics = {
+            condition: condition_metrics(
+                [
+                    row for row in rows
+                    if row["condition"] == condition
+                    and row["corruption"] == corruption_name
+                ]
+            )
+            for condition in CONDITIONS
+        }
+        corruption_results[corruption_name] = {
+            "conditions": metrics,
+            "comparison": compare_conditions(metrics),
+            "config": config.to_dict(),
+        }
+    if all(
+        result["comparison"]["conclusion"]
+        == "supports_accumulated_prediction_error_memory"
+        for result in corruption_results.values()
+    ):
+        overall_conclusion = "supports_accumulated_prediction_error_memory"
+    elif all(
+        result["comparison"]["conclusion"]
+        == "error_useful_but_accumulated_memory_has_no_extra_value"
+        for result in corruption_results.values()
+    ):
+        overall_conclusion = "error_useful_but_accumulated_memory_has_no_extra_value"
+    elif all(
+        result["comparison"]["conclusion"]
+        == "benefit_mainly_from_temporal_recurrence"
+        for result in corruption_results.values()
+    ):
+        overall_conclusion = "benefit_mainly_from_temporal_recurrence"
     else:
-        conclusion = "learned_recurrent_transition_does_not_beat_current_stateful"
+        overall_conclusion = "mixed_corruption_results"
     with (training_dir / "training_summary.json").open() as handle:
         training_summary = json.load(handle)
     summary = {
-        "experiment": "real_frame_error_driven_v2_validation",
+        "experiment": "real_frame_error_memory_validation",
         "git_revision": revision,
         "device": str(DEVICE),
         "gpu_name": torch.cuda.get_device_name(DEVICE),
-        "conditions": metrics,
-        "comparison": {
-            "metric": "disturbance_mean_representation_normalized_l2",
-            "current_stateful": baseline_value,
-            "observation_driven_recurrent": observation_value,
-            "error_driven_recurrent_v2": learned_value,
-            "error_vs_current_improvement_percent": error_vs_current,
-            "error_vs_observation_improvement_percent": error_vs_observation,
-            "error_vs_observation_absolute_change": observation_value - learned_value,
-            "conclusion": conclusion,
-        },
+        "corruptions": corruption_results,
+        "overall_conclusion": overall_conclusion,
         "protocol": {
             "train_drives": training_summary["train_drives"],
             "val_drives": drives,
@@ -433,31 +567,24 @@ def main():
             "baseline_frames": BASELINE_FRAMES,
             "disturbance_frames": DISTURBANCE_FRAMES,
             "recovery_frames": RECOVERY_FRAMES,
-            "blur_kernel_size": BLUR_KERNEL_SIZE,
-            "blur_sigma": BLUR_SIGMA,
             "dynamic_error": "epsilon_t=0.207*e_t+0.793*epsilon_(t-1)",
             "instant_error": "e_t=F_t-Fhat_t",
             "core_conditions": CORE_CONDITIONS,
-            "state_transition_error": "h_t=T(h_(t-1),P([relu(e_t),relu(-e_t)]),feedback)",
-            "state_transition_observation": "h_t=T(h_(t-1),F_t,feedback)",
-            "current_feedforward_transition_input": False,
+            "state_transition": "h_t=T(h_(t-1),F_t,E(error_input),feedback)",
             "learned_top_down_feedback": True,
             "matched_transition_capacity": True,
             "dedicated_error_encoder": True,
-            "temporal_predictor_trained": True,
-            "tbptt_window": training_summary["tbptt_window"],
+            "temporal_predictor_trained": False,
             "cross_frame_state_detached": True,
             "future_predictor": False,
             "online_learning_during_validation": False,
         },
         "training": training_summary,
         "checkpoints": {
-            "error_driven_recurrent_v2": str(error_checkpoint),
-            "error_driven_recurrent_v2_sha256": sha256_file(error_checkpoint),
-            "observation_driven_recurrent": str(observation_checkpoint),
-            "observation_driven_recurrent_sha256": sha256_file(
-                observation_checkpoint
-            ),
+            condition: str(path) for condition, path in checkpoints.items()
+        } | {
+            f"{condition}_sha256": sha256_file(path)
+            for condition, path in checkpoints.items()
         },
         "per_frame_row_count": len(rows),
     }
@@ -472,7 +599,7 @@ def main():
     with (output_dir / "training_summary.json").open("w") as handle:
         json.dump(training_summary, handle, indent=2, sort_keys=True)
     write_readme(output_dir / "README.md", summary)
-    print(json.dumps(summary["comparison"], sort_keys=True), flush=True)
+    print(json.dumps(summary["overall_conclusion"], sort_keys=True), flush=True)
 
 
 if __name__ == "__main__":

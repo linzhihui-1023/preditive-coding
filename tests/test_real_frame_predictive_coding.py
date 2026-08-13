@@ -316,11 +316,12 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
                 self.assertIsNone(state.previous_feedback_prediction)
             with torch.no_grad():
                 error_drive = self.model.recurrent_error_encoder_modules[layer_index](
-                    expected_instant_error,
+                    expected_dynamic_error,
                     state.feedforward_drive.shape[-2:],
                 )
                 expected = self.model.recurrent_transition_modules[layer_index](
                     previous_representation,
+                    state.feedforward_drive,
                     error_drive,
                     feedback_drive,
                     base_representation,
@@ -339,8 +340,6 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
         allowed_prefixes = (
             "recurrent_transition_modules.",
             "recurrent_error_encoder_modules.",
-            "input_prediction_module.",
-            "feedback_modules.",
         )
         self.assertTrue(all(name.startswith(allowed_prefixes) for name in trainable_names))
 
@@ -375,139 +374,82 @@ class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
         self.assertTrue(all(not memory.requires_grad for memory in memories))
         self.assertTrue(all(memory.grad_fn is None for memory in memories))
 
-    def test_short_window_keeps_then_detaches_recurrent_gradient_chain(self):
-        self.model.step_frame(self.frame1, detach_recurrent_state=False)
-        self.assertTrue(
-            any(
-                memory is not None and memory.grad_fn is not None
-                for memory in self.model.prediction_state_memory
-            )
-        )
-        self.model.step_frame(self.frame2, detach_recurrent_state=False)
-        self.assertTrue(
-            any(
-                memory is not None and memory.grad_fn is not None
-                for memory in self.model.representation_state_memory
-            )
-        )
-        loss = self.model.collect_recurrent_transition_loss(self.frame3)
-        self.assertIsNotNone(loss)
-        loss.backward()
-        trainable_parameters = [
-            parameter for parameter in self.model.parameters() if parameter.requires_grad
-        ]
-        self.assertTrue(any(parameter.grad is not None for parameter in trainable_parameters))
-        self.model.detach_recurrent_state()
-        memories = (
-            self.model.representation_state_memory
-            + self.model.prediction_state_memory
-            + self.model.instant_error_state_memory
-            + self.model.error_state_memory
-        )
-        self.assertTrue(all(not memory.requires_grad for memory in memories))
-        self.assertTrue(all(memory.grad_fn is None for memory in memories))
-
-    def test_observation_control_uses_current_observation_with_matched_capacity(self):
-        observation = copy.deepcopy(self.model)
-        observation.real_frame_recurrent_error_input = "observation"
-        error_parameter_count = sum(
-            parameter.numel()
-            for parameter in self.model.recurrent_transition_modules.parameters()
-        )
-        observation_parameter_count = sum(
-            parameter.numel()
-            for parameter in observation.recurrent_transition_modules.parameters()
-        )
-        self.assertEqual(error_parameter_count, observation_parameter_count)
+    def test_temporal_instant_and_memory_conditions_have_matched_capacity(self):
+        instant = copy.deepcopy(self.model)
+        memory = copy.deepcopy(self.model)
+        temporal = copy.deepcopy(self.model)
+        instant.real_frame_recurrent_error_input = "instant"
+        memory.real_frame_recurrent_error_input = "memory"
+        temporal.real_frame_recurrent_error_input = "temporal_only"
+        counts = {
+            sum(parameter.numel() for parameter in model.recurrent_transition_modules.parameters())
+            + sum(parameter.numel() for parameter in model.recurrent_error_encoder_modules.parameters())
+            for model in (instant, memory, temporal)
+        }
+        self.assertEqual(len(counts), 1)
 
         with torch.no_grad():
             for transition in self.model.recurrent_transition_modules:
                 channels = transition.candidate.out_channels
                 transition.candidate.weight[:, :channels].zero_()
                 diagonal = torch.arange(channels)
-                transition.candidate.weight[diagonal, diagonal, 0, 0] = 0.1
-            observation.recurrent_transition_modules.load_state_dict(
-                self.model.recurrent_transition_modules.state_dict()
-            )
-
-        self.model.reset()
-        observation.reset()
-        self.model.step_frame(self.frame1)
-        observation.step_frame(self.frame1)
-        self.model.step_frame(self.frame2)
-        observation.step_frame(self.frame2)
-
-        for error_state, observation_state in zip(
-            self.model.layer_states, observation.layer_states
-        ):
-            self.assertTrue(
-                torch.equal(
-                    error_state.previous_feedback_prediction,
-                    observation_state.previous_feedback_prediction,
-                )
-                if error_state.previous_feedback_prediction is not None
-                else observation_state.previous_feedback_prediction is None
-            )
-            self.assertTrue(
-                torch.equal(error_state.dynamic_error, observation_state.dynamic_error)
-            )
-        self.assertTrue(
-            any(
-                not torch.allclose(error_state.representation, observation_state.representation)
-                for error_state, observation_state in zip(
-                    self.model.layer_states, observation.layer_states
-                )
-            )
-        )
-
-    def test_zeroed_control_changes_only_the_transition_error_input(self):
-        zeroed = copy.deepcopy(self.model)
-        zeroed.real_frame_recurrent_error_input = "zeroed"
-        with torch.no_grad():
-            for transition in self.model.recurrent_transition_modules:
-                channels = transition.candidate.out_channels
-                transition.candidate.weight[:, :channels].zero_()
-                diagonal = torch.arange(channels)
-                transition.candidate.weight[diagonal, diagonal, 0, 0] = 0.1
+                transition.candidate.weight[diagonal, channels + diagonal, 0, 0] = 0.1
             for encoder in self.model.recurrent_error_encoder_modules:
                 encoder.projection.weight.zero_()
                 output_channels = encoder.projection.out_channels
                 input_channels = encoder.projection.in_channels
                 diagonal = torch.arange(min(output_channels, input_channels))
                 encoder.projection.weight[diagonal, diagonal, 0, 0] = 0.1
-            zeroed.recurrent_transition_modules.load_state_dict(
+            instant.recurrent_transition_modules.load_state_dict(
                 self.model.recurrent_transition_modules.state_dict()
             )
+            memory.recurrent_transition_modules.load_state_dict(
+                self.model.recurrent_transition_modules.state_dict()
+            )
+            temporal.recurrent_transition_modules.load_state_dict(
+                self.model.recurrent_transition_modules.state_dict()
+            )
+            instant.recurrent_error_encoder_modules.load_state_dict(
+                self.model.recurrent_error_encoder_modules.state_dict()
+            )
+            memory.recurrent_error_encoder_modules.load_state_dict(
+                self.model.recurrent_error_encoder_modules.state_dict()
+            )
+            temporal.recurrent_error_encoder_modules.load_state_dict(
+                self.model.recurrent_error_encoder_modules.state_dict()
+            )
 
-        self.model.reset()
-        zeroed.reset()
-        self.model.step_frame(self.frame1)
-        zeroed.step_frame(self.frame1)
-        self.model.step_frame(self.frame2)
-        zeroed.step_frame(self.frame2)
+        for model in (instant, memory, temporal):
+            model.reset()
+            model.step_frame(self.frame1)
+            model.step_frame(self.frame2)
 
-        for dynamic_state, zeroed_state in zip(
-            self.model.layer_states, zeroed.layer_states
+        for instant_state, memory_state, temporal_state in zip(
+            instant.layer_states, memory.layer_states, temporal.layer_states
         ):
             self.assertTrue(
                 torch.equal(
-                    dynamic_state.previous_dynamic_error,
-                    zeroed_state.previous_dynamic_error,
+                    instant_state.previous_feedback_prediction,
+                    memory_state.previous_feedback_prediction,
                 )
+                if instant_state.previous_feedback_prediction is not None
+                else memory_state.previous_feedback_prediction is None
             )
-            self.assertTrue(
-                torch.equal(
-                    dynamic_state.previous_feedback_prediction,
-                    zeroed_state.previous_feedback_prediction,
-                )
-                if dynamic_state.previous_feedback_prediction is not None
-                else zeroed_state.previous_feedback_prediction is None
-            )
+            self.assertTrue(torch.equal(instant_state.dynamic_error, memory_state.dynamic_error))
+            self.assertTrue(torch.equal(instant_state.dynamic_error, temporal_state.dynamic_error))
         self.assertTrue(
             any(
-                not torch.allclose(dynamic_state.representation, zeroed_state.representation)
-                for dynamic_state, zeroed_state in zip(
-                    self.model.layer_states, zeroed.layer_states
+                not torch.allclose(instant_state.representation, memory_state.representation)
+                for instant_state, memory_state in zip(
+                    instant.layer_states, memory.layer_states
+                )
+            )
+        )
+        self.assertTrue(
+            any(
+                not torch.allclose(memory_state.representation, temporal_state.representation)
+                for memory_state, temporal_state in zip(
+                    memory.layer_states, temporal.layer_states
                 )
             )
         )

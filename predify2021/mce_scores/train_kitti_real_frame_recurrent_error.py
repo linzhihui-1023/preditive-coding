@@ -24,31 +24,21 @@ FORBIDDEN_TEST_DRIVE_IDS = ("drive_0051_sync", "drive_0056_sync")
 
 
 TRAINED_CONDITIONS = {
-    "error_driven_recurrent_v2": "dynamic",
-    "observation_driven_recurrent": "observation",
+    "temporal_only": "temporal_only",
+    "instant_error": "instant",
+    "error_memory": "memory",
 }
 
 
 def recurrent_training_parameters(model, recurrent_input):
     modules = [
         model.recurrent_transition_modules,
-        model.input_prediction_module,
-        model.feedback_modules,
+        model.recurrent_error_encoder_modules,
     ]
-    if recurrent_input == "dynamic":
-        modules.append(model.recurrent_error_encoder_modules)
     parameters = []
     for module in modules:
         parameters.extend(module.parameters())
     return parameters
-
-
-def prediction_state_dict(model):
-    return {
-        "input_prediction_module": model.input_prediction_module.state_dict(),
-        "feedback_modules": model.feedback_modules.state_dict(),
-    }
-
 
 def build_model(weights_path, recurrent_input):
     model = get_model(
@@ -96,16 +86,12 @@ def segment_raw_frames(dataset):
         yield (*starts, starts[-1] + 1)
 
 
-def run_epoch(model, datasets, optimizer=None, tbptt_window=4):
+def run_epoch(model, datasets, optimizer=None):
     training = optimizer is not None
     model.eval()
     model.recurrent_transition_modules.train(training)
-    model.input_prediction_module.train(training)
-    model.feedback_modules.train(training)
     if model.recurrent_error_encoder_modules is not None:
-        model.recurrent_error_encoder_modules.train(
-            training and model.real_frame_recurrent_error_input == "dynamic"
-        )
+        model.recurrent_error_encoder_modules.train(training)
     total_loss = 0.0
     update_count = 0
     per_drive = {}
@@ -115,21 +101,18 @@ def run_epoch(model, datasets, optimizer=None, tbptt_window=4):
         drive_updates = 0
         for raw_frames in segment_raw_frames(dataset):
             model.reset()
-            pending_losses = []
-            window_updates = 0
-            if training:
-                optimizer.zero_grad(set_to_none=True)
             for raw_index, next_raw_index in zip(raw_frames[:-1], raw_frames[1:]):
                 frame = dataset._load_frame(dataset.frame_paths[raw_index])
                 frame = frame.unsqueeze(0).to(DEVICE)
                 next_frame = dataset._load_frame(dataset.frame_paths[next_raw_index])
                 next_frame = next_frame.unsqueeze(0).to(DEVICE)
                 if training:
-                    model.step_frame(frame, detach_recurrent_state=False)
+                    optimizer.zero_grad(set_to_none=True)
+                    model.step_frame(frame)
                     loss = model.collect_recurrent_transition_loss(next_frame)
                     if loss is not None:
-                        pending_losses.append(loss)
-                        window_updates += 1
+                        loss.backward()
+                        optimizer.step()
                 else:
                     with torch.no_grad():
                         model.step_frame(frame)
@@ -142,19 +125,6 @@ def run_epoch(model, datasets, optimizer=None, tbptt_window=4):
                     update_count += 1
                     drive_updates += 1
                 del frame, next_frame
-                if training and pending_losses and window_updates >= tbptt_window:
-                    torch.stack(pending_losses).mean().backward()
-                    optimizer.step()
-                    optimizer.zero_grad(set_to_none=True)
-                    model.detach_recurrent_state()
-                    pending_losses = []
-                    window_updates = 0
-
-            if training and pending_losses:
-                torch.stack(pending_losses).mean().backward()
-                optimizer.step()
-                optimizer.zero_grad(set_to_none=True)
-                model.detach_recurrent_state()
 
         per_drive[drive] = {
             "mean_prediction_mse": drive_loss / drive_updates,
@@ -179,7 +149,6 @@ def train_condition(
     epochs,
     learning_rate,
     seed,
-    tbptt_window,
 ):
     random.seed(seed)
     torch.manual_seed(seed)
@@ -201,12 +170,7 @@ def train_condition(
     best_epoch = None
     checkpoint_path = output_dir / f"best_{condition}.pt"
     for epoch in range(1, epochs + 1):
-        train_metrics = run_epoch(
-            model,
-            train_datasets,
-            optimizer=optimizer,
-            tbptt_window=tbptt_window,
-        )
+        train_metrics = run_epoch(model, train_datasets, optimizer=optimizer)
         val_metrics = run_epoch(model, val_datasets)
         record = {
             "condition": condition,
@@ -225,12 +189,11 @@ def train_condition(
                     "epoch": epoch,
                     "val_prediction_mse": best_val,
                     "condition": condition,
-                    "transition_mode": "matched_convgru_v2",
+                    "transition_mode": "observation_error_memory_convgru",
                     "top_down_feedback": True,
                     "recurrent_error_input": recurrent_input,
-                    "dedicated_error_encoder": recurrent_input == "dynamic",
-                    "temporal_predictor_trained": True,
-                    "tbptt_window": tbptt_window,
+                    "dedicated_error_encoder": True,
+                    "temporal_predictor_trained": False,
                     "current_feedforward_transition_input": False,
                     "dynamic_error": "epsilon_t=0.207*e_t+0.793*epsilon_(t-1)",
                     "instant_error": "e_t=F_t-Fhat_t",
@@ -241,11 +204,8 @@ def train_condition(
                         model.recurrent_transition_modules.state_dict()
                     ),
                     "recurrent_error_encoder_state_dict": (
-                        None
-                        if recurrent_input != "dynamic"
-                        else model.recurrent_error_encoder_modules.state_dict()
+                        model.recurrent_error_encoder_modules.state_dict()
                     ),
-                    "prediction_state_dict": prediction_state_dict(model),
                 },
                 checkpoint_path,
             )
@@ -277,13 +237,12 @@ def train_condition(
             parameter.numel() for parameter in trainable_parameters
         ),
         "objective": "mean next-frame per-layer PCoder prediction MSE",
-        "transition": f"ConvGRU(previous_state,{recurrent_input},feedback)",
-        "dedicated_error_encoder": recurrent_input == "dynamic",
-        "temporal_predictor_trained": True,
-        "tbptt_window": tbptt_window,
+        "transition": f"ConvGRU(previous_state,observation,{recurrent_input},feedback)",
+        "dedicated_error_encoder": True,
+        "temporal_predictor_trained": False,
         "recurrent_input": recurrent_input,
         "current_feedforward_transition_input": False,
-        "bptt": "truncated",
+        "bptt": False,
         "cross_frame_state_detached": True,
         "history": history,
     }
@@ -305,7 +264,6 @@ def main():
     seed = int(os.environ.get("PREDIFY_SEED", "0"))
     fixed_dt_s = float(os.environ.get("PREDIFY_FIXED_TS_S", "0.1035"))
     tolerance = float(os.environ.get("PREDIFY_FIXED_TS_TOL_S", "0.001"))
-    tbptt_window = int(os.environ.get("PREDIFY_TBPTT_WINDOW", "4"))
 
     if any(
         forbidden in drive
@@ -332,15 +290,14 @@ def main():
             epochs,
             learning_rate,
             seed,
-            tbptt_window,
         )
 
     legacy_checkpoint = output_dir / "best_recurrent_transition.pt"
     legacy_checkpoint.write_bytes(
-        (output_dir / "best_error_driven_recurrent_v2.pt").read_bytes()
+        (output_dir / "best_error_memory.pt").read_bytes()
     )
     summary = {
-        "experiment": "real_frame_matched_recurrent_training",
+        "experiment": "real_frame_error_memory_training",
         "git_revision": revision,
         "device": str(DEVICE),
         "gpu_name": torch.cuda.get_device_name(DEVICE),
@@ -354,8 +311,7 @@ def main():
         "conditions": summaries,
         "matched_transition_capacity": True,
         "objective": "mean next-frame per-layer PCoder prediction MSE",
-        "temporal_predictor_trained": True,
-        "tbptt_window": tbptt_window,
+        "temporal_predictor_trained": False,
         "legacy_error_driven_checkpoint": str(legacy_checkpoint),
     }
     with (output_dir / "training_summary.json").open("w") as handle:

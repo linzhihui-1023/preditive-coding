@@ -5,8 +5,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PREDIFY_PYTHON_BIN:-/home/lin/anaconda3/envs/predifyproject/bin/python}"
 GIT_REVISION="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 SHORT_REVISION="${GIT_REVISION:0:7}"
-TRAIN_OUTPUT="${PREDIFY_RECURRENT_ERROR_TRAIN_OUTPUT_ROOT:-/tmp/predify-storage/experiments/real_frame_error_driven_v2_train_${SHORT_REVISION}}"
-EVAL_OUTPUT="${PREDIFY_RECURRENT_ERROR_EVAL_OUTPUT_ROOT:-$REPO_ROOT/results/real_frame_error_driven_v2_${SHORT_REVISION}}"
+TRAIN_OUTPUT="${PREDIFY_RECURRENT_ERROR_TRAIN_OUTPUT_ROOT:-/tmp/predify-storage/experiments/real_frame_error_memory_train_${SHORT_REVISION}}"
+EVAL_OUTPUT="${PREDIFY_RECURRENT_ERROR_EVAL_OUTPUT_ROOT:-$REPO_ROOT/results/real_frame_error_memory_${SHORT_REVISION}}"
 LOG_ROOT="${PREDIFY_RECURRENT_ERROR_LOG_ROOT:-/tmp/predify-storage/experiments}"
 PCODER_WEIGHTS="${PREDIFY_PCODER_WEIGHTS:-/home/lin/predify/weights_pvgg16_imagenet}"
 
@@ -54,7 +54,6 @@ env -i \
     "${COMMON_ENV[@]}" \
     "PREDIFY_EPOCHS=5" \
     "PREDIFY_LR=1e-4" \
-    "PREDIFY_TBPTT_WINDOW=4" \
     "PREDIFY_RECURRENT_ERROR_TRAIN_OUTPUT_DIR=$TRAIN_OUTPUT" \
     "$PYTHON_BIN" -u -m predify2021.mce_scores.train_kitti_real_frame_recurrent_error \
     2>&1 | tee "$LOG_ROOT/real_frame_recurrent_error_train_${SHORT_REVISION}.log"
@@ -67,5 +66,5 @@ env -i \
     "$PYTHON_BIN" -u -m predify2021.mce_scores.evaluate_kitti_real_frame_recurrent_error \
     2>&1 | tee "$LOG_ROOT/real_frame_recurrent_error_eval_${SHORT_REVISION}.log"
 
-printf 'git_revision=%s\ntrain_drives=0005,0013,0014,0036\nval_drives=0011,0039\nfrozen_test_read=false\ncore_conditions=current_stateful,observation_driven_recurrent,error_driven_recurrent_v2\nmatched_transition_capacity=true\ndedicated_error_encoder=true\ntemporal_predictor_trained=true\ntbptt_window=4\ntop_down_feedback=true\ncurrent_feedforward_transition_input=false\ninstant_error=e_t=F_t-Fhat_t\ntraining_target=F_(t+1)\nepochs=5\nlr=1e-4\n' \
+printf 'git_revision=%s\ntrain_drives=0005,0013,0014,0036\nval_drives=0011,0039\nfrozen_test_read=false\ncore_conditions=temporal_only,instant_error,error_memory\ncorruptions=gaussian_blur,brightness_overexposure\nmatched_transition_capacity=true\ndedicated_error_encoder=true\ntemporal_predictor_trained=false\ntop_down_feedback=true\nobservation_input=true\ninstant_error=e_t=F_t-Fhat_t\ndynamic_error=epsilon_t=0.207e_t+0.793epsilon_t_minus_1\ntraining_target=F_(t+1)\nepochs=5\nlr=1e-4\n' \
     "$GIT_REVISION" > "$EVAL_OUTPUT/manifest.txt"
