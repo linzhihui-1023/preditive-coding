@@ -967,6 +967,40 @@ Server-only log:
 /tmp/predify-storage/experiments/real_frame_pc_phase1_9a3d9bd.log
 ```
 
+### Learned recurrent-error result
+
+The current learned mechanism revision is `c9fec52`. It preserves the original
+Predify feedforward and previous-frame top-down feedback base update, disables
+the fixed `dynamic error -> gradient projection -> pc_error_multiplier`
+correction only in learned mode, and adds one 1x1 ConvGRU transition per layer.
+The dynamic recurrence remains
+`epsilon_t=0.207e_t+0.793epsilon_(t-1)`. Cross-frame states detach and reset at
+drive/segment boundaries. Only 7,328,064 transition parameters train.
+
+Training used ordered clean streams from 0005/0013/0014/0036 and one fixed
+five-epoch `lr=1e-4` run. Val clean prediction MSE on 0011/0039 selected epoch
+1 (`0.893984978`). Formal controlled-blur validation then compared only:
+
+| Condition | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |
+| --- | ---: | ---: | ---: |
+| Current stateful | 0.784296992 | 0.427156845 | 0.001205088 |
+| Learned recurrent-error | 0.501548966 | 0.280066796 | 0.004235435 |
+| Same checkpoint, error input zeroed | 0.521438669 | 0.301188880 | 0.045429500 |
+
+Learned improved by `36.051143%` over current and by `3.814390%` over zeroed.
+Both Val drives improved in both comparisons. Interpret the first gap as the
+value of the learned recurrent transition and the second as the isolated
+incremental dynamic-error contribution. Do not assign the full 36.1% to
+dynamic error. Frozen Test drives 0051/0056 were not read.
+
+Artifacts:
+
+```text
+results/real_frame_recurrent_error_c9fec52/
+/tmp/predify-storage/experiments/real_frame_recurrent_error_train_c9fec52/
+checkpoint sha256: 26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4
+```
+
 ## Frozen historical runners
 
 The commands below belong to completed predictor research. They remain for

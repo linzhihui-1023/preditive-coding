@@ -1306,6 +1306,45 @@ results/real_frame_pc_phase1_9a3d9bd/
 /tmp/predify-storage/experiments/real_frame_pc_phase1_9a3d9bd.log
 ```
 
+## Learned Recurrent-error Transition
+
+Date: 2026-08-13
+
+Training/evaluation revision: `c9fec52`
+
+The learned path retained the original per-layer feedforward and top-down
+feedback base update, disabled the fixed dynamic-error gradient projection,
+and trained only 7,328,064 parameters in five 1x1 ConvGRU transition cells.
+Ordered clean streams from 0005/0013/0014/0036 supplied 1,411 transition
+frames per epoch. Clean prediction MSE on Val 0011/0039 selected epoch 1 at
+`0.893984978`; the run used one fixed five-epoch, `lr=1e-4` configuration.
+
+Formal validation reused the Phase-1 40-clean/80-persistent-Gaussian-blur/
+40-clean protocol on 0011/0039. Learned and zeroed loaded the identical
+checkpoint; zeroed changed only the recurrent transition's error input.
+
+| Condition | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |
+| --- | ---: | ---: | ---: |
+| Current stateful | 0.784296992 | 0.427156845 | 0.001205088 |
+| Learned recurrent-error | 0.501548966 | 0.280066796 | 0.004235435 |
+| Learned recurrent-error zeroed | 0.521438669 | 0.301188880 | 0.045429500 |
+
+Learned improved by `36.051143%` over current-stateful and by `3.814390%`
+over zeroed. The learned-versus-zeroed improvement was `2.291069%` on drive
+0011 and `5.414597%` on drive 0039. It was positive at every layer and largest
+at Stage 5 (`18.557417%`). Learned versus current was worse at Stage 1 but
+better at Stages 2--5. This supports both a learned recurrent-state benefit and
+a smaller, separately identified dynamic-error contribution. Frozen Test
+drives 0051/0056 were not read.
+
+Tracked artifacts and server-only checkpoint:
+
+```text
+results/real_frame_recurrent_error_c9fec52/
+/tmp/predify-storage/experiments/real_frame_recurrent_error_train_c9fec52/
+checkpoint sha256: 26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4
+```
+
 ## Earlier adjacent-pair result
 
 This older experiment reset model state each batch and therefore tested

@@ -1,5 +1,31 @@
 # Research Decisions
 
+## 2026-08-13: Learned recurrent error transition clears both Val comparisons
+
+Status: accepted
+
+Revision `c9fec52` retained the original Predify feedforward and top-down
+feedback base update, disabled the fixed dynamic-error gradient projection in
+the learned path, and trained only five ConvGRU transition cells. Training used
+ordered clean streams from 0005/0013/0014/0036; epoch 1 was selected by clean
+prediction MSE on 0011/0039. Frozen Test drives 0051/0056 were not read.
+
+Under the unchanged 40-clean/80-blur/40-recovery validation protocol,
+disturbance normalized representation L2 was `0.784296992` for the original
+current-stateful model, `0.501548966` for learned recurrent-error, and
+`0.521438669` when only the learned transition's error input was zeroed while
+loading the identical checkpoint. Learned recurrent-error improved by
+`36.051143%` over current-stateful and by `3.814390%` over zeroed. Both Val
+drives improved in both comparisons.
+
+Accept this as evidence that the learned recurrent transition has value and
+that the dynamic-error input has an incremental contribution under this fixed
+protocol. Do not attribute the full 36.1% to dynamic error: most of that gap is
+the learned recurrent state transition, while the direct zeroed comparison
+isolates a 3.8% aggregate dynamic-error contribution. Stage 1 did not beat the
+current-stateful baseline, and learned recovery ended above that baseline, so
+the result is not uniform dominance across every layer or recovery statistic.
+
 ## 2026-08-13: Dynamic Stage-4 error state fails the persistence gate
 
 Status: accepted

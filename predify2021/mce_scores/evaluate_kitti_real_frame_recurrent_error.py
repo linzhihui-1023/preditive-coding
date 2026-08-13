@@ -232,7 +232,36 @@ def write_readme(path, summary):
         f"Learned vs zeroed disturbance improvement: {summary['comparison']['learned_vs_zeroed_improvement_percent']:.6f}%.",
         f"Conclusion: {summary['comparison']['conclusion']}.",
         "",
+        "## Per Drive",
+        "",
+        "| Drive | Current | Learned | Zeroed |",
+        "| --- | ---: | ---: | ---: |",
     ]
+    for drive in summary["protocol"]["val_drives"]:
+        lines.append(
+            f"| {drive.split('_drive_')[-1].split('_sync')[0]} | "
+            f"{baseline['per_drive'][drive]['disturbance_mean_representation_normalized_l2']:.9f} | "
+            f"{learned['per_drive'][drive]['disturbance_mean_representation_normalized_l2']:.9f} | "
+            f"{zeroed['per_drive'][drive]['disturbance_mean_representation_normalized_l2']:.9f} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Per Layer",
+            "",
+            "| Layer | Current | Learned | Zeroed |",
+            "| ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for layer in range(1, 6):
+        key = str(layer)
+        lines.append(
+            f"| {layer} | "
+            f"{baseline['per_layer'][key]['disturbance_mean_representation_normalized_l2']:.9f} | "
+            f"{learned['per_layer'][key]['disturbance_mean_representation_normalized_l2']:.9f} | "
+            f"{zeroed['per_layer'][key]['disturbance_mean_representation_normalized_l2']:.9f} |"
+        )
+    lines.append("")
     Path(path).write_text("\n".join(lines), encoding="ascii")
 
 

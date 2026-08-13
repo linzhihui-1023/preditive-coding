@@ -1,0 +1,9 @@
+git_revision=c9fec526680bb274aca2b96397db4e20741f248d
+train_drives=0005,0013,0014,0036
+val_drives=0011,0039
+frozen_test_read=false
+conditions=current_stateful,learned_recurrent_error,learned_recurrent_error_zeroed
+shared_learned_checkpoint=true
+top_down_feedback=true
+epochs=5
+lr=1e-4

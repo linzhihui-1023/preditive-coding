@@ -8,8 +8,9 @@ Stage-4 next-frame feature prediction is closed to further extension. Its
 completed results remain versioned below, but it is no longer the active model
 or the next experiment.
 
-The active model is the inference-only `PVGG16TargetFlow` real-frame
-predictive-coding recurrence:
+The active model family is the `PVGG16TargetFlow` real-frame predictive-coding
+recurrence. The original inference-only stateful model remains the formal
+baseline, and the learned path adds one ConvGRU transition per layer:
 
 1. A segment starts with `reset`; its first frame initializes five PCoder
    representations from current feedforward drives.
@@ -18,14 +19,15 @@ predictive-coding recurrence:
 3. Frame `t` inherits only detached representations, predictions, and dynamic
    Target Flow errors completed on frame `t-1`.
 4. Previous higher-layer predictions enter the original feedback terms.
-   Previous same-layer prediction errors are projected through frozen PCoder
-   decoders into the original error-correction terms.
+   The baseline projects previous same-layer prediction errors through frozen
+   PCoder decoders; the learned path disables that projection and applies a
+   ConvGRU gated residual after the same feedforward-plus-feedback base update.
 5. Current hierarchical residuals and dynamic errors are formed only after the
    current representations and predictions exist, then detached for frame
    `t+1`.
-6. The recurrence accepts no future frame or future target, creates no future
-   predictor, exposes no training loss, and performs no parameter or online
-   update.
+6. The recurrence accepts no future frame or future target and creates no
+   future predictor. Only the new ConvGRU transition parameters train; all
+   backbone, decoder, and existing Predify parameters remain frozen.
 
 The accepted causal state chain is:
 
@@ -58,11 +60,28 @@ control. Disturbance normalized L2 was `0.890284632` (Feedforward),
 mainly representation memory rather than feedback. Outputs are in
 `results/real_frame_pc_phase1_9a3d9bd/`.
 
+The learned recurrent-error experiment at revision `c9fec52` retained the
+original feedforward and top-down feedback base path and selected epoch 1 on
+Val clean prediction MSE. Under the same controlled blur protocol, disturbance
+normalized L2 was `0.784296992` (current-stateful), `0.501548966` (learned),
+and `0.521438669` (same learned checkpoint with only error input zeroed).
+Learned improved by `36.051143%` over current and by `3.814390%` over zeroed;
+both Val drives improved in both comparisons. Recovery first/last ten values
+for learned were `0.280066796/0.004235435`. Frozen Test was not read. Outputs
+are in `results/real_frame_recurrent_error_c9fec52/`.
+
 ## Current implementation
 
 - `predify2021/model_factory/pvgg16_targetflow.py`
   - Defaults to `task=real_frame_pc` and implements five real-frame PCoder
     stages using the original PVGG16 feedforward boundaries and decoders.
+  - Selects `real_frame_transition_mode=predify` for the frozen baseline or
+    `convgru_error` for the learned transition. The learned path keeps the
+    original beta/lambda feedforward-plus-feedback base update and replaces
+    only the fixed dynamic-error gradient correction.
+  - Supports `real_frame_recurrent_error_input=zeroed` solely for the formal
+    same-checkpoint error-input control; dynamic-error state computation and
+    all other recurrence inputs remain unchanged.
   - Snapshots every layer's previous state before processing the current frame,
     preventing current-frame higher-layer predictions from leaking into the
     historical feedback slots.
