@@ -214,6 +214,14 @@ def write_readme(path, summary):
     baseline = summary["conditions"]["current_stateful"]
     learned = summary["conditions"]["learned_error_driven"]
     zeroed = summary["conditions"]["learned_error_driven_zeroed"]
+    learned_vs_zeroed = summary["comparison"][
+        "learned_vs_zeroed_improvement_percent"
+    ]
+    learned_vs_zeroed_text = (
+        f"{learned_vs_zeroed:.6f}%"
+        if learned_vs_zeroed is not None
+        else "undefined (zeroed disturbance is exactly zero)"
+    )
     lines = [
         "# Prediction-error-driven Recurrent Validation",
         "",
@@ -229,7 +237,7 @@ def write_readme(path, summary):
         f"| Learned error-driven zeroed | {zeroed['disturbance_mean_representation_normalized_l2']:.9f} | {zeroed['recovery_first_10_mean_representation_normalized_l2']:.9f} | {zeroed['recovery_last_10_mean_representation_normalized_l2']:.9f} |",
         "",
         f"Learned vs current disturbance improvement: {summary['comparison']['learned_vs_current_improvement_percent']:.6f}%.",
-        f"Learned vs zeroed disturbance improvement: {summary['comparison']['learned_vs_zeroed_improvement_percent']:.6f}%.",
+        f"Learned vs zeroed disturbance improvement: {learned_vs_zeroed_text}.",
         f"Conclusion: {summary['comparison']['conclusion']}.",
         "",
         "## Per Drive",
@@ -336,8 +344,14 @@ def main():
     learned_vs_current = 100.0 * (
         baseline_value - learned_value
     ) / baseline_value
-    learned_vs_zeroed = 100.0 * (zeroed_value - learned_value) / zeroed_value
-    if learned_vs_current > 0.0 and learned_vs_zeroed > 0.0:
+    learned_vs_zeroed = (
+        None
+        if zeroed_value == 0.0
+        else 100.0 * (zeroed_value - learned_value) / zeroed_value
+    )
+    if learned_vs_zeroed is None:
+        conclusion = "error_zeroed_is_input_blind_prediction_error_mechanism_not_established"
+    elif learned_vs_current > 0.0 and learned_vs_zeroed > 0.0:
         conclusion = "recurrent_transition_and_dynamic_error_both_help"
     elif learned_vs_current > 0.0:
         conclusion = "recurrent_transition_helps_without_dynamic_error_evidence"
@@ -358,6 +372,7 @@ def main():
             "learned_error_driven_zeroed": zeroed_value,
             "learned_vs_current_improvement_percent": learned_vs_current,
             "learned_vs_zeroed_improvement_percent": learned_vs_zeroed,
+            "learned_vs_zeroed_absolute_change": zeroed_value - learned_value,
             "conclusion": conclusion,
         },
         "protocol": {
