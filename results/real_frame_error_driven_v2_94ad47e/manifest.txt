@@ -1,0 +1,15 @@
+git_revision=94ad47e7878c3cea30a55b8d866eae5f4016d874
+train_drives=0005,0013,0014,0036
+val_drives=0011,0039
+frozen_test_read=false
+core_conditions=current_stateful,observation_driven_recurrent,error_driven_recurrent_v2
+matched_transition_capacity=true
+dedicated_error_encoder=true
+temporal_predictor_trained=true
+tbptt_window=4
+top_down_feedback=true
+current_feedforward_transition_input=false
+instant_error=e_t=F_t-Fhat_t
+training_target=F_(t+1)
+epochs=5
+lr=1e-4

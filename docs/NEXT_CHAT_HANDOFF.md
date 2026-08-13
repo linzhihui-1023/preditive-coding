@@ -28,6 +28,7 @@ latest Stage-4 prediction training revision: c887e94
 latest unified robustness evaluator revision: 42a7029
 latest strict error-driven training/evaluation revisions: a721fcb / d39ffa3
 latest matched recurrent-control revision: 1765d15
+latest error-driven recurrent v2 revision: 94ad47e
 ```
 
 All selective-online-adaptation work must stay on
@@ -50,7 +51,44 @@ Read this file first, then consult:
 3. `docs/EXPERIMENT_LOG.md`
 4. `docs/README_FUTURE_FEATURE_KITTI.md`
 
-## Latest Matched Recurrent-control Result
+## Latest Error-driven Recurrent V2 Result
+
+Revision `94ad47e` completed the last constrained error-driven structure:
+dedicated signed-error encoder, joint training of recurrent transition plus
+temporal prediction decoders plus error encoder, and truncated BPTT window 4.
+The error-driven transition does not receive the current observation feature:
+
+```text
+e_t = F_t - Fhat_t
+z_t = P([relu(e_t), relu(-e_t)])
+h_t = T(h_(t-1), z_t, feedback)
+```
+
+The matched observation control used the same train drives
+0005/0013/0014/0036, Val drives 0011/0039, seed, epoch count, optimizer,
+learning rate `1e-4`, next-frame objective, and ConvGRU transition capacity,
+but fed `F_t` as the recurrent input. Frozen Test 0051/0056 was not read.
+
+| Condition | Next-frame MSE | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |
+| --- | ---: | ---: | ---: | ---: |
+| Current stateful | 2.671453703 | 0.784296992 | 0.427156845 | 0.001205088 |
+| Observation-driven recurrent | 2.355917884 | 0.660923713 | 0.514935964 | 0.189150613 |
+| Error-driven recurrent v2 | 1.805955697 | 0.660516654 | 0.524020957 | 0.175822271 |
+
+Error-driven v2 improved over current by `15.782330%` but only by
+`0.061589%` over the matched observation control on the primary disturbance
+representation-deviation metric. Final decision: **NO-GO for independent
+prediction-error state-update value**. The supported claim remains learned
+recurrent temporal modeling over current-stateful, not prediction error as a
+clearly better update input. Results are in
+`results/real_frame_error_driven_v2_94ad47e/`. Checkpoints remain server-only:
+
+```text
+/tmp/predify-storage/experiments/real_frame_error_driven_v2_train_94ad47e/best_error_driven_recurrent_v2.pt
+/tmp/predify-storage/experiments/real_frame_error_driven_v2_train_94ad47e/best_observation_driven_recurrent.pt
+```
+
+## Previous Matched Recurrent-control Result
 
 Revision `1765d15` added a fair observation-driven recurrent control for the
 strict error-driven transition. It trained two same-capacity ConvGRU

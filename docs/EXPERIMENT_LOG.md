@@ -1533,6 +1533,52 @@ error checkpoint sha256: 05166f66273b5545fce2cd160c4a0f730882df8e153ad7c5cf30e67
 observation checkpoint sha256: 531dbef98d71475c58a978abb3e9a3b1ce893c4fd7882276172a85efaf7717f3
 ```
 
+### Error-driven Recurrent V2 with Dedicated Error Encoder
+
+Code/training/evaluation revision: `94ad47e`
+
+This final error-driven structure replaced the frozen-stage error input with a
+dedicated signed-error encoder:
+`z_t=P([relu(F_t-Fhat_t), relu(Fhat_t-F_t)])`, followed by
+`h_t=T(h_(t-1), z_t, feedback)`. The current observation feature does not
+enter the error-driven transition. The recurrent transition, signed-error
+encoder, and temporal prediction decoders were trained jointly with a
+short-window truncated-BPTT window of 4. VGG and the non-recurrent Predify body
+remained frozen. Observation-driven recurrent used the same train drives,
+epochs, optimizer, learning rate, next-frame objective, and recurrent
+transition capacity, with `F_t` as its update input. Frozen Test 0051/0056 was
+not read.
+
+Training selected epoch 5 for both learned conditions. Clean Val next-frame MSE
+was `2.611095539` for error-driven v2 and `3.301208898` for
+observation-driven.
+
+| Condition | Next-frame MSE | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |
+| --- | ---: | ---: | ---: | ---: |
+| Current stateful | 2.671453703 | 0.784296992 | 0.427156845 | 0.001205088 |
+| Observation-driven recurrent | 2.355917884 | 0.660923713 | 0.514935964 | 0.189150613 |
+| Error-driven recurrent v2 | 1.805955697 | 0.660516654 | 0.524020957 | 0.175822271 |
+
+Error-driven v2 improved the primary disturbance representation deviation by
+`15.782330%` versus current-stateful, but only by `0.061589%` versus the
+matched observation-driven control. The next-frame MSE advantage is real, but
+the robustness/adaptation metric is effectively tied with observation-driven.
+Final decision: **NO-GO for independent prediction-error state-update value**;
+the observed robustness benefit is still best described as recurrent temporal
+modeling rather than a clearly superior error-driven mechanism.
+
+Tracked artifacts and server-only checkpoints/logs:
+
+```text
+results/real_frame_error_driven_v2_94ad47e/
+/tmp/predify-storage/experiments/real_frame_error_driven_v2_train_94ad47e/best_error_driven_recurrent_v2.pt
+/tmp/predify-storage/experiments/real_frame_error_driven_v2_train_94ad47e/best_observation_driven_recurrent.pt
+/tmp/predify-storage/experiments/real_frame_recurrent_error_train_94ad47e.log
+/tmp/predify-storage/experiments/real_frame_recurrent_error_eval_94ad47e.log
+error checkpoint sha256: ba0927e64aa6c6cf6acdc994fb4f01f6aef35fae8e587570b271757afae4b35a
+observation checkpoint sha256: b84e910e1f80775436a2691a32cba7ff606be89720b7f23f0ea1af517e1fc555
+```
+
 ## Earlier adjacent-pair result
 
 This older experiment reset model state each batch and therefore tested

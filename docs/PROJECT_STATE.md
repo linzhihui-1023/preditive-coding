@@ -141,6 +141,22 @@ show independent value over a matched observation-driven recurrent input.
 Frozen Test was not read. Outputs are in
 `results/real_frame_matched_recurrent_1765d15/`.
 
+The final error-driven v2 revision `94ad47e` added a dedicated signed-error
+encoder and jointly trained the transition, temporal prediction decoders, and
+error encoder with truncated BPTT window 4. The error-driven update is
+`h_t=T(h_(t-1),P([relu(F_t-Fhat_t),relu(Fhat_t-F_t)]),feedback)` and still
+does not feed the current observation directly into the transition. The
+matched observation control used the same data, optimizer, epochs, learning
+rate, next-frame objective, and ConvGRU transition capacity. On Val 0011/0039,
+disturbance normalized L2 was `0.784296992` (current-stateful),
+`0.660923713` (observation-driven), and `0.660516654` (error-driven v2).
+Error-driven v2 improved over current by `15.782330%`, but only by
+`0.061589%` over observation-driven. Next-frame MSE favored error-driven v2
+(`1.805955697` versus `2.355917884` in the robustness stream), but the primary
+disturbance adaptation metric was effectively tied. The final decision is
+NO-GO for independent prediction-error state-update value. Frozen Test was not
+read. Outputs are in `results/real_frame_error_driven_v2_94ad47e/`.
+
 ## Current implementation
 
 - `predify2021/model_factory/pvgg16_targetflow.py`
@@ -155,6 +171,11 @@ Frozen Test was not read. Outputs are in
     that feeds the current observation feature into the same transition
     capacity. This is now the core comparator for testing prediction-error
     input value.
+  - In v2, `real_frame_recurrent_error_input=dynamic` uses a dedicated
+    signed-error encoder, not a frozen VGG stage:
+    `[relu(e_t),relu(-e_t)] -> 1x1 projection -> recurrent drive`.
+    The training script jointly trains this encoder, the recurrent transition,
+    and the prediction decoders with short-window truncated BPTT.
   - Supports `real_frame_recurrent_error_input=zeroed` solely for the formal
     sanity check; it is not a fair performance comparator because the strict
     path becomes input-blind after initialization.

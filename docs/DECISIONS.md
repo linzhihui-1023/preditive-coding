@@ -1,5 +1,33 @@
 # Research Decisions
 
+## 2026-08-14: Error-driven recurrent v2 is No-Go for independent error value
+
+Status: accepted
+
+Revision `94ad47e` implemented the final constrained error-driven structure:
+a dedicated signed-error encoder
+`P([relu(F_t-Fhat_t), relu(Fhat_t-F_t)])`, joint training of the recurrent
+transition, prediction decoders, and error encoder, and short-window truncated
+BPTT with window 4. The current observation feature does not enter the
+error-driven transition. The matched observation control kept the same train
+drives, epoch count, optimizer, learning rate, next-frame objective, and
+ConvGRU transition capacity.
+
+On Val 0011/0039 with the unchanged Gaussian-blur sigma-3 40/80/40 protocol,
+disturbance normalized L2 was `0.784296992` for current-stateful,
+`0.660923713` for observation-driven, and `0.660516654` for error-driven v2.
+Error-driven v2 improved by `15.782330%` over current-stateful, but only
+`0.061589%` over observation-driven. It had better next-frame MSE
+(`1.805955697` versus `2.355917884` in the robustness stream), but the primary
+disturbance adaptation metric was effectively tied.
+
+Decision: **NO-GO for independent prediction-error state-update value** under
+this protocol. The reasonable positive claim is that learned recurrent
+temporal modeling helps relative to current-stateful. Do not claim that
+prediction error is a clearly superior recurrent update input unless a later
+predeclared experiment beats the matched observation-driven control by a
+material margin. Frozen Test drives 0051/0056 were not read.
+
 ## 2026-08-14: Matched observation control rejects independent error-input claim
 
 Status: accepted
