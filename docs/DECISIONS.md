@@ -1,5 +1,28 @@
 # Research Decisions
 
+## 2026-08-13: Dynamic Stage-4 error state fails the persistence gate
+
+Status: accepted
+
+The phase-1 runtime revision `eaf29a0` kept the successful Stage-4 predictor
+frozen and evaluated 7680 transitions on Val drives 0011/0039. Corrected
+CSV-only analysis at `3071391` found direction-independent persistence AUROC
+`0.64897569` for instantaneous error RMS, `0.65151042` for scalar EMA, and
+`0.50489583` for the dynamic signed-tensor state. Dynamic AUROC remained near
+chance for blur (`0.51312500`), i.i.d. noise (`0.50687500`), and RGB bias
+(`0.50343750`).
+
+The recurrence was implemented correctly: every trajectory reset, every frame
+updated once, all memory detached, formula error was zero, and `K=1` made the
+state exactly equal to matched tensor EMA. The null therefore is not explained
+by leakage, repeated same-frame iterations, optimizer effects, or a recurrence
+implementation mismatch.
+
+Do not proceed to `epsilon_t -> selective online adaptation`. This conclusion
+is limited to the fixed signed tensor recurrence and these matched temporal-
+organization diagnostics; it does not rule out scalar envelopes or other
+predeclared persistence features.
+
 ## 2026-08-13: Restore one observation-gated Stage-4 error-state chain
 
 Status: accepted

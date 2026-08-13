@@ -195,6 +195,14 @@ read frozen Test drives 0051/0056. Run it with:
 scripts/run_kitti_stage4_dynamic_error_state_phase1.sh
 ```
 
+The phase-1 run at revision `eaf29a0` produced 7680 frame rows and 480 matched
+windows. Direction-independent AUROC was `0.64897569` for instantaneous error,
+`0.65151042` for scalar EMA, and only `0.50489583` for the dynamic state.
+Dynamic AUROC stayed near chance for blur, noise, and RGB bias, and the state
+was exactly equal to the matched tensor EMA under `K=1`. This is a no-go result:
+do not connect the state to selective online adaptation. Auditable artifacts
+are under `results/stage4_dynamic_error_state_phase1_eaf29a0/`.
+
 To inspect or resume the frozen baseline without moving the new research
 branch:
 

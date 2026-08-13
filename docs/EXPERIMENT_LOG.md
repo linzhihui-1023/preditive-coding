@@ -1,5 +1,43 @@
 # Experiment Log
 
+## Stage-4 Dynamic Prediction Error state: phase 1
+
+Date: 2026-08-13
+
+Runtime revision: `eaf29a04fc69b6d4e2e71da7dc044cca027a7278`
+
+Corrected analysis revision: `307139167ba22f9e1197ae915a6dad6d76859417`
+
+The frozen epoch-7 `c887e94` Stage-4 aligned temporal-difference predictor ran
+48 independently reset trajectories on Val drives 0011/0039. Gaussian blur,
+i.i.d. Gaussian noise, and RGB bias each used four counterbalanced replicates
+of persistent severity plateaus versus the same shuffled severity multiset.
+Each trajectory contained 40 baseline, 80 disturbance, and 40 recovery
+transitions. The network was not updated, the dynamic state was not a
+predictor input, and frozen Test drives were not read.
+
+| Score | Higher-is-persistent AUROC | Separability AUROC |
+| --- | ---: | ---: |
+| Instantaneous `RMS(e_t)` | 0.35102431 | 0.64897569 |
+| Scalar `EMA(RMS(e_t))` | 0.34848958 | 0.65151042 |
+| Dynamic `RMS(epsilon_t)` | 0.50489583 | 0.50489583 |
+
+The original runtime summary incorrectly compared directional AUROCs directly
+and was retained as `summary_before_separability_fix.json`. Revision `3071391`
+recomputed only the analysis from the saved frame/window CSVs, retained the
+predeclared score direction, and ranked separability using
+`max(AUROC, 1-AUROC)`. No network replay occurred.
+
+Dynamic-state AUROC was near chance for every corruption and was `0.14407986`
+below instantaneous error and `0.14661458` below scalar EMA in aggregate. The
+formula audit and matched tensor-EMA difference were both exactly zero.
+Decision: no-go; do not begin selective online adaptation from this state.
+
+Audited artifacts are under
+`results/stage4_dynamic_error_state_phase1_eaf29a0/`; the frozen checkpoint and
+execution log remain under
+`/tmp/predify-storage/experiments/stage4_dynamic_error_state_phase1_eaf29a0*`.
+
 ## Stage-4 multi-drive aligned-difference predictor
 
 Date: 2026-08-13

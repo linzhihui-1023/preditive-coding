@@ -254,6 +254,19 @@ artifacts and the completed one-time Test receipt are under
 `results/stage4_multidrive_c887e94/`. The frozen Test is now consumed for this
 checkpoint and must not be replayed or used for follow-up selection.
 
+The independent Stage-4 Dynamic Prediction Error phase-1 diagnostic completed
+at runtime revision `eaf29a0` with corrected CSV-only analysis at `3071391`.
+It compared persistent versus shuffled severity organization across blur,
+i.i.d. noise, and RGB bias on Val drives 0011/0039. Aggregate direction-
+independent AUROC was `0.64897569` for instantaneous RMS, `0.65151042` for
+scalar EMA, and `0.50489583` for dynamic-state RMS. The dynamic state was near
+chance for each corruption and exactly matched tensor EMA at `K=1`.
+
+This fails the phase-1 state-utility gate. No predictor feedback, optimizer,
+online adaptation, or frozen-Test read occurred, and selective online
+adaptation must not proceed from this state. Artifacts are under
+`results/stage4_dynamic_error_state_phase1_eaf29a0/`.
+
 The Stage-4 aligned temporal-difference run completed at revision `fdc4743`.
 Its epoch-1 checkpoint improved fixed replay MSE by `6.815535%` on train drive
 0005 but changed held-out drive-0011 MSE by `-0.718741%` relative to Stage-4

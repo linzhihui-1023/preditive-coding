@@ -809,6 +809,26 @@ that the formal `K=1` dynamics are mathematically identical to a tensor EMA
 with `alpha=0.207`. No score or direction is selected from the data, no
 network is updated, and frozen Test drives are not read.
 
+This phase-1 diagnostic completed at evaluation revision `eaf29a0`. The
+corrected offline analysis is revision `3071391`; it used only the saved CSVs
+and did not replay the network. Direction-independent aggregate AUROC was
+`0.64897569` for instantaneous RMS, `0.65151042` for scalar EMA, and
+`0.50489583` for dynamic-state RMS. Dynamic AUROC was `0.51312500` for blur,
+`0.50687500` for i.i.d. noise, and `0.50343750` for RGB bias. Formula error and
+dynamic-versus-matched-tensor-EMA difference were both exactly zero.
+
+Decision: `no_go_dynamic_state_not_better_than_controls`. Do not start phase 2
+online adaptation from this state. The result is a mechanistic null for the
+fixed signed tensor recurrence, not a rejection of all possible persistence
+features.
+
+Artifacts:
+
+```text
+results/stage4_dynamic_error_state_phase1_eaf29a0/
+/tmp/predify-storage/experiments/stage4_dynamic_error_state_phase1_eaf29a0*
+```
+
 Run the three-condition 1x1 Temporal Error matrix:
 
 ```bash
