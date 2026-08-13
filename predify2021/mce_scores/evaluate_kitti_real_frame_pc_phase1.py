@@ -18,7 +18,12 @@ from predify2021.model_factory import get_model
 
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-CONDITIONS = ("feedforward", "pc_no_error", "pc_dynamic_error")
+CONDITIONS = (
+    "feedforward",
+    "representation_memory_only",
+    "pc_no_error",
+    "pc_dynamic_error",
+)
 ALLOWED_DRIVES = (
     "2011_09_26/2011_09_26_drive_0011_sync",
     "2011_09_26/2011_09_26_drive_0039_sync",
@@ -134,10 +139,17 @@ def build_base_model(weights_path):
 def build_condition_models(base_model, condition):
     clean_model = copy.deepcopy(base_model).to(DEVICE).eval()
     corrupted_model = copy.deepcopy(base_model).to(DEVICE).eval()
-    error_multiplier = 0.0 if condition == "pc_no_error" else 0.01
+    error_multiplier = (
+        0.0
+        if condition in {"representation_memory_only", "pc_no_error"}
+        else 0.01
+    )
     with torch.no_grad():
         clean_model.pc_error_multipliers.fill_(error_multiplier)
         corrupted_model.pc_error_multipliers.fill_(error_multiplier)
+        if condition == "representation_memory_only":
+            clean_model.pc_fb_multipliers.zero_()
+            corrupted_model.pc_fb_multipliers.zero_()
     return clean_model, corrupted_model
 
 
@@ -386,6 +398,45 @@ def summarize_rows(rows):
             ),
         }
 
+    disturbance = {
+        condition: condition_summary[condition]["phases"]["disturbance"][
+            "mean_representation_normalized_l2"
+        ]
+        for condition in CONDITIONS
+    }
+    adjacent_specs = (
+        ("a_to_b_representation_memory", "feedforward", "representation_memory_only"),
+        ("b_to_c_feedback", "representation_memory_only", "pc_no_error"),
+        ("c_to_d_dynamic_error", "pc_no_error", "pc_dynamic_error"),
+    )
+    adjacent_improvements = {}
+    for name, source, target in adjacent_specs:
+        source_value = disturbance[source]
+        target_value = disturbance[target]
+        adjacent_improvements[name] = {
+            "source_condition": source,
+            "target_condition": target,
+            "source": source_value,
+            "target": target_value,
+            "absolute_reduction": source_value - target_value,
+            "relative_improvement_percent": (
+                100.0 * (source_value - target_value) / source_value
+            ),
+        }
+
+    representation_reduction = adjacent_improvements[
+        "a_to_b_representation_memory"
+    ]["absolute_reduction"]
+    feedback_reduction = adjacent_improvements[
+        "b_to_c_feedback"
+    ]["absolute_reduction"]
+    if representation_reduction > feedback_reduction:
+        main_source = "representation_memory"
+    elif feedback_reduction > representation_reduction:
+        main_source = "top_down_feedback"
+    else:
+        main_source = "equal"
+
     dynamic = condition_summary["pc_dynamic_error"]
     no_error = condition_summary["pc_no_error"]
     dynamic_disturbance = dynamic["phases"]["disturbance"][
@@ -415,6 +466,17 @@ def summarize_rows(rows):
     decision = "GO" if primary_pass and recovery_decreased else "NO-GO"
     return {
         "conditions": condition_summary,
+        "adjacent_improvements": adjacent_improvements,
+        "a_to_c_total": {
+            "feedforward": disturbance["feedforward"],
+            "pc_no_error": disturbance["pc_no_error"],
+            "relative_improvement_percent": 100.0 * (
+                disturbance["feedforward"] - disturbance["pc_no_error"]
+            ) / disturbance["feedforward"],
+            "main_source": main_source,
+            "representation_memory_absolute_reduction": representation_reduction,
+            "feedback_absolute_reduction": feedback_reduction,
+        },
         "primary_comparison": {
             "metric": "disturbance_mean_representation_normalized_l2",
             "pc_no_error": no_error_disturbance,
@@ -475,9 +537,18 @@ def write_readme(path, summary):
             f"{item['recovery_last_10_mean_normalized_l2']:.9f} |"
         )
     comparison = summary["primary_comparison"]
+    adjacent = summary["adjacent_improvements"]
+    attribution = summary["a_to_c_total"]
     recovery = summary["recovery_check"]
     lines.extend(
         [
+            "",
+            "## Adjacent Contributions",
+            "",
+            f"A -> B representation memory: {adjacent['a_to_b_representation_memory']['relative_improvement_percent']:.6f}%.",
+            f"B -> C top-down feedback: {adjacent['b_to_c_feedback']['relative_improvement_percent']:.6f}%.",
+            f"C -> D dynamic error: {adjacent['c_to_d_dynamic_error']['relative_improvement_percent']:.6f}%.",
+            f"The A -> C improvement is mainly from {attribution['main_source']}.",
             "",
             f"## {summary['decision']}",
             "",
@@ -563,6 +634,8 @@ def main():
         "drives": drives,
         "frozen_test_drives_read": False,
         "conditions": result["conditions"],
+        "adjacent_improvements": result["adjacent_improvements"],
+        "a_to_c_total": result["a_to_c_total"],
         "primary_comparison": result["primary_comparison"],
         "recovery_check": result["recovery_check"],
         "decision": result["decision"],
@@ -585,6 +658,14 @@ def main():
             "cross_frame_state_detached": True,
             "parameter_frozen": True,
             "dynamic_error": "epsilon_t=0.207*r_t+0.793*epsilon_(t-1)",
+            "feedforward": "reset every frame",
+            "representation_memory_only": (
+                "representation memory; feedback=0; alpha=0"
+            ),
+            "pc_no_error": "representation memory + feedback; alpha=0",
+            "pc_dynamic_error": (
+                "representation memory + feedback + dynamic error correction"
+            ),
             "pc_no_error_alpha": 0.0,
             "pc_dynamic_error_alpha": 0.01,
             "beta": (0.2, 0.4, 0.4, 0.5, 0.6),

@@ -45,6 +45,7 @@ class RealFramePCPhase1Test(unittest.TestCase):
         )
         disturbance_values = {
             "feedforward": 0.30,
+            "representation_memory_only": 0.21,
             "pc_no_error": 0.20,
             "pc_dynamic_error": 0.18,
         }
@@ -81,6 +82,28 @@ class RealFramePCPhase1Test(unittest.TestCase):
         self.assertEqual(summary["decision"], "GO")
         self.assertTrue(summary["primary_comparison"]["passed"])
         self.assertTrue(summary["recovery_check"]["distance_decreased"])
+        self.assertAlmostEqual(
+            summary["adjacent_improvements"][
+                "a_to_b_representation_memory"
+            ]["relative_improvement_percent"],
+            30.0,
+        )
+        self.assertAlmostEqual(
+            summary["adjacent_improvements"]["b_to_c_feedback"][
+                "relative_improvement_percent"
+            ],
+            100.0 / 21.0,
+        )
+        self.assertAlmostEqual(
+            summary["adjacent_improvements"]["c_to_d_dynamic_error"][
+                "relative_improvement_percent"
+            ],
+            10.0,
+        )
+        self.assertEqual(
+            summary["a_to_c_total"]["main_source"],
+            "representation_memory",
+        )
 
 
 if __name__ == "__main__":

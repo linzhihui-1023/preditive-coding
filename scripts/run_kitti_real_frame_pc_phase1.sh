@@ -32,7 +32,7 @@ if [[ ! -d "$PCODER_WEIGHTS" ]]; then
 fi
 
 mkdir -p "$(dirname "$LOG_PATH")"
-printf 'git_revision=%s\nexperiment=real_frame_predictive_coding_phase1\ndrives=0011,0039\nfrozen_test_read=false\nconditions=feedforward,pc_no_error,pc_dynamic_error\ntrajectory=clean40,persistent_gaussian_blur80,clean_recovery40\nnetwork_training=false\nonline_learning=false\nfuture_predictor=false\n' \
+printf 'git_revision=%s\nexperiment=real_frame_predictive_coding_phase1\ndrives=0011,0039\nfrozen_test_read=false\nconditions=feedforward,representation_memory_only,pc_no_error,pc_dynamic_error\ntrajectory=clean40,persistent_gaussian_blur80,clean_recovery40\nnetwork_training=false\nonline_learning=false\nfuture_predictor=false\n' \
     "$GIT_REVISION" > "$MANIFEST_PATH"
 
 env -i \
