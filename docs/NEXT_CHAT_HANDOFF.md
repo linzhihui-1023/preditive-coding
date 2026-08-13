@@ -1029,6 +1029,27 @@ Do not rerun 0051/0056 for the `c9fec52` checkpoint. The receipt is completed
 and bound to checkpoint SHA-256
 `26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4`.
 
+Cross-corruption validation then ran at evaluator revision `54e893e` on Val
+0011/0039 only. The c9fec52 epoch-1 checkpoint, three conditions, and 40/80/40
+protocol stayed fixed. Gaussian noise used pre-normalization `std=0.08` and
+brightness shift used uniform pre-normalization RGB `+0.15`; each had one
+fixed severity.
+
+| Corruption | Current | Learned | Zeroed | Learned vs current | Learned vs zeroed |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Gaussian noise | 0.650661257 | 0.490607851 | 0.487297715 | 24.598576% | -0.679284% |
+| Brightness shift | 0.272876398 | 0.184116804 | 0.197603509 | 32.527399% | 6.825134% |
+
+The learned recurrent transition improved over current for both corruptions.
+Dynamic-error input improved over zeroed for brightness on both drives, but
+not for Gaussian noise, where the two drives had opposite directions. Frozen
+Test was not read. Artifacts:
+
+```text
+results/real_frame_recurrent_error_cross_corruption_54e893e/
+/tmp/predify-storage/experiments/real_frame_recurrent_error_cross_corruption_54e893e.log
+```
+
 ## Frozen historical runners
 
 The commands below belong to completed predictor research. They remain for

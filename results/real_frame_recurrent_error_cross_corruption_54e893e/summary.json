@@ -1,0 +1,447 @@
+{
+  "checkpoint": {
+    "epoch": 1,
+    "path": "/tmp/predify-storage/experiments/real_frame_recurrent_error_train_c9fec52/best_recurrent_transition.pt",
+    "sha256": "26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4",
+    "val_prediction_mse": 0.8939849783818181
+  },
+  "corruptions": {
+    "brightness_shift": {
+      "comparison": {
+        "current_stateful": 0.2728763977508393,
+        "learned_recurrent_error": 0.1841168039982005,
+        "learned_recurrent_error_zeroed": 0.19760350855777953,
+        "learned_vs_current_improvement_percent": 32.52739866262977,
+        "learned_vs_zeroed_improvement_percent": 6.825134157795334,
+        "metric": "disturbance_mean_representation_normalized_l2",
+        "per_drive": {
+          "2011_09_26/2011_09_26_drive_0011_sync": {
+            "current_stateful": 0.2618005564132329,
+            "learned_recurrent_error": 0.1861057564394056,
+            "learned_recurrent_error_zeroed": 0.19661357828756676,
+            "learned_vs_current_improvement_percent": 28.913154735373684,
+            "learned_vs_zeroed_improvement_percent": 5.344402934772097
+          },
+          "2011_09_26/2011_09_26_drive_0039_sync": {
+            "current_stateful": 0.2839522390884451,
+            "learned_recurrent_error": 0.18212785155699523,
+            "learned_recurrent_error_zeroed": 0.19859343882799257,
+            "learned_vs_current_improvement_percent": 35.85968818500273,
+            "learned_vs_zeroed_improvement_percent": 8.29110335576527
+          }
+        }
+      },
+      "conditions": {
+        "current_stateful": {
+          "disturbance_mean_representation_normalized_l2": 0.2728763977508393,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0011_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.2618005564132329,
+              "recovery_first_10_mean_representation_normalized_l2": 0.15389166414317162,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0007859764471165029
+            },
+            "2011_09_26/2011_09_26_drive_0039_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.2839522390884451,
+              "recovery_first_10_mean_representation_normalized_l2": 0.16005385665230318,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0006881558960018714
+            }
+          },
+          "per_layer": {
+            "1": {
+              "disturbance_mean_representation_normalized_l2": 0.26983682256081776,
+              "recovery_first_10_mean_representation_normalized_l2": 0.08804350131958846,
+              "recovery_last_10_mean_representation_normalized_l2": 0.00018165712686638724
+            },
+            "2": {
+              "disturbance_mean_representation_normalized_l2": 0.2500775588394076,
+              "recovery_first_10_mean_representation_normalized_l2": 0.11741992950141744,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0004406912235612719
+            },
+            "3": {
+              "disturbance_mean_representation_normalized_l2": 0.24261343326967771,
+              "recovery_first_10_mean_representation_normalized_l2": 0.14525791562569643,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0007427240195629316
+            },
+            "4": {
+              "disturbance_mean_representation_normalized_l2": 0.2849698265683319,
+              "recovery_first_10_mean_representation_normalized_l2": 0.19258591542667045,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0010426607489281735
+            },
+            "5": {
+              "disturbance_mean_representation_normalized_l2": 0.31688434751596073,
+              "recovery_first_10_mean_representation_normalized_l2": 0.2415565401153142,
+              "recovery_last_10_mean_representation_normalized_l2": 0.001277597738877171
+            }
+          },
+          "recovery_first_10_mean_representation_normalized_l2": 0.15697276039773744,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0007370661715591869
+        },
+        "learned_recurrent_error": {
+          "disturbance_mean_representation_normalized_l2": 0.1841168039982005,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0011_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.1861057564394056,
+              "recovery_first_10_mean_representation_normalized_l2": 0.1061160279573545,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0008179998421763411
+            },
+            "2011_09_26/2011_09_26_drive_0039_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.18212785155699523,
+              "recovery_first_10_mean_representation_normalized_l2": 0.09907425821449337,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0008625214844577789
+            }
+          },
+          "per_layer": {
+            "1": {
+              "disturbance_mean_representation_normalized_l2": 0.2724106447822402,
+              "recovery_first_10_mean_representation_normalized_l2": 0.09573919285014965,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0003399271163954913
+            },
+            "2": {
+              "disturbance_mean_representation_normalized_l2": 0.23114718397396183,
+              "recovery_first_10_mean_representation_normalized_l2": 0.11385431411118034,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0007875232018049918
+            },
+            "3": {
+              "disturbance_mean_representation_normalized_l2": 0.17859384245841897,
+              "recovery_first_10_mean_representation_normalized_l2": 0.11807244331393427,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0009041017680973731
+            },
+            "4": {
+              "disturbance_mean_representation_normalized_l2": 0.14257644707672643,
+              "recovery_first_10_mean_representation_normalized_l2": 0.10893507179083717,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0010298758511418597
+            },
+            "5": {
+              "disturbance_mean_representation_normalized_l2": 0.09585590169965498,
+              "recovery_first_10_mean_representation_normalized_l2": 0.07637469336351839,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0011398753791455848
+            }
+          },
+          "recovery_first_10_mean_representation_normalized_l2": 0.10259514308592398,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0008402606633170605
+        },
+        "learned_recurrent_error_zeroed": {
+          "disturbance_mean_representation_normalized_l2": 0.19760350855777953,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0011_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.19661357828756676,
+              "recovery_first_10_mean_representation_normalized_l2": 0.11450794666060977,
+              "recovery_last_10_mean_representation_normalized_l2": 0.016254853880807208
+            },
+            "2011_09_26/2011_09_26_drive_0039_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.19859343882799257,
+              "recovery_first_10_mean_representation_normalized_l2": 0.11458978365318918,
+              "recovery_last_10_mean_representation_normalized_l2": 0.024987984730555447
+            }
+          },
+          "per_layer": {
+            "1": {
+              "disturbance_mean_representation_normalized_l2": 0.27202514591843474,
+              "recovery_first_10_mean_representation_normalized_l2": 0.08971865648912196,
+              "recovery_last_10_mean_representation_normalized_l2": 0.00025676720881609596
+            },
+            "2": {
+              "disturbance_mean_representation_normalized_l2": 0.2371221302859253,
+              "recovery_first_10_mean_representation_normalized_l2": 0.108204508948697,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0008161151695946273
+            },
+            "3": {
+              "disturbance_mean_representation_normalized_l2": 0.1843999138099057,
+              "recovery_first_10_mean_representation_normalized_l2": 0.11334073360310734,
+              "recovery_last_10_mean_representation_normalized_l2": 0.004569067074701746
+            },
+            "4": {
+              "disturbance_mean_representation_normalized_l2": 0.1527153866683382,
+              "recovery_first_10_mean_representation_normalized_l2": 0.11218510659549252,
+              "recovery_last_10_mean_representation_normalized_l2": 0.018361047225166342
+            },
+            "5": {
+              "disturbance_mean_representation_normalized_l2": 0.14175496610629462,
+              "recovery_first_10_mean_representation_normalized_l2": 0.14929532014807864,
+              "recovery_last_10_mean_representation_normalized_l2": 0.07910409985012784
+            }
+          },
+          "recovery_first_10_mean_representation_normalized_l2": 0.11454886515689947,
+          "recovery_last_10_mean_representation_normalized_l2": 0.020621419305681322
+        }
+      },
+      "config": {
+        "bias_rgb": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "blur_kernel_size": 11,
+        "blur_sigma": 3.0,
+        "corruption_type": "bias",
+        "noise_std": 0.0,
+        "seed": 0
+      },
+      "corruption": "brightness_shift"
+    },
+    "gaussian_noise": {
+      "comparison": {
+        "current_stateful": 0.6506612574474316,
+        "learned_recurrent_error": 0.490607851069567,
+        "learned_recurrent_error_zeroed": 0.48729771482238454,
+        "learned_vs_current_improvement_percent": 24.598576378400047,
+        "learned_vs_zeroed_improvement_percent": -0.679284171974616,
+        "metric": "disturbance_mean_representation_normalized_l2",
+        "per_drive": {
+          "2011_09_26/2011_09_26_drive_0011_sync": {
+            "current_stateful": 0.5995042332205116,
+            "learned_recurrent_error": 0.4752311142098392,
+            "learned_recurrent_error_zeroed": 0.4664817327861467,
+            "learned_vs_current_improvement_percent": 20.72931467774338,
+            "learned_vs_zeroed_improvement_percent": -1.8756107278703626
+          },
+          "2011_09_26/2011_09_26_drive_0039_sync": {
+            "current_stateful": 0.7018182816743512,
+            "learned_recurrent_error": 0.5059845879292957,
+            "learned_recurrent_error_zeroed": 0.5081136968586233,
+            "learned_vs_current_improvement_percent": 27.903760682587034,
+            "learned_vs_zeroed_improvement_percent": 0.41902214848579555
+          }
+        }
+      },
+      "conditions": {
+        "current_stateful": {
+          "disturbance_mean_representation_normalized_l2": 0.6506612574474316,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0011_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.5995042332205116,
+              "recovery_first_10_mean_representation_normalized_l2": 0.3575260269992065,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0013139915185699056
+            },
+            "2011_09_26/2011_09_26_drive_0039_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.7018182816743512,
+              "recovery_first_10_mean_representation_normalized_l2": 0.42771915460240423,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0010211984387160885
+            }
+          },
+          "per_layer": {
+            "1": {
+              "disturbance_mean_representation_normalized_l2": 0.5013514383822483,
+              "recovery_first_10_mean_representation_normalized_l2": 0.15348304965053422,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0002671741784030889
+            },
+            "2": {
+              "disturbance_mean_representation_normalized_l2": 0.6902643120184819,
+              "recovery_first_10_mean_representation_normalized_l2": 0.35519878284660666,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0006569666752682759
+            },
+            "3": {
+              "disturbance_mean_representation_normalized_l2": 0.6443536678800146,
+              "recovery_first_10_mean_representation_normalized_l2": 0.42096188027771675,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0010935819517749557
+            },
+            "4": {
+              "disturbance_mean_representation_normalized_l2": 0.6688793988946553,
+              "recovery_first_10_mean_representation_normalized_l2": 0.4872602394980553,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0015776058727440944
+            },
+            "5": {
+              "disturbance_mean_representation_normalized_l2": 0.7484574700617567,
+              "recovery_first_10_mean_representation_normalized_l2": 0.5462090017311141,
+              "recovery_last_10_mean_representation_normalized_l2": 0.002242646215024572
+            }
+          },
+          "recovery_first_10_mean_representation_normalized_l2": 0.39262259080080547,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0011675949786429966
+        },
+        "learned_recurrent_error": {
+          "disturbance_mean_representation_normalized_l2": 0.490607851069567,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0011_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.4752311142098392,
+              "recovery_first_10_mean_representation_normalized_l2": 0.30671935838155884,
+              "recovery_last_10_mean_representation_normalized_l2": 0.003120952849998353
+            },
+            "2011_09_26/2011_09_26_drive_0039_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.5059845879292957,
+              "recovery_first_10_mean_representation_normalized_l2": 0.3257553411854589,
+              "recovery_last_10_mean_representation_normalized_l2": 0.01099171275006166
+            }
+          },
+          "per_layer": {
+            "1": {
+              "disturbance_mean_representation_normalized_l2": 0.5430434475992204,
+              "recovery_first_10_mean_representation_normalized_l2": 0.18465574183475528,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0008271472297798564
+            },
+            "2": {
+              "disturbance_mean_representation_normalized_l2": 0.6668913138257982,
+              "recovery_first_10_mean_representation_normalized_l2": 0.37841690822104096,
+              "recovery_last_10_mean_representation_normalized_l2": 0.003417731891968266
+            },
+            "3": {
+              "disturbance_mean_representation_normalized_l2": 0.5544522221918256,
+              "recovery_first_10_mean_representation_normalized_l2": 0.4168530600076771,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0034669565318886176
+            },
+            "4": {
+              "disturbance_mean_representation_normalized_l2": 0.42111765870252416,
+              "recovery_first_10_mean_representation_normalized_l2": 0.36303330226770575,
+              "recovery_last_10_mean_representation_normalized_l2": 0.006798501366246872
+            },
+            "5": {
+              "disturbance_mean_representation_normalized_l2": 0.2675346130284687,
+              "recovery_first_10_mean_representation_normalized_l2": 0.2382277365863652,
+              "recovery_last_10_mean_representation_normalized_l2": 0.02077132698026641
+            }
+          },
+          "recovery_first_10_mean_representation_normalized_l2": 0.31623734978350876,
+          "recovery_last_10_mean_representation_normalized_l2": 0.007056332800030009
+        },
+        "learned_recurrent_error_zeroed": {
+          "disturbance_mean_representation_normalized_l2": 0.48729771482238454,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0011_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.4664817327861467,
+              "recovery_first_10_mean_representation_normalized_l2": 0.2928079652396056,
+              "recovery_last_10_mean_representation_normalized_l2": 0.021033030892887505
+            },
+            "2011_09_26/2011_09_26_drive_0039_sync": {
+              "disturbance_mean_representation_normalized_l2": 0.5081136968586233,
+              "recovery_first_10_mean_representation_normalized_l2": 0.3217085449909938,
+              "recovery_last_10_mean_representation_normalized_l2": 0.05236248741069726
+            }
+          },
+          "per_layer": {
+            "1": {
+              "disturbance_mean_representation_normalized_l2": 0.5376321210231211,
+              "recovery_first_10_mean_representation_normalized_l2": 0.17301935748027053,
+              "recovery_last_10_mean_representation_normalized_l2": 0.0006882698807338024
+            },
+            "2": {
+              "disturbance_mean_representation_normalized_l2": 0.6550461855121423,
+              "recovery_first_10_mean_representation_normalized_l2": 0.34530129960504785,
+              "recovery_last_10_mean_representation_normalized_l2": 0.002185055328643373
+            },
+            "3": {
+              "disturbance_mean_representation_normalized_l2": 0.5264708931001908,
+              "recovery_first_10_mean_representation_normalized_l2": 0.3745545828767992,
+              "recovery_last_10_mean_representation_normalized_l2": 0.011975395884062361
+            },
+            "4": {
+              "disturbance_mean_representation_normalized_l2": 0.4130026798026659,
+              "recovery_first_10_mean_representation_normalized_l2": 0.343069483176674,
+              "recovery_last_10_mean_representation_normalized_l2": 0.03935101709739183
+            },
+            "5": {
+              "disturbance_mean_representation_normalized_l2": 0.3043366946738045,
+              "recovery_first_10_mean_representation_normalized_l2": 0.3003465524377067,
+              "recovery_last_10_mean_representation_normalized_l2": 0.12928905756813053
+            }
+          },
+          "recovery_first_10_mean_representation_normalized_l2": 0.30725825511529964,
+          "recovery_last_10_mean_representation_normalized_l2": 0.03669775915179238
+        }
+      },
+      "config": {
+        "bias_rgb": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "blur_kernel_size": 11,
+        "blur_sigma": 3.0,
+        "corruption_type": "iid_gaussian",
+        "noise_std": 0.08,
+        "seed": 0
+      },
+      "corruption": "gaussian_noise"
+    }
+  },
+  "evaluator_revision": "54e893ec7514c6958769985a18025a5c60eff1e4",
+  "experiment": "real_frame_recurrent_error_cross_corruption_validation",
+  "model_revision": "c9fec526680bb274aca2b96397db4e20741f248d",
+  "overall_macro_mean": {
+    "comparison": {
+      "current_stateful": 0.46176882759913546,
+      "learned_recurrent_error": 0.33736232753388373,
+      "learned_recurrent_error_zeroed": 0.34245061169008206,
+      "learned_vs_current_improvement_percent": 26.94129456769001,
+      "learned_vs_zeroed_improvement_percent": 1.4858446685454396,
+      "metric": "disturbance_mean_representation_normalized_l2",
+      "per_drive": {
+        "2011_09_26/2011_09_26_drive_0011_sync": {
+          "current_stateful": 0.43065239481687223,
+          "learned_recurrent_error": 0.3306684353246224,
+          "learned_recurrent_error_zeroed": 0.3315476555368567,
+          "learned_vs_current_improvement_percent": 23.216859048181153,
+          "learned_vs_zeroed_improvement_percent": 0.2651866775563914
+        },
+        "2011_09_26/2011_09_26_drive_0039_sync": {
+          "current_stateful": 0.4928852603813981,
+          "learned_recurrent_error": 0.3440562197431455,
+          "learned_recurrent_error_zeroed": 0.35335356784330796,
+          "learned_vs_current_improvement_percent": 30.195473997962058,
+          "learned_vs_zeroed_improvement_percent": 2.6311742532865305
+        }
+      }
+    },
+    "conditions": {
+      "current_stateful": {
+        "disturbance_mean_representation_normalized_l2": 0.46176882759913546,
+        "recovery_first_10_mean_representation_normalized_l2": 0.2747976755992715,
+        "recovery_last_10_mean_representation_normalized_l2": 0.0009523305751010917
+      },
+      "learned_recurrent_error": {
+        "disturbance_mean_representation_normalized_l2": 0.33736232753388373,
+        "recovery_first_10_mean_representation_normalized_l2": 0.20941624643471637,
+        "recovery_last_10_mean_representation_normalized_l2": 0.003948296731673535
+      },
+      "learned_recurrent_error_zeroed": {
+        "disturbance_mean_representation_normalized_l2": 0.34245061169008206,
+        "recovery_first_10_mean_representation_normalized_l2": 0.21090356013609957,
+        "recovery_last_10_mean_representation_normalized_l2": 0.02865958922873685
+      }
+    }
+  },
+  "per_frame_row_count": 9600,
+  "protocol": {
+    "baseline_frames": 40,
+    "checkpoint_selection": false,
+    "corruptions": [
+      "gaussian_noise",
+      "brightness_shift"
+    ],
+    "disturbance_frames": 80,
+    "frozen_test_drives_read": false,
+    "recovery_frames": 40,
+    "seed": 0,
+    "training": false,
+    "tuning": false,
+    "val_drives": [
+      "2011_09_26/2011_09_26_drive_0011_sync",
+      "2011_09_26/2011_09_26_drive_0039_sync"
+    ]
+  },
+  "selected_raw_frames": {
+    "brightness_shift": {
+      "2011_09_26/2011_09_26_drive_0011_sync": {
+        "count": 160,
+        "start": 0,
+        "stop_inclusive": 159
+      },
+      "2011_09_26/2011_09_26_drive_0039_sync": {
+        "count": 160,
+        "start": 0,
+        "stop_inclusive": 159
+      }
+    },
+    "gaussian_noise": {
+      "2011_09_26/2011_09_26_drive_0011_sync": {
+        "count": 160,
+        "start": 0,
+        "stop_inclusive": 159
+      },
+      "2011_09_26/2011_09_26_drive_0039_sync": {
+        "count": 160,
+        "start": 0,
+        "stop_inclusive": 159
+      }
+    }
+  }
+}

@@ -1,5 +1,26 @@
 # Research Decisions
 
+## 2026-08-13: Cross-corruption Val separates recurrent and error contributions
+
+Status: accepted
+
+Evaluator revision `54e893e` kept the `c9fec52` epoch-1 checkpoint frozen and
+ran only Val drives 0011/0039. The existing three conditions and
+40-clean/80-disturbance/40-recovery protocol were reused with one fixed
+pre-normalization strength per new corruption: Gaussian noise standard
+deviation `0.08` and uniform RGB brightness shift `+0.15`. No Frozen Test
+drive, training, tuning, or checkpoint selection was used.
+
+Learned recurrent-error beat current-stateful by `24.598576%` under Gaussian
+noise and `32.527399%` under brightness shift. This supports the learned
+recurrent transition across both new corruptions. Learned versus the identical
+zeroed checkpoint was `-0.679284%` for Gaussian noise, with opposite directions
+on the two drives, but `+6.825134%` for brightness shift, favorable on both
+drives. Therefore dynamic-error input has cross-drive support for the
+persistent systematic brightness shift but not for the per-frame Gaussian
+noise condition. Do not use the positive two-corruption macro mean to erase
+this corruption-specific difference.
+
 ## 2026-08-13: Learned recurrent-error mechanism passes Frozen Test
 
 Status: accepted

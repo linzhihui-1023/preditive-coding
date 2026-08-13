@@ -1,0 +1,11 @@
+evaluator_revision=54e893ec7514c6958769985a18025a5c60eff1e4
+model_revision=c9fec52
+checkpoint_epoch=1
+checkpoint_sha256=26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4
+val_drives=0011,0039
+frozen_test_read=false
+corruptions=gaussian_noise_std0.08,brightness_shift_rgb+0.15
+conditions=current_stateful,learned_recurrent_error,learned_recurrent_error_zeroed
+training=false
+tuning=false
+checkpoint_selection=false

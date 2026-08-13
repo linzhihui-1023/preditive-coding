@@ -1380,6 +1380,40 @@ results/real_frame_recurrent_error_frozen_test_c9fec52/
 /tmp/predify-storage/experiments/real_frame_recurrent_error_train_c9fec52/best_recurrent_transition_real_frame_frozen_test_receipt.json
 ```
 
+### Cross-corruption Val
+
+Evaluator revision: `54e893e`
+
+The frozen `c9fec52` epoch-1 checkpoint was evaluated only on Val drives
+0011/0039 with the unchanged three conditions and 40/80/40 protocol. Gaussian
+noise used deterministic absolute-frame realizations with pixel-space
+`std=0.08`; brightness shift added uniform pixel-space RGB `+0.15`. Both were
+applied before ImageNet normalization. No training, tuning, checkpoint
+selection, severity sweep, or Frozen Test read occurred.
+
+| Corruption | Condition | Disturbance L2 | Recovery first 10 | Recovery last 10 |
+| --- | --- | ---: | ---: | ---: |
+| Gaussian noise | Current | 0.650661257 | 0.392622591 | 0.001167595 |
+| Gaussian noise | Learned | 0.490607851 | 0.316237350 | 0.007056333 |
+| Gaussian noise | Zeroed | 0.487297715 | 0.307258255 | 0.036697759 |
+| Brightness shift | Current | 0.272876398 | 0.156972760 | 0.000737066 |
+| Brightness shift | Learned | 0.184116804 | 0.102595143 | 0.000840261 |
+| Brightness shift | Zeroed | 0.197603509 | 0.114548865 | 0.020621419 |
+
+Gaussian noise: learned improved `24.598576%` over current but was `0.679284%`
+worse than zeroed. The learned-versus-zeroed direction was negative on 0011
+and positive on 0039. Brightness shift: learned improved `32.527399%` over
+current and `6.825134%` over zeroed, favorable on both drives. The macro mean
+over the two fixed corruptions was `26.941295%` versus current and `1.485845%`
+versus zeroed, but mechanism interpretation remains corruption-specific.
+
+Tracked artifacts and server-only log:
+
+```text
+results/real_frame_recurrent_error_cross_corruption_54e893e/
+/tmp/predify-storage/experiments/real_frame_recurrent_error_cross_corruption_54e893e.log
+```
+
 ## Earlier adjacent-pair result
 
 This older experiment reset model state each batch and therefore tested

@@ -214,6 +214,31 @@ def write_readme(path, summary):
                 f"{result['conditions']['learned_recurrent_error_zeroed']['per_layer'][key]['disturbance_mean_representation_normalized_l2']:.9f} |"
             )
         lines.append("")
+    overall = summary["overall_macro_mean"]
+    lines.extend(
+        [
+            "## Overall Macro Mean",
+            "",
+            "| Condition | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+    )
+    for condition in CONDITIONS:
+        item = overall["conditions"][condition]
+        lines.append(
+            f"| {condition} | "
+            f"{item['disturbance_mean_representation_normalized_l2']:.9f} | "
+            f"{item['recovery_first_10_mean_representation_normalized_l2']:.9f} | "
+            f"{item['recovery_last_10_mean_representation_normalized_l2']:.9f} |"
+        )
+    lines.extend(
+        [
+            "",
+            f"Learned vs current: {overall['comparison']['learned_vs_current_improvement_percent']:.6f}%.",
+            f"Learned vs zeroed: {overall['comparison']['learned_vs_zeroed_improvement_percent']:.6f}%.",
+            "",
+        ]
+    )
     Path(path).write_text("\n".join(lines), encoding="ascii")
 
 

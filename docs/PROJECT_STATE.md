@@ -81,6 +81,17 @@ both comparisons favorable on each drive. The predeclared decision is
 0051/0056 for this checkpoint. Outputs are in
 `results/real_frame_recurrent_error_frozen_test_c9fec52/`.
 
+Cross-corruption validation at evaluator revision `54e893e` then used only Val
+0011/0039, without touching Frozen Test. With fixed Gaussian noise
+`std=0.08`, learned improved by `24.598576%` over current but changed by
+`-0.679284%` versus zeroed; the two drives disagreed on the latter direction.
+With a fixed uniform RGB brightness shift of `+0.15`, learned improved by
+`32.527399%` over current and `6.825134%` over zeroed, with both drives
+favorable. The recurrent transition therefore generalized across both new
+corruptions, while the dynamic-error input contribution generalized to the
+systematic brightness shift but not to per-frame Gaussian noise. Outputs are
+in `results/real_frame_recurrent_error_cross_corruption_54e893e/`.
+
 ## Current implementation
 
 - `predify2021/model_factory/pvgg16_targetflow.py`
