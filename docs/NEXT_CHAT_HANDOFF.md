@@ -26,6 +26,7 @@ remote: myprivate -> git@github.com:linzhihui-1023/preditive-coding.git
 latest Gate 3 evaluation revision: 80c4aee
 latest Stage-4 prediction training revision: c887e94
 latest unified robustness evaluator revision: 42a7029
+latest strict error-driven training/evaluation revisions: a721fcb / d39ffa3
 ```
 
 All selective-online-adaptation work must stay on
@@ -64,6 +65,18 @@ Learned beat current-stateful for every corruption/severity. It beat zeroed
 for six corruptions, but was `0.1683%` worse on the Gaussian-noise mean; do not
 claim a universal dynamic-error-input benefit. Results are in
 `results/real_frame_robustness_benchmark_42a7029/`.
+
+## Strict Error-driven Result
+
+Revision `a721fcb` removed the current feedforward feature from the learned
+transition and moved training supervision to `F_(t+1)`. The epoch-5 checkpoint
+was evaluated at `d39ffa3` on Val 0011/0039 with blur sigma 3 only. Disturbance
+normalized L2 was `0.784296992` (current), `0.522036018` (full), and `0`
+(error-zeroed). Full improved `33.438988%` over current, but Full versus zeroed
+is undefined because zeroed is input-blind and produces identical paired clean
+and corrupted trajectories. The mechanism conclusion is `NOT ESTABLISHED`;
+do not expand this branch or touch Frozen Test. Results are in
+`results/real_frame_error_driven_d39ffa3/`.
 
 ## Settled Research Paradigm
 

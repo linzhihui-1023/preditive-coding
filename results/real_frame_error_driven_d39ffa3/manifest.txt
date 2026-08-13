@@ -1,0 +1,14 @@
+evaluator_revision=d39ffa3a118dc58bbb5f12e42bc72cb068f73ae2
+training_revision=a721fcb764b69da2a69c26e523fd4e517f24d542
+checkpoint=/tmp/predify-storage/experiments/real_frame_recurrent_error_train_a721fcb/best_recurrent_transition.pt
+checkpoint_epoch=5
+checkpoint_sha256=7b743640cae5901874090b3eed438d3ea697eafd8415ebbfcf3fefddcb6015d3
+train_drives=0005,0013,0014,0036
+val_drives=0011,0039
+frozen_test_read=false
+corruption=gaussian_blur_sigma3
+trajectory=clean40,corruption80,recovery40
+conditions=current_stateful,learned_error_driven_zeroed,learned_error_driven
+current_feedforward_transition_input=false
+training_target=F_(t+1)
+conclusion=prediction_error_mechanism_not_established

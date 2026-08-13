@@ -107,15 +107,33 @@ transition generalized across this Val benchmark, but the error-input benefit
 remains corruption-specific. Frozen Test was not read. Auditable outputs are
 in `results/real_frame_robustness_benchmark_42a7029/`.
 
+The strict prediction-error-driven revision `a721fcb` removed the current
+feedforward feature from the learned ConvGRU transition. It now forms
+`e_t=F_t-Fhat_t`, updates `epsilon_t=0.207e_t+0.793epsilon_(t-1)`, and applies
+`h_t=T(h_(t-1),epsilon_t,feedback)`; its training loss compares the resulting
+prediction only with `F_(t+1)`. The epoch-5 checkpoint selected by Val
+next-frame MSE (`3.362763003`) was evaluated at revision `d39ffa3` on the fixed
+Val blur-severity-3 protocol. Disturbance normalized L2 was `0.784296992`
+(current-stateful), `0.522036018` (full error-driven), and exactly `0`
+(error-zeroed). Full improved `33.438988%` over current, but a Full-versus-
+zeroed percentage is undefined: after removing both feedforward and error,
+zeroed receives no current-frame information, so its paired clean/corrupted
+state trajectories are identical. This input-blind degeneracy means prediction
+error was not established as the main state-update driver under the requested
+metric. No additional structure or corruption experiment is authorized from
+this result. Frozen Test was not read. Outputs are in
+`results/real_frame_error_driven_d39ffa3/`.
+
 ## Current implementation
 
 - `predify2021/model_factory/pvgg16_targetflow.py`
   - Defaults to `task=real_frame_pc` and implements five real-frame PCoder
     stages using the original PVGG16 feedforward boundaries and decoders.
   - Selects `real_frame_transition_mode=predify` for the frozen baseline or
-    `convgru_error` for the learned transition. The learned path keeps the
-    original beta/lambda feedforward-plus-feedback base update and replaces
-    only the fixed dynamic-error gradient correction.
+    `convgru_error` for the learned transition. The strict learned path uses
+    previous state, current dynamic prediction error, and historical feedback;
+    current feedforward features do not enter the transition after first-frame
+    state initialization.
   - Supports `real_frame_recurrent_error_input=zeroed` solely for the formal
     same-checkpoint error-input control; dynamic-error state computation and
     all other recurrence inputs remain unchanged.

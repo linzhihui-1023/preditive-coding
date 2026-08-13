@@ -1,0 +1,407 @@
+{
+  "checkpoint_sha256": "7b743640cae5901874090b3eed438d3ea697eafd8415ebbfcf3fefddcb6015d3",
+  "comparison": {
+    "conclusion": "error_zeroed_is_input_blind_prediction_error_mechanism_not_established",
+    "current_stateful": 0.7842969923228538,
+    "learned_error_driven": 0.522036017988896,
+    "learned_error_driven_zeroed": 0.0,
+    "learned_vs_current_improvement_percent": 33.43898764130397,
+    "learned_vs_zeroed_absolute_change": -0.522036017988896,
+    "learned_vs_zeroed_improvement_percent": null,
+    "metric": "disturbance_mean_representation_normalized_l2"
+  },
+  "conditions": {
+    "current_stateful": {
+      "disturbance_mean_representation_normalized_l2": 0.7842969923228538,
+      "per_drive": {
+        "2011_09_26/2011_09_26_drive_0011_sync": {
+          "disturbance_mean_representation_normalized_l2": 0.7564145483359619,
+          "recovery_first_10_mean_representation_normalized_l2": 0.42868169872646517,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0013826680140952693
+        },
+        "2011_09_26/2011_09_26_drive_0039_sync": {
+          "disturbance_mean_representation_normalized_l2": 0.812179436309743,
+          "recovery_first_10_mean_representation_normalized_l2": 0.42563199221307707,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0010275080290224562
+        }
+      },
+      "per_layer": {
+        "1": {
+          "disturbance_mean_representation_normalized_l2": 0.5220145086309539,
+          "recovery_first_10_mean_representation_normalized_l2": 0.18042767924539543,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0002508046655639539
+        },
+        "2": {
+          "disturbance_mean_representation_normalized_l2": 0.8095683607040897,
+          "recovery_first_10_mean_representation_normalized_l2": 0.3448330635537542,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0006652196166160802
+        },
+        "3": {
+          "disturbance_mean_representation_normalized_l2": 0.7789518799735554,
+          "recovery_first_10_mean_representation_normalized_l2": 0.4377450368645057,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0011741918172375261
+        },
+        "4": {
+          "disturbance_mean_representation_normalized_l2": 0.823902837043283,
+          "recovery_first_10_mean_representation_normalized_l2": 0.531784625788767,
+          "recovery_last_10_mean_representation_normalized_l2": 0.001715207699710754
+        },
+        "5": {
+          "disturbance_mean_representation_normalized_l2": 0.9870473752623854,
+          "recovery_first_10_mean_representation_normalized_l2": 0.6409938218964337,
+          "recovery_last_10_mean_representation_normalized_l2": 0.002220016308666
+        }
+      },
+      "recovery_first_10_mean_representation_normalized_l2": 0.42715684546977123,
+      "recovery_last_10_mean_representation_normalized_l2": 0.0012050880215588628
+    },
+    "learned_error_driven": {
+      "disturbance_mean_representation_normalized_l2": 0.522036017988896,
+      "per_drive": {
+        "2011_09_26/2011_09_26_drive_0011_sync": {
+          "disturbance_mean_representation_normalized_l2": 0.5275446708048118,
+          "recovery_first_10_mean_representation_normalized_l2": 0.4138543118134278,
+          "recovery_last_10_mean_representation_normalized_l2": 0.06796613793228626
+        },
+        "2011_09_26/2011_09_26_drive_0039_sync": {
+          "disturbance_mean_representation_normalized_l2": 0.5165273651729813,
+          "recovery_first_10_mean_representation_normalized_l2": 0.36819380032940346,
+          "recovery_last_10_mean_representation_normalized_l2": 0.05325576568104809
+        }
+      },
+      "per_layer": {
+        "1": {
+          "disturbance_mean_representation_normalized_l2": 0.3852649137000158,
+          "recovery_first_10_mean_representation_normalized_l2": 0.3826373021795427,
+          "recovery_last_10_mean_representation_normalized_l2": 0.09399072544984326
+        },
+        "2": {
+          "disturbance_mean_representation_normalized_l2": 0.6261458628057992,
+          "recovery_first_10_mean_representation_normalized_l2": 0.4210053150420542,
+          "recovery_last_10_mean_representation_normalized_l2": 0.041792077211907405
+        },
+        "3": {
+          "disturbance_mean_representation_normalized_l2": 0.7272966765533451,
+          "recovery_first_10_mean_representation_normalized_l2": 0.4950463971353075,
+          "recovery_last_10_mean_representation_normalized_l2": 0.06324745907398492
+        },
+        "4": {
+          "disturbance_mean_representation_normalized_l2": 0.8594425579819716,
+          "recovery_first_10_mean_representation_normalized_l2": 0.6445805021001647,
+          "recovery_last_10_mean_representation_normalized_l2": 0.09406418655317864
+        },
+        "5": {
+          "disturbance_mean_representation_normalized_l2": 0.01203007890335023,
+          "recovery_first_10_mean_representation_normalized_l2": 0.011850763900009066,
+          "recovery_last_10_mean_representation_normalized_l2": 0.009960310744421554
+        }
+      },
+      "recovery_first_10_mean_representation_normalized_l2": 0.39102405607141577,
+      "recovery_last_10_mean_representation_normalized_l2": 0.06061095180666718
+    },
+    "learned_error_driven_zeroed": {
+      "disturbance_mean_representation_normalized_l2": 0.0,
+      "per_drive": {
+        "2011_09_26/2011_09_26_drive_0011_sync": {
+          "disturbance_mean_representation_normalized_l2": 0.0,
+          "recovery_first_10_mean_representation_normalized_l2": 0.0,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0
+        },
+        "2011_09_26/2011_09_26_drive_0039_sync": {
+          "disturbance_mean_representation_normalized_l2": 0.0,
+          "recovery_first_10_mean_representation_normalized_l2": 0.0,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0
+        }
+      },
+      "per_layer": {
+        "1": {
+          "disturbance_mean_representation_normalized_l2": 0.0,
+          "recovery_first_10_mean_representation_normalized_l2": 0.0,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0
+        },
+        "2": {
+          "disturbance_mean_representation_normalized_l2": 0.0,
+          "recovery_first_10_mean_representation_normalized_l2": 0.0,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0
+        },
+        "3": {
+          "disturbance_mean_representation_normalized_l2": 0.0,
+          "recovery_first_10_mean_representation_normalized_l2": 0.0,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0
+        },
+        "4": {
+          "disturbance_mean_representation_normalized_l2": 0.0,
+          "recovery_first_10_mean_representation_normalized_l2": 0.0,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0
+        },
+        "5": {
+          "disturbance_mean_representation_normalized_l2": 0.0,
+          "recovery_first_10_mean_representation_normalized_l2": 0.0,
+          "recovery_last_10_mean_representation_normalized_l2": 0.0
+        }
+      },
+      "recovery_first_10_mean_representation_normalized_l2": 0.0,
+      "recovery_last_10_mean_representation_normalized_l2": 0.0
+    }
+  },
+  "device": "cuda:0",
+  "experiment": "real_frame_learned_error_driven_validation",
+  "git_revision": "d39ffa3a118dc58bbb5f12e42bc72cb068f73ae2",
+  "gpu_name": "NVIDIA GeForce RTX 5090",
+  "per_frame_row_count": 4800,
+  "protocol": {
+    "baseline_frames": 40,
+    "blur_kernel_size": 11,
+    "blur_sigma": 3.0,
+    "cross_frame_state_detached": true,
+    "current_feedforward_transition_input": false,
+    "disturbance_frames": 80,
+    "dynamic_error": "epsilon_t=0.207*e_t+0.793*epsilon_(t-1)",
+    "frozen_test_drives_read": false,
+    "future_predictor": false,
+    "instant_error": "e_t=F_t-Fhat_t",
+    "learned_and_zeroed_share_checkpoint": true,
+    "learned_top_down_feedback": true,
+    "online_learning_during_validation": false,
+    "recovery_frames": 40,
+    "state_transition": "h_t=T(h_(t-1),epsilon_t,feedback)",
+    "train_drives": [
+      "2011_09_26/2011_09_26_drive_0005_sync",
+      "2011_09_26/2011_09_26_drive_0013_sync",
+      "2011_09_26/2011_09_26_drive_0014_sync",
+      "2011_09_26/2011_09_26_drive_0036_sync"
+    ],
+    "val_drives": [
+      "2011_09_26/2011_09_26_drive_0011_sync",
+      "2011_09_26/2011_09_26_drive_0039_sync"
+    ],
+    "zeroed_control": "only recurrent transition error drive is zero"
+  },
+  "training": {
+    "best_epoch": 5,
+    "best_val_prediction_mse": 3.3627630032790012,
+    "bptt": false,
+    "checkpoint": "/tmp/predify-storage/experiments/real_frame_recurrent_error_train_a721fcb/best_recurrent_transition.pt",
+    "cross_frame_state_detached": true,
+    "current_feedforward_transition_input": false,
+    "device": "cuda:0",
+    "epochs": 5,
+    "experiment": "real_frame_learned_error_driven_training",
+    "frozen_test_drives_read": false,
+    "git_revision": "a721fcb764b69da2a69c26e523fd4e517f24d542",
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "history": [
+      {
+        "epoch": 1,
+        "train": {
+          "mean_prediction_mse": 3.7164418813431612,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0005_sync": {
+              "mean_prediction_mse": 4.713305973692944,
+              "transition_frames": 152
+            },
+            "2011_09_26/2011_09_26_drive_0013_sync": {
+              "mean_prediction_mse": 4.073822006373338,
+              "transition_frames": 142
+            },
+            "2011_09_26/2011_09_26_drive_0014_sync": {
+              "mean_prediction_mse": 2.911238934749212,
+              "transition_frames": 312
+            },
+            "2011_09_26/2011_09_26_drive_0036_sync": {
+              "mean_prediction_mse": 3.777555488766207,
+              "transition_frames": 801
+            }
+          },
+          "transition_frames": 1407
+        },
+        "val": {
+          "mean_prediction_mse": 3.7690508720966487,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0011_sync": {
+              "mean_prediction_mse": 3.1501131687329447,
+              "transition_frames": 231
+            },
+            "2011_09_26/2011_09_26_drive_0039_sync": {
+              "mean_prediction_mse": 4.132853949646306,
+              "transition_frames": 393
+            }
+          },
+          "transition_frames": 624
+        }
+      },
+      {
+        "epoch": 2,
+        "train": {
+          "mean_prediction_mse": 5.649508924033511,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0005_sync": {
+              "mean_prediction_mse": 3.937333196401596,
+              "transition_frames": 152
+            },
+            "2011_09_26/2011_09_26_drive_0013_sync": {
+              "mean_prediction_mse": 3.557438392034719,
+              "transition_frames": 142
+            },
+            "2011_09_26/2011_09_26_drive_0014_sync": {
+              "mean_prediction_mse": 2.9708257840994077,
+              "transition_frames": 312
+            },
+            "2011_09_26/2011_09_26_drive_0036_sync": {
+              "mean_prediction_mse": 7.388677295822925,
+              "transition_frames": 801
+            }
+          },
+          "transition_frames": 1407
+        },
+        "val": {
+          "mean_prediction_mse": 4.460120115524683,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0011_sync": {
+              "mean_prediction_mse": 3.4982007705804072,
+              "transition_frames": 231
+            },
+            "2011_09_26/2011_09_26_drive_0039_sync": {
+              "mean_prediction_mse": 5.025523089270555,
+              "transition_frames": 393
+            }
+          },
+          "transition_frames": 624
+        }
+      },
+      {
+        "epoch": 3,
+        "train": {
+          "mean_prediction_mse": 3.7552186824280738,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0005_sync": {
+              "mean_prediction_mse": 3.8612936829265796,
+              "transition_frames": 152
+            },
+            "2011_09_26/2011_09_26_drive_0013_sync": {
+              "mean_prediction_mse": 3.4580613576190573,
+              "transition_frames": 142
+            },
+            "2011_09_26/2011_09_26_drive_0014_sync": {
+              "mean_prediction_mse": 3.0524964275268407,
+              "transition_frames": 312
+            },
+            "2011_09_26/2011_09_26_drive_0036_sync": {
+              "mean_prediction_mse": 4.061488699377253,
+              "transition_frames": 801
+            }
+          },
+          "transition_frames": 1407
+        },
+        "val": {
+          "mean_prediction_mse": 4.239382944428003,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0011_sync": {
+              "mean_prediction_mse": 3.2566421867965105,
+              "transition_frames": 231
+            },
+            "2011_09_26/2011_09_26_drive_0039_sync": {
+              "mean_prediction_mse": 4.817024458455675,
+              "transition_frames": 393
+            }
+          },
+          "transition_frames": 624
+        }
+      },
+      {
+        "epoch": 4,
+        "train": {
+          "mean_prediction_mse": 4.924877441852924,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0005_sync": {
+              "mean_prediction_mse": 4.006952999453795,
+              "transition_frames": 152
+            },
+            "2011_09_26/2011_09_26_drive_0013_sync": {
+              "mean_prediction_mse": 3.4232551715743376,
+              "transition_frames": 142
+            },
+            "2011_09_26/2011_09_26_drive_0014_sync": {
+              "mean_prediction_mse": 2.4432996224898558,
+              "transition_frames": 312
+            },
+            "2011_09_26/2011_09_26_drive_0036_sync": {
+              "mean_prediction_mse": 6.331877638189384,
+              "transition_frames": 801
+            }
+          },
+          "transition_frames": 1407
+        },
+        "val": {
+          "mean_prediction_mse": 8.051679155383354,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0011_sync": {
+              "mean_prediction_mse": 10.051322250655204,
+              "transition_frames": 231
+            },
+            "2011_09_26/2011_09_26_drive_0039_sync": {
+              "mean_prediction_mse": 6.876316419994558,
+              "transition_frames": 393
+            }
+          },
+          "transition_frames": 624
+        }
+      },
+      {
+        "epoch": 5,
+        "train": {
+          "mean_prediction_mse": 2.857196333311768,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0005_sync": {
+              "mean_prediction_mse": 3.7396392492871535,
+              "transition_frames": 152
+            },
+            "2011_09_26/2011_09_26_drive_0013_sync": {
+              "mean_prediction_mse": 3.365879547428077,
+              "transition_frames": 142
+            },
+            "2011_09_26/2011_09_26_drive_0014_sync": {
+              "mean_prediction_mse": 2.558489293242112,
+              "transition_frames": 312
+            },
+            "2011_09_26/2011_09_26_drive_0036_sync": {
+              "mean_prediction_mse": 2.7159132582418035,
+              "transition_frames": 801
+            }
+          },
+          "transition_frames": 1407
+        },
+        "val": {
+          "mean_prediction_mse": 3.3627630032790012,
+          "per_drive": {
+            "2011_09_26/2011_09_26_drive_0011_sync": {
+              "mean_prediction_mse": 2.9150885916375495,
+              "transition_frames": 231
+            },
+            "2011_09_26/2011_09_26_drive_0039_sync": {
+              "mean_prediction_mse": 3.625899871190389,
+              "transition_frames": 393
+            }
+          },
+          "transition_frames": 624
+        }
+      }
+    ],
+    "learning_rate": 0.0001,
+    "objective": "mean next-frame per-layer PCoder prediction MSE",
+    "seed": 0,
+    "train_drives": [
+      "2011_09_26/2011_09_26_drive_0005_sync",
+      "2011_09_26/2011_09_26_drive_0013_sync",
+      "2011_09_26/2011_09_26_drive_0014_sync",
+      "2011_09_26/2011_09_26_drive_0036_sync"
+    ],
+    "trainable_parameter_count": 5497152,
+    "transition": "ConvGRU(previous_state,current_dynamic_prediction_error,feedback)",
+    "val_drives": [
+      "2011_09_26/2011_09_26_drive_0011_sync",
+      "2011_09_26/2011_09_26_drive_0039_sync"
+    ],
+    "weight_decay": 0.0
+  }
+}

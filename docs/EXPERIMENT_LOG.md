@@ -1450,6 +1450,45 @@ results/real_frame_robustness_benchmark_42a7029/
 /tmp/predify-storage/experiments/real_frame_robustness_benchmark_42a7029.log
 ```
 
+### Strict Prediction-error-driven Recurrent Transition
+
+Training revision: `a721fcb`
+
+Evaluation revision: `d39ffa3`
+
+The learned ConvGRU transition no longer receives the current feedforward
+feature. The causal update is `Fhat_t -> e_t=F_t-Fhat_t -> epsilon_t -> h_t`,
+with historical state and top-down feedback retained. Only transition
+parameters trained, and the loss uses the next real-frame feature target after
+the current recurrence is complete. Epoch 5 minimized Val next-frame MSE at
+`3.362763003`. The fixed validation used only drives 0011/0039 and Gaussian
+blur sigma 3 under the 40/80/40 protocol.
+
+| Condition | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |
+| --- | ---: | ---: | ---: |
+| Current stateful | 0.784296992 | 0.427156845 | 0.001205088 |
+| Error-zeroed | 0.000000000 | 0.000000000 | 0.000000000 |
+| Full error-driven | 0.522036018 | 0.391024056 | 0.060610952 |
+
+Full improved `33.438988%` over current-stateful on disturbance deviation.
+Full versus zeroed has no defined relative percentage because the denominator
+is exactly zero; the absolute change is `-0.522036018`. This zero is a control
+degeneracy, not successful adaptation: without current feedforward or error,
+zeroed is input-blind after initialization, making its clean and corrupted
+trajectories identical. The predeclared conclusion is therefore that
+prediction error was not established as the main state-update driver. Frozen
+Test drives 0051/0056 were not read.
+
+Tracked artifacts and server-only checkpoint/logs:
+
+```text
+results/real_frame_error_driven_d39ffa3/
+/tmp/predify-storage/experiments/real_frame_recurrent_error_train_a721fcb/best_recurrent_transition.pt
+/tmp/predify-storage/experiments/real_frame_recurrent_error_train_a721fcb.log
+/tmp/predify-storage/experiments/real_frame_error_driven_eval_d39ffa3.log
+checkpoint sha256: 7b743640cae5901874090b3eed438d3ea697eafd8415ebbfcf3fefddcb6015d3
+```
+
 ## Earlier adjacent-pair result
 
 This older experiment reset model state each batch and therefore tested

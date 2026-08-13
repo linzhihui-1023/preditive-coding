@@ -814,3 +814,20 @@ be implemented as a mode of current-stateful. The learned and error-zeroed
 conditions load the same epoch-1 `c9fec52` checkpoint; only the recurrent error
 input differs. Unified validation is limited to drives 0011/0039 and cannot
 trigger another read of Frozen Test 0051/0056.
+
+## 2026-08-13: Stop the strict error-driven branch after an input-blind control
+
+Status: accepted
+
+Revision `a721fcb` removed the learned transition's current-feedforward input
+and trained its updated state against the next-frame feature. Under the fixed
+Val blur protocol, Full improved over current-stateful but error-zeroed had
+exactly zero paired representation deviation because it received no current-
+frame information after initialization. Its clean and corrupted trajectories
+were therefore identical by construction.
+
+The zeroed result cannot demonstrate robustness and makes the requested Full-
+versus-zeroed relative percentage undefined. Consequently this experiment
+does not establish prediction error as the primary state-update driver. Do not
+add structure or expand corruptions to rescue this mechanism without first
+changing the scientific question and predeclaring a task-performance control.
