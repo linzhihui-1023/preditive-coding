@@ -89,6 +89,50 @@ def _make_input_prediction_module():
     )
 
 
+class ConvGRUErrorTransition(nn.Module):
+    """One-cell recurrent transition conditioned on feedforward and error drives."""
+
+    def __init__(self, channels: int):
+        super().__init__()
+        combined_channels = 3 * channels
+        self.gates = nn.Conv2d(combined_channels, 2 * channels, kernel_size=1)
+        self.candidate = nn.Conv2d(combined_channels, channels, kernel_size=1)
+
+        nn.init.zeros_(self.gates.weight)
+        nn.init.zeros_(self.gates.bias)
+        nn.init.constant_(self.gates.bias[channels:], -2.0)
+        nn.init.zeros_(self.candidate.weight)
+        nn.init.zeros_(self.candidate.bias)
+
+    def forward(
+        self,
+        previous_representation: torch.Tensor,
+        feedforward_drive: torch.Tensor,
+        error_drive: torch.Tensor,
+    ):
+        reset_gate, update_gate = self.gates(
+            torch.cat(
+                (previous_representation, feedforward_drive, error_drive),
+                dim=1,
+            )
+        ).chunk(2, dim=1)
+        reset_gate = torch.sigmoid(reset_gate)
+        update_gate = torch.sigmoid(update_gate)
+        candidate_delta = torch.tanh(
+            self.candidate(
+                torch.cat(
+                    (feedforward_drive, error_drive, reset_gate * previous_representation),
+                    dim=1,
+                )
+            )
+        )
+        candidate_representation = feedforward_drive + candidate_delta
+        return (
+            (1.0 - update_gate) * previous_representation
+            + update_gate * candidate_representation
+        )
+
+
 class PVGG16TargetFlow(nn.Module):
     """
     PVGG16 with a real-frame predictive-coding recurrence.
@@ -118,6 +162,7 @@ class PVGG16TargetFlow(nn.Module):
         pc_ff_multiplier=(0.2, 0.4, 0.4, 0.5, 0.6),
         pc_fb_multiplier=(0.05, 0.1, 0.1, 0.1, 0.0),
         pc_error_multiplier=(0.01, 0.01, 0.01, 0.01, 0.01),
+        real_frame_transition_mode: str = "predify",
         future_feature_stage: int = 5,
         future_feature_history_mode: str = "none",
         future_feature_temporal_fusion_mode: str = "none",
@@ -233,6 +278,16 @@ class PVGG16TargetFlow(nn.Module):
                 f"{future_feature_history_mode}"
             )
         self.task = task
+        if real_frame_transition_mode not in {"predify", "convgru_error"}:
+            raise ValueError(
+                "Unsupported real_frame_transition_mode: "
+                f"{real_frame_transition_mode}"
+            )
+        if self.task != "real_frame_pc" and real_frame_transition_mode != "predify":
+            raise ValueError(
+                "real_frame_transition_mode is configurable only for real_frame_pc."
+            )
+        self.real_frame_transition_mode = real_frame_transition_mode
         pc_ff_multipliers = _expand_per_layer_values(
             pc_ff_multiplier,
             self.number_of_layers,
@@ -368,10 +423,16 @@ class PVGG16TargetFlow(nn.Module):
         self.future_motion_patch_size = int(future_motion_patch_size)
         self.temporal_target_dim = 2 if self.temporal_target_mode == "ego_motion" else self.stage_channels[-1]
         self.input_prediction_module = None
+        self.recurrent_transition_modules = None
         self.temporal_predictor = None
         self.future_feature_predictor = None
         if self.task == "real_frame_pc":
             self.input_prediction_module = _make_input_prediction_module()
+            if self.real_frame_transition_mode == "convgru_error":
+                self.recurrent_transition_modules = nn.ModuleList(
+                    ConvGRUErrorTransition(channels)
+                    for channels in self.stage_channels
+                )
         else:
             temporal_context_dim = self.stage_channels[-1] + 2 * sum(self.stage_channels)
             self.temporal_predictor = nn.Sequential(
@@ -432,10 +493,14 @@ class PVGG16TargetFlow(nn.Module):
         self.future_prediction_outputs = None
         self.real_frame_update_count = 0
         self.recurrence_outputs = None
+        self.recurrent_transition_losses = []
 
         if self.task == "real_frame_pc":
             for parameter in self.parameters():
                 parameter.requires_grad_(False)
+            if self.recurrent_transition_modules is not None:
+                for parameter in self.recurrent_transition_modules.parameters():
+                    parameter.requires_grad_(True)
 
     def reset(self):
         self.layer_states = []
@@ -457,6 +522,7 @@ class PVGG16TargetFlow(nn.Module):
         self.future_prediction_outputs = None
         self.real_frame_update_count = 0
         self.recurrence_outputs = None
+        self.recurrent_transition_losses = []
 
     @staticmethod
     def _resolve_memory(memory, reference_tensor: torch.Tensor):
@@ -499,6 +565,7 @@ class PVGG16TargetFlow(nn.Module):
         frame_index = self.real_frame_update_count + 1
         current_input = x
         states = []
+        transition_losses = []
 
         for layer_index, stage in enumerate(self.forward_stages):
             with torch.no_grad():
@@ -525,62 +592,95 @@ class PVGG16TargetFlow(nn.Module):
                 )
 
             prediction_module = self._prediction_module_for_layer(layer_index)
-            c_sqrt = self.pc_error_c_sqrt[layer_index]
-            error_correction = project_dynamic_error_to_representation(
-                prediction_module,
-                previous_representation,
-                previous_prediction,
-                previous_dynamic_error,
-                None if float(c_sqrt.item()) < 0.0 else c_sqrt,
-            )
-
-            if previous_representation is None:
-                representation = feedforward_drive
-            else:
-                ff_multiplier = self.pc_ff_multipliers[layer_index].to(
-                    feedforward_drive
-                )
-                fb_multiplier = self.pc_fb_multipliers[layer_index].to(
-                    feedforward_drive
-                )
-                error_multiplier = self.pc_error_multipliers[layer_index].to(
-                    feedforward_drive
-                )
-                representation = previous_representation + ff_multiplier * (
-                    feedforward_drive - previous_representation
-                )
-                if previous_feedback_prediction is not None:
-                    representation = representation + fb_multiplier * (
-                        previous_feedback_prediction - previous_representation
+            error_correction = None
+            error_scale = None
+            c_sqrt = None
+            if self.real_frame_transition_mode == "convgru_error":
+                previous_feedback_prediction = None
+                if previous_representation is None:
+                    representation = feedforward_drive
+                else:
+                    with torch.no_grad():
+                        error_drive = stage(previous_dynamic_error)
+                    representation = self.recurrent_transition_modules[layer_index](
+                        previous_representation,
+                        feedforward_drive,
+                        error_drive,
                     )
-                if error_correction is not None:
-                    representation = representation - error_multiplier * error_correction
-
-            if float(c_sqrt.item()) < 0.0:
-                calibrated_c_sqrt = compute_pcoder_c_sqrt(
-                    prediction_module,
-                    representation,
-                )
-                self.pc_error_c_sqrt[layer_index].copy_(calibrated_c_sqrt)
-                c_sqrt = self.pc_error_c_sqrt[layer_index]
-            error_scale = representation.new_tensor(
-                float(prediction_target.numel())
-            ) / c_sqrt.to(representation)
-
-            with torch.no_grad():
                 module_output = prediction_module(representation)
                 prediction = (
                     module_output[-1]
                     if isinstance(module_output, tuple)
                     else module_output
                 )
+                if previous_representation is not None:
+                    transition_losses.append(
+                        nn.functional.mse_loss(
+                            prediction,
+                            prediction_target.detach(),
+                        )
+                    )
+            else:
+                c_sqrt = self.pc_error_c_sqrt[layer_index]
+                error_correction = project_dynamic_error_to_representation(
+                    prediction_module,
+                    previous_representation,
+                    previous_prediction,
+                    previous_dynamic_error,
+                    None if float(c_sqrt.item()) < 0.0 else c_sqrt,
+                )
+
+                if previous_representation is None:
+                    representation = feedforward_drive
+                else:
+                    ff_multiplier = self.pc_ff_multipliers[layer_index].to(
+                        feedforward_drive
+                    )
+                    fb_multiplier = self.pc_fb_multipliers[layer_index].to(
+                        feedforward_drive
+                    )
+                    error_multiplier = self.pc_error_multipliers[layer_index].to(
+                        feedforward_drive
+                    )
+                    representation = previous_representation + ff_multiplier * (
+                        feedforward_drive - previous_representation
+                    )
+                    if previous_feedback_prediction is not None:
+                        representation = representation + fb_multiplier * (
+                            previous_feedback_prediction - previous_representation
+                        )
+                    if error_correction is not None:
+                        representation = (
+                            representation - error_multiplier * error_correction
+                        )
+
+                if float(c_sqrt.item()) < 0.0:
+                    calibrated_c_sqrt = compute_pcoder_c_sqrt(
+                        prediction_module,
+                        representation,
+                    )
+                    self.pc_error_c_sqrt[layer_index].copy_(calibrated_c_sqrt)
+                    c_sqrt = self.pc_error_c_sqrt[layer_index]
+                error_scale = representation.new_tensor(
+                    float(prediction_target.numel())
+                ) / c_sqrt.to(representation)
+
+                with torch.no_grad():
+                    module_output = prediction_module(representation)
+                    prediction = (
+                        module_output[-1]
+                        if isinstance(module_output, tuple)
+                        else module_output
+                    )
+
+            with torch.no_grad():
                 instant_error = build_targetflow_instant_error(
-                    prediction,
-                    prediction_target,
+                    prediction.detach(),
+                    prediction_target.detach(),
                 )
                 dynamic_error = build_targetflow_error(
-                    prediction,
-                    prediction_target,
+                    prediction.detach(),
+                    prediction_target.detach(),
                     previous_error=self._resolve_memory(
                         previous_dynamic_error,
                         instant_error,
@@ -620,8 +720,8 @@ class PVGG16TargetFlow(nn.Module):
                 error_correction=(
                     None if error_correction is None else error_correction.detach()
                 ),
-                error_scale=error_scale.detach(),
-                c_sqrt=c_sqrt.detach().clone(),
+                error_scale=(None if error_scale is None else error_scale.detach()),
+                c_sqrt=(None if c_sqrt is None else c_sqrt.detach().clone()),
                 representation=representation.detach(),
                 prediction_target=prediction_target.detach(),
                 prediction=prediction.detach(),
@@ -632,6 +732,7 @@ class PVGG16TargetFlow(nn.Module):
             current_input = state.representation
 
         self.layer_states = states
+        self.recurrent_transition_losses = transition_losses
         for layer_index, state in enumerate(states):
             self.representation_state_memory[layer_index] = (
                 state.representation.detach()
@@ -645,6 +746,7 @@ class PVGG16TargetFlow(nn.Module):
         self.real_frame_update_count = frame_index
         self.recurrence_outputs = {
             "frame_index": frame_index,
+            "transition_mode": self.real_frame_transition_mode,
             "updates_per_layer": tuple(1 for _ in states),
             "used_future_frame": False,
             "parameter_update": False,
@@ -1422,6 +1524,13 @@ class PVGG16TargetFlow(nn.Module):
             per_layer.append(state.local_loss)
             total = state.local_loss if total is None else total + state.local_loss
         return per_layer, total
+
+    def collect_recurrent_transition_loss(self):
+        if self.real_frame_transition_mode != "convgru_error":
+            return None
+        if not self.recurrent_transition_losses:
+            return None
+        return torch.stack(self.recurrent_transition_losses).mean()
 
     def collect_temporal_prediction_loss(self):
         if self.temporal_prediction is None or self.temporal_target is None:

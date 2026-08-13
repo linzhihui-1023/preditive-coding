@@ -256,5 +256,90 @@ class RealFramePredictiveCodingTest(unittest.TestCase):
         )
 
 
+class LearnedRecurrentErrorTransitionTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        torch.manual_seed(11)
+        cls.model = PVGG16TargetFlow(
+            backbone=vgg16(weights=None),
+            task="real_frame_pc",
+            dynamic_error=True,
+            error_state_mode="ema",
+            real_frame_transition_mode="convgru_error",
+        ).eval()
+        cls.frame1 = torch.randn(1, 3, 32, 32)
+        cls.frame2 = torch.randn(1, 3, 32, 32)
+
+    def setUp(self):
+        self.model.reset()
+        self.model.zero_grad(set_to_none=True)
+
+    def test_convgru_replaces_gradient_projection_and_uses_previous_error(self):
+        self.model.step_frame(self.frame1)
+        first_states = RealFramePredictiveCodingTest._clone_states(
+            self.model.layer_states
+        )
+        self.model.step_frame(self.frame2)
+
+        self.assertEqual(
+            self.model.recurrence_outputs["transition_mode"],
+            "convgru_error",
+        )
+        for layer_index, state in enumerate(self.model.layer_states):
+            with torch.no_grad():
+                error_drive = self.model.forward_stages[layer_index](
+                    first_states[layer_index]["dynamic_error"]
+                )
+                expected = self.model.recurrent_transition_modules[layer_index](
+                    first_states[layer_index]["representation"],
+                    state.feedforward_drive,
+                    error_drive,
+                )
+            self.assertIsNone(state.previous_feedback_prediction)
+            self.assertIsNone(state.error_correction)
+            self.assertIsNone(state.error_scale)
+            self.assertIsNone(state.c_sqrt)
+            self.assertTrue(torch.allclose(state.representation, expected))
+            expected_dynamic_error = (
+                0.207 * state.instant_error
+                + 0.793 * first_states[layer_index]["dynamic_error"]
+            )
+            self.assertTrue(torch.allclose(state.dynamic_error, expected_dynamic_error))
+
+    def test_only_transition_parameters_train_and_cross_frame_state_is_detached(self):
+        trainable_names = {
+            name for name, parameter in self.model.named_parameters()
+            if parameter.requires_grad
+        }
+        self.assertTrue(trainable_names)
+        self.assertTrue(
+            all(name.startswith("recurrent_transition_modules.") for name in trainable_names)
+        )
+
+        self.model.step_frame(self.frame1)
+        self.model.step_frame(self.frame2)
+        loss = self.model.collect_recurrent_transition_loss()
+        self.assertIsNotNone(loss)
+        self.assertTrue(loss.requires_grad)
+        loss.backward()
+
+        trainable_parameters = [
+            parameter for parameter in self.model.parameters() if parameter.requires_grad
+        ]
+        self.assertTrue(any(parameter.grad is not None for parameter in trainable_parameters))
+        frozen_parameters = [
+            parameter for parameter in self.model.parameters() if not parameter.requires_grad
+        ]
+        self.assertTrue(all(parameter.grad is None for parameter in frozen_parameters))
+        memories = (
+            self.model.representation_state_memory
+            + self.model.prediction_state_memory
+            + self.model.instant_error_state_memory
+            + self.model.error_state_memory
+        )
+        self.assertTrue(all(not memory.requires_grad for memory in memories))
+        self.assertTrue(all(memory.grad_fn is None for memory in memories))
+
+
 if __name__ == "__main__":
     unittest.main()
