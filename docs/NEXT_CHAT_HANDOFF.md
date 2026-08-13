@@ -1001,6 +1001,34 @@ results/real_frame_recurrent_error_c9fec52/
 checkpoint sha256: 26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4
 ```
 
+The single Frozen Test access for this checkpoint is now complete. Evaluator
+revision `8915f75` reused the identical three conditions and
+40-clean/80-blur/40-recovery protocol on 0051/0056, with no training, tuning,
+or checkpoint update.
+
+| Condition | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |
+| --- | ---: | ---: | ---: |
+| Current stateful | 0.819635281 | 0.446208276 | 0.001090620 |
+| Learned recurrent-error | 0.536746322 | 0.305349457 | 0.001978208 |
+| Same checkpoint, error input zeroed | 0.548573083 | 0.310442773 | 0.040968571 |
+
+Learned improved over current/zeroed by `37.165928%/0.568743%` on 0051 and
+`31.765203%/3.624299%` on 0056. Aggregate improvements were
+`34.514005%/2.155914%`. Both drives passed both comparisons, so the
+predeclared decision is `PASS_MAIN_MECHANISM`. Per-layer directions are not
+uniform; retain the conclusion at the predeclared drive-level aggregate.
+
+Frozen Test artifacts and receipt:
+
+```text
+results/real_frame_recurrent_error_frozen_test_c9fec52/
+/tmp/predify-storage/experiments/real_frame_recurrent_error_train_c9fec52/best_recurrent_transition_real_frame_frozen_test_receipt.json
+```
+
+Do not rerun 0051/0056 for the `c9fec52` checkpoint. The receipt is completed
+and bound to checkpoint SHA-256
+`26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4`.
+
 ## Frozen historical runners
 
 The commands below belong to completed predictor research. They remain for

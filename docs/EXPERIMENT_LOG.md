@@ -1345,6 +1345,41 @@ results/real_frame_recurrent_error_c9fec52/
 checkpoint sha256: 26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4
 ```
 
+### Frozen Test
+
+Evaluator revision: `8915f75`
+
+The unchanged `c9fec52` epoch-1 checkpoint received one Frozen Test access on
+0051/0056. The evaluator claimed an atomic checkpoint-bound receipt before
+reading Test frames. It reused the Val conditions, preprocessing, seed,
+40-clean/80-blur/40-recovery trajectory, and metrics without training or
+tuning. Drive 0051 used the first qualifying continuous 160-frame segment
+after its timestamp break (raw frames 58--217); 0056 used raw frames 0--159.
+
+| Condition | Disturbance normalized L2 | Recovery first 10 | Recovery last 10 |
+| --- | ---: | ---: | ---: |
+| Current stateful | 0.819635281 | 0.446208276 | 0.001090620 |
+| Learned recurrent-error | 0.536746322 | 0.305349457 | 0.001978208 |
+| Learned recurrent-error zeroed | 0.548573083 | 0.310442773 | 0.040968571 |
+
+| Drive | Learned vs current | Learned vs zeroed |
+| --- | ---: | ---: |
+| 0051 | 37.165928% | 0.568743% |
+| 0056 | 31.765203% | 3.624299% |
+
+Both drives passed both predeclared comparisons. Aggregate improvements were
+`34.514005%` over current and `2.155914%` over zeroed, yielding
+`PASS_MAIN_MECHANISM`. The layer-level direction was not uniform: Stage 1 was
+worse than current and Stage 4 was worse than zeroed. The conclusion is the
+predeclared drive-level main-metric result, not layer-uniform dominance.
+
+Tracked artifacts and completed server receipt:
+
+```text
+results/real_frame_recurrent_error_frozen_test_c9fec52/
+/tmp/predify-storage/experiments/real_frame_recurrent_error_train_c9fec52/best_recurrent_transition_real_frame_frozen_test_receipt.json
+```
+
 ## Earlier adjacent-pair result
 
 This older experiment reset model state each batch and therefore tested

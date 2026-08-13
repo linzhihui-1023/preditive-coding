@@ -70,6 +70,17 @@ both Val drives improved in both comparisons. Recovery first/last ten values
 for learned were `0.280066796/0.004235435`. Frozen Test was not read. Outputs
 are in `results/real_frame_recurrent_error_c9fec52/`.
 
+The same frozen epoch-1 checkpoint subsequently received its single authorized
+Frozen Test read through evaluator revision `8915f75`. On 0051/0056,
+disturbance normalized L2 was `0.819635281` (current-stateful), `0.536746322`
+(learned), and `0.548573083` (same checkpoint with error input zeroed).
+Learned improved by `34.514005%` over current and `2.155914%` over zeroed, with
+both comparisons favorable on each drive. The predeclared decision is
+`PASS_MAIN_MECHANISM`. Recovery first/last ten values for learned were
+`0.305349457/0.001978208`. The Test receipt is complete, so do not replay
+0051/0056 for this checkpoint. Outputs are in
+`results/real_frame_recurrent_error_frozen_test_c9fec52/`.
+
 ## Current implementation
 
 - `predify2021/model_factory/pvgg16_targetflow.py`

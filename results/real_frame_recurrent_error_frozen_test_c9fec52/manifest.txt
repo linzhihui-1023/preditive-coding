@@ -1,0 +1,8 @@
+evaluator_revision=8915f75ab52526e0e563d895a0c4498b9b6c7835
+model_revision=c9fec52
+checkpoint_epoch=1
+checkpoint_sha256=26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4
+frozen_test_drives=0051,0056
+conditions=current_stateful,learned_recurrent_error,learned_recurrent_error_zeroed
+training=false
+tuning=false

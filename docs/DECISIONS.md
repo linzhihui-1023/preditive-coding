@@ -1,5 +1,29 @@
 # Research Decisions
 
+## 2026-08-13: Learned recurrent-error mechanism passes Frozen Test
+
+Status: accepted
+
+The one-time Frozen Test evaluator revision `8915f75` loaded the unchanged
+`c9fec52` epoch-1 checkpoint with SHA-256
+`26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4`.
+No training, tuning, checkpoint update, metric change, or corruption change
+occurred. Drives 0051 and 0056 used the same three conditions and fixed
+40-clean/80-blur/40-recovery protocol as Val.
+
+Aggregate disturbance normalized L2 was `0.819635281` for current-stateful,
+`0.536746322` for learned recurrent-error, and `0.548573083` for the identical
+learned checkpoint with its transition error input zeroed. Learned improved by
+`34.514005%` over current and `2.155914%` over zeroed. It beat both controls on
+each Test drive independently, so the predeclared decision is
+`PASS_MAIN_MECHANISM`.
+
+Interpret the first comparison as support for the learned recurrent transition
+and the second as support for an incremental dynamic-error contribution under
+this fixed protocol. The per-layer result is not uniform: learned did not beat
+current at Stage 1 and did not beat zeroed at Stage 4. Do not convert the
+aggregate drive-level pass into a claim of improvement at every layer.
+
 ## 2026-08-13: Learned recurrent error transition clears both Val comparisons
 
 Status: accepted

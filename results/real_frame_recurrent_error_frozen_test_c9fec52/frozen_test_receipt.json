@@ -1,0 +1,14 @@
+{
+  "checkpoint_path": "/tmp/predify-storage/experiments/real_frame_recurrent_error_train_c9fec52/best_recurrent_transition.pt",
+  "checkpoint_sha256": "26c5333da95a6b754af6036f9d16a5dd394673400e6f9456c0ebc0b27e714cf4",
+  "decision": "PASS_MAIN_MECHANISM",
+  "evaluator_revision": "8915f75ab52526e0e563d895a0c4498b9b6c7835",
+  "frozen_test_drives": [
+    "2011_09_26/2011_09_26_drive_0051_sync",
+    "2011_09_26/2011_09_26_drive_0056_sync"
+  ],
+  "model_revision": "c9fec526680bb274aca2b96397db4e20741f248d",
+  "output_summary_path": "/home/lin/predify2021_selective_adaptation/results/real_frame_recurrent_error_frozen_test_c9fec52/summary.json",
+  "policy": "single_frozen_test_access_without_retraining_or_tuning",
+  "status": "completed"
+}
