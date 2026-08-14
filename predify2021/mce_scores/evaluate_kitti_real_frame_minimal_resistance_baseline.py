@@ -16,6 +16,7 @@ from predify2021.mce_scores.evaluate_kitti_real_frame_pc_phase1 import (
 )
 from predify2021.mce_scores.evaluate_kitti_real_frame_recurrent_error import (
     DEVICE,
+    build_model as build_real_frame_model,
     sha256_file,
 )
 from predify2021.mce_scores.evaluate_kitti_real_frame_recurrent_error_cross_corruption import (
@@ -24,7 +25,6 @@ from predify2021.mce_scores.evaluate_kitti_real_frame_recurrent_error_cross_corr
 from predify2021.mce_scores.evaluate_kitti_real_frame_robustness_benchmark import (
     FrozenVGGAdapter,
     OriginalPredifyAdapter,
-    RealFrameAdapter,
 )
 from predify2021.mce_scores.kitti_controlled_corruption import (
     ControlledCorruptionConfig,
@@ -49,6 +49,31 @@ CORRUPTIONS = {
 }
 
 
+class TemporalOnlyAdapter:
+    def __init__(self, weights_path, checkpoint):
+        self.model = build_real_frame_model(
+            weights_path,
+            "convgru_error",
+            checkpoint=checkpoint,
+            recurrent_input="temporal_only",
+        ).to(DEVICE).eval()
+        self.representations = None
+
+    def reset(self):
+        self.model.reset()
+        self.representations = None
+
+    def step(self, frame):
+        self.model.step_frame(frame)
+        self.representations = tuple(
+            state.representation for state in self.model.layer_states
+        )
+
+    def sync_calibration_to(self, other):
+        with torch.no_grad():
+            other.model.pc_error_c_sqrt.copy_(self.model.pc_error_c_sqrt)
+
+
 def normalized_representation_distance(candidate, reference):
     numerator = torch.linalg.vector_norm((candidate - reference).float())
     denominator = torch.linalg.vector_norm(reference.float()).clamp_min(1e-12)
@@ -61,12 +86,7 @@ def build_adapter(model_name, weights_path, temporal_only_checkpoint):
     if model_name == "original_predify":
         return OriginalPredifyAdapter(weights_path)
     if model_name == "temporal_only":
-        return RealFrameAdapter(
-            "convgru_error",
-            weights_path,
-            checkpoint=temporal_only_checkpoint,
-            error_input="temporal_only",
-        )
+        return TemporalOnlyAdapter(weights_path, temporal_only_checkpoint)
     raise ValueError(f"Unknown model: {model_name}")
 
 
