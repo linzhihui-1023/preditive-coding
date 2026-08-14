@@ -30,6 +30,7 @@ latest strict error-driven training/evaluation revisions: a721fcb / d39ffa3
 latest matched recurrent-control revision: 1765d15
 latest error-driven recurrent v2 revision: 94ad47e
 latest observation/error-memory recurrent revisions: 268e926 / 1178f7b
+latest minimal anti-corruption baseline revision: eaebb41
 ```
 
 All selective-online-adaptation work must stay on
@@ -95,6 +96,39 @@ server-only:
 /tmp/predify-storage/experiments/real_frame_error_memory_train_268e926/best_instant_error.pt
 /tmp/predify-storage/experiments/real_frame_error_memory_train_268e926/best_error_memory.pt
 ```
+
+## Minimal Anti-corruption Baseline
+
+Evaluator revision `eaebb41` used the exact `1178f7b` Val protocol and compared
+only Frozen VGG16, legacy Original Predify, and the `268e926` temporal-only
+checkpoint. No training, tuning, error-memory replay, or Frozen Test read
+occurred.
+
+| Model | Blur disturbance | Brightness disturbance | Recovery first 10 | Recovery last 10 |
+| --- | ---: | ---: | ---: | ---: |
+| Frozen VGG16 | 0.890284630 | 0.271695565 | 0.000000000 | 0.000000000 |
+| Original Predify | 0.849276881 | 0.237481374 | 0.000000000 | 0.000000000 |
+| Temporal-only | 0.517564677 | 0.184214546 | 0.239301884 | 0.035414099 |
+
+Gains on the disturbance metric:
+
+```text
+Gaussian blur:
+  Original Predify vs VGG:        +4.606139%
+  Temporal-only vs Original:     +39.058193%
+  Temporal-only vs VGG:          +41.865258%
+
+Brightness overexposure:
+  Original Predify vs VGG:       +12.592841%
+  Temporal-only vs Original:     +22.429897%
+  Temporal-only vs VGG:          +32.198177%
+```
+
+Per-drive disturbance means are in
+`results/minimal_anti_corruption_baseline_eaebb41/README.md`. The result
+supports the narrow baseline conclusion that Original Predify adds modest
+robustness over frozen feedforward VGG, while real cross-frame temporal state
+is responsible for the larger gain under these two corruptions.
 
 ## Previous Error-driven Recurrent V2 Result
 

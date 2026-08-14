@@ -161,6 +161,17 @@ than temporal-only on both corruptions and both Val drives. Current decision:
 does not establish independent anti-corruption value. Frozen Test was not
 read. Outputs are in `results/real_frame_error_memory_1178f7b/`.
 
+A minimal evaluator-only baseline at revision `eaebb41` then used the same Val
+drives 0011/0039, paired 40/80/40 protocol, Gaussian blur, and brightness
+overexposure to compare Frozen VGG16, legacy Original Predify, and the
+`268e926` temporal-only checkpoint. Disturbance normalized L2 under blur was
+`0.890284630`, `0.849276881`, and `0.517564677`; under brightness it was
+`0.271695565`, `0.237481374`, and `0.184214546`. Original Predify therefore
+adds a modest robustness gain over frozen VGG, while the real cross-frame
+temporal-only state accounts for the larger improvement on both Val drives and
+both corruptions. Outputs are in
+`results/minimal_anti_corruption_baseline_eaebb41/`.
+
 The previous error-driven v2 revision `94ad47e` remains recorded as a no-go:
 it used a dedicated signed-error encoder, joint transition/predictor/error
 training, and short-window BPTT, but improved only `0.061589%` over its matched

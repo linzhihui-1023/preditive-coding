@@ -1,5 +1,47 @@
 # Experiment Log
 
+## Minimal anti-corruption baseline: VGG to Predify to temporal Predify
+
+Date: 2026-08-14
+
+Evaluator revision: `eaebb41437673bdf29a9aecc041426f0a071b0f1`
+
+This evaluator-only baseline used the exact Val drives, paired clean/corrupt
+frame protocol, Gaussian blur, and brightness overexposure settings from the
+`1178f7b` error-memory experiment. It compared only Frozen VGG16, legacy
+Original Predify, and the `268e926` temporal-only checkpoint. No training,
+tuning, checkpoint selection, error-memory replay, or Frozen Test read
+occurred.
+
+| Model | Blur disturbance | Brightness disturbance | Recovery first 10 | Recovery last 10 |
+| --- | ---: | ---: | ---: | ---: |
+| Frozen VGG16 | 0.890284630 | 0.271695565 | 0.000000000 | 0.000000000 |
+| Original Predify | 0.849276881 | 0.237481374 | 0.000000000 | 0.000000000 |
+| Temporal-only | 0.517564677 | 0.184214546 | 0.239301884 | 0.035414099 |
+
+For Gaussian blur, Original Predify improved over Frozen VGG16 by
+`4.606139%`; Temporal-only improved over Original Predify by `39.058193%` and
+over Frozen VGG16 by `41.865258%`. For brightness overexposure, the
+corresponding gains were `12.592841%`, `22.429897%`, and `32.198177%`.
+
+Per-drive disturbance means:
+
+| Corruption | Drive | Frozen VGG16 | Original Predify | Temporal-only |
+| --- | --- | ---: | ---: | ---: |
+| Gaussian blur | 0011 | 0.886308037 | 0.829467372 | 0.522200407 |
+| Gaussian blur | 0039 | 0.894261223 | 0.869086390 | 0.512928947 |
+| Brightness overexposure | 0011 | 0.270142815 | 0.235929674 | 0.185761141 |
+| Brightness overexposure | 0039 | 0.273248316 | 0.239033073 | 0.182667951 |
+
+This answers the narrow baseline question: adding Original Predify improves
+robustness modestly over frozen feedforward VGG, while adding real cross-frame
+temporal state via the temporal-only checkpoint produces the larger reduction
+on both Val drives and both corruptions. Recovery is zero for the stateless
+Frozen VGG16 and independent single-frame Original Predify paths because the
+clean recovery frames are identical in the paired clean/corrupt streams;
+temporal-only retains cross-frame state and therefore shows recovery residual.
+Auditable outputs are under `results/minimal_anti_corruption_baseline_eaebb41/`.
+
 ## Real-frame observation plus accumulated error-memory recurrence
 
 Date: 2026-08-14
