@@ -1,11 +1,24 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, Tuple
 
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torchvision.models import ResNet50_Weights, resnet50
-from torchvision.models.segmentation.deeplabv3 import ASPP
+from torchvision.models import resnet50
+
+
+CITYSCAPES_NUM_CLASSES = 19
+CITYSCAPES_CONFIG_NAME = "deeplabv3plus_r50-d8_4xb2-80k_cityscapes-512x1024"
+CITYSCAPES_CHECKPOINT_NAME = (
+    "deeplabv3plus_r50-d8_512x1024_80k_cityscapes_"
+    "20200606_114049-f9fb496d.pth"
+)
+CITYSCAPES_CHECKPOINT_URL = (
+    "https://download.openmmlab.com/mmsegmentation/v0.5/deeplabv3plus/"
+    "deeplabv3plus_r50-d8_512x1024_80k_cityscapes/"
+    f"{CITYSCAPES_CHECKPOINT_NAME}"
+)
 
 
 @dataclass(frozen=True)
@@ -28,110 +41,204 @@ class DeepLabV3PlusHostOutput:
     host_feature: HostFeature
 
 
-class ResNet50FeatureExtractor(nn.Module):
-    def __init__(self, weights=ResNet50_Weights.IMAGENET1K_V2):
-        super().__init__()
-        backbone = resnet50(
-            weights=weights,
-            replace_stride_with_dilation=(False, False, True),
-        )
-        self.stem = nn.Sequential(
-            backbone.conv1,
-            backbone.bn1,
-            backbone.relu,
-            backbone.maxpool,
-        )
-        self.layer1 = backbone.layer1
-        self.layer2 = backbone.layer2
-        self.layer3 = backbone.layer3
-        self.layer4 = backbone.layer4
-
-    def forward(self, images: torch.Tensor) -> HostFeature:
-        output_size = tuple(images.shape[-2:])
-        x = self.stem(images)
-        low_level = self.layer1(x)
-        x = self.layer2(low_level)
-        x = self.layer3(x)
-        x = self.layer4(x)
-        return HostFeature(
-            tensor=x,
-            low_level=low_level,
-            output_size=output_size,
-        )
-
-
-class DeepLabV3PlusDecoder(nn.Module):
+class ConvModule(nn.Module):
     def __init__(
         self,
-        num_classes: int,
-        atrous_rates=(6, 12, 18),
-        high_channels: int = 2048,
-        low_channels: int = 256,
-        aspp_channels: int = 256,
-        low_projection_channels: int = 48,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride=1,
+        padding=0,
+        dilation=1,
+        groups=1,
+        bias=False,
     ):
         super().__init__()
-        self.aspp = ASPP(high_channels, atrous_rates, aspp_channels)
-        self.low_projection = nn.Sequential(
-            nn.Conv2d(low_channels, low_projection_channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(low_projection_channels),
-            nn.ReLU(inplace=True),
+        self.conv = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
+            bias=bias,
         )
-        decoder_channels = aspp_channels + low_projection_channels
-        self.decoder = nn.Sequential(
-            nn.Conv2d(decoder_channels, 256, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(256, num_classes, kernel_size=1),
-        )
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.activate = nn.ReLU(inplace=True)
 
-    def forward(self, host_feature: HostFeature) -> torch.Tensor:
-        high = self.aspp(host_feature.tensor)
-        high = F.interpolate(
-            high,
+    def forward(self, x):
+        return self.activate(self.bn(self.conv(x)))
+
+
+class DepthwiseSeparableConvModule(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size=3,
+        padding=1,
+        dilation=1,
+    ):
+        super().__init__()
+        self.depthwise_conv = ConvModule(
+            in_channels,
+            in_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            dilation=dilation,
+            groups=in_channels,
+        )
+        self.pointwise_conv = ConvModule(in_channels, out_channels, kernel_size=1)
+
+    def forward(self, x):
+        return self.pointwise_conv(self.depthwise_conv(x))
+
+
+class MMSegResNetV1cBackbone(nn.Module):
+    """ResNetV1c R-50 D8 backbone layout used by MMSegmentation v0.x."""
+
+    def __init__(self):
+        super().__init__()
+        reference = resnet50(
+            weights=None,
+            replace_stride_with_dilation=(False, True, True),
+        )
+        self.stem = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+        )
+        self.maxpool = reference.maxpool
+        self.layer1 = reference.layer1
+        self.layer2 = reference.layer2
+        self.layer3 = reference.layer3
+        self.layer4 = reference.layer4
+
+    def forward(self, images):
+        x = self.stem(images)
+        x = self.maxpool(x)
+        c1 = self.layer1(x)
+        c2 = self.layer2(c1)
+        c3 = self.layer3(c2)
+        c4 = self.layer4(c3)
+        return c1, c2, c3, c4
+
+
+class MMSegDepthwiseSeparableASPPHead(nn.Module):
+    def __init__(self, num_classes=CITYSCAPES_NUM_CLASSES):
+        super().__init__()
+        self.image_pool = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            ConvModule(2048, 512, kernel_size=1),
+        )
+        self.aspp_modules = nn.ModuleList(
+            [
+                ConvModule(2048, 512, kernel_size=1),
+                DepthwiseSeparableConvModule(
+                    2048, 512, kernel_size=3, padding=12, dilation=12
+                ),
+                DepthwiseSeparableConvModule(
+                    2048, 512, kernel_size=3, padding=24, dilation=24
+                ),
+                DepthwiseSeparableConvModule(
+                    2048, 512, kernel_size=3, padding=36, dilation=36
+                ),
+            ]
+        )
+        self.bottleneck = ConvModule(512 * 5, 512, kernel_size=3, padding=1)
+        self.c1_bottleneck = ConvModule(256, 48, kernel_size=1)
+        self.sep_bottleneck = nn.Sequential(
+            DepthwiseSeparableConvModule(560, 512, kernel_size=3, padding=1),
+            DepthwiseSeparableConvModule(512, 512, kernel_size=3, padding=1),
+        )
+        self.dropout = nn.Dropout2d(0.1)
+        self.conv_seg = nn.Conv2d(512, num_classes, kernel_size=1)
+
+    def forward(self, host_feature: HostFeature):
+        high = host_feature.tensor
+        image_pool = self.image_pool(high)
+        image_pool = F.interpolate(
+            image_pool,
+            size=high.shape[-2:],
+            mode="bilinear",
+            align_corners=False,
+        )
+        aspp = [image_pool]
+        aspp.extend(module(high) for module in self.aspp_modules)
+        output = self.bottleneck(torch.cat(aspp, dim=1))
+        output = F.interpolate(
+            output,
             size=host_feature.low_level.shape[-2:],
             mode="bilinear",
             align_corners=False,
         )
-        low = self.low_projection(host_feature.low_level)
-        logits = self.decoder(torch.cat([high, low], dim=1))
+        low = self.c1_bottleneck(host_feature.low_level)
+        output = self.sep_bottleneck(torch.cat([output, low], dim=1))
+        output = self.conv_seg(self.dropout(output))
         return F.interpolate(
-            logits,
+            output,
             size=host_feature.output_size,
             mode="bilinear",
             align_corners=False,
         )
 
 
-class DeepLabV3PlusResNet50Host(nn.Module):
-    """Static DeepLabV3+ ResNet-50 segmentation host.
+class MMSegFCNAuxiliaryHead(nn.Module):
+    def __init__(self, num_classes=CITYSCAPES_NUM_CLASSES):
+        super().__init__()
+        self.convs = nn.Sequential(ConvModule(1024, 256, kernel_size=3, padding=1))
+        self.dropout = nn.Dropout2d(0.1)
+        self.conv_seg = nn.Conv2d(256, num_classes, kernel_size=1)
 
-    The host exposes a model-agnostic feature boundary for future adapters:
-    callers can extract `HostFeature.tensor`, replace it with a modified tensor
-    through `HostFeature.replace`, and continue through the segmentation head.
-    """
+    def forward(self, c3, output_size):
+        output = self.conv_seg(self.dropout(self.convs(c3)))
+        return F.interpolate(
+            output,
+            size=output_size,
+            mode="bilinear",
+            align_corners=False,
+        )
+
+
+class DeepLabV3PlusResNet50Host(nn.Module):
+    """MMSegmentation DeepLabV3+ R-50 D8 Cityscapes static host."""
 
     def __init__(
         self,
-        num_classes: int = 21,
-        pretrained_backbone: bool = True,
+        num_classes: int = CITYSCAPES_NUM_CLASSES,
+        checkpoint_path: Optional[str] = None,
+        load_cityscapes_checkpoint: bool = True,
         freeze_backbone: bool = False,
     ):
         super().__init__()
-        weights = ResNet50_Weights.IMAGENET1K_V2 if pretrained_backbone else None
-        self.feature_extractor = ResNet50FeatureExtractor(weights=weights)
-        self.decoder = DeepLabV3PlusDecoder(num_classes=num_classes)
+        self.num_classes = num_classes
+        self.backbone = MMSegResNetV1cBackbone()
+        self.decode_head = MMSegDepthwiseSeparableASPPHead(num_classes=num_classes)
+        self.auxiliary_head = MMSegFCNAuxiliaryHead(num_classes=num_classes)
+        self.cityscapes_checkpoint_loaded = False
+        self.checkpoint_load_report = None
+        if load_cityscapes_checkpoint:
+            self.load_cityscapes_checkpoint(checkpoint_path)
         if freeze_backbone:
-            self.feature_extractor.requires_grad_(False)
+            self.backbone.requires_grad_(False)
 
     def extract_host_feature(self, images: torch.Tensor) -> HostFeature:
-        return self.feature_extractor(images)
+        c1, _, _, c4 = self.backbone(images)
+        return HostFeature(
+            tensor=c4,
+            low_level=c1,
+            output_size=tuple(images.shape[-2:]),
+        )
 
     def decode_from_host_feature(self, host_feature: HostFeature) -> torch.Tensor:
-        return self.decoder(host_feature)
+        return self.decode_head(host_feature)
 
     def forward_with_host_feature(self, images: torch.Tensor) -> DeepLabV3PlusHostOutput:
         host_feature = self.extract_host_feature(images)
@@ -141,14 +248,58 @@ class DeepLabV3PlusResNet50Host(nn.Module):
     def forward(self, images: torch.Tensor) -> torch.Tensor:
         return self.forward_with_host_feature(images).logits
 
+    def load_cityscapes_checkpoint(self, checkpoint_path: Optional[str] = None):
+        checkpoint = load_official_cityscapes_checkpoint(checkpoint_path)
+        state_dict = checkpoint["state_dict"]
+        self.load_state_dict(state_dict, strict=True)
+        backbone_keys = sum(key.startswith("backbone.") for key in state_dict)
+        decode_keys = sum(key.startswith("decode_head.") for key in state_dict)
+        auxiliary_keys = sum(key.startswith("auxiliary_head.") for key in state_dict)
+        if backbone_keys == 0 or decode_keys == 0:
+            raise RuntimeError("Official checkpoint did not contain backbone and decode_head weights.")
+        self.cityscapes_checkpoint_loaded = True
+        self.checkpoint_load_report = {
+            "config": CITYSCAPES_CONFIG_NAME,
+            "checkpoint": CITYSCAPES_CHECKPOINT_NAME,
+            "source": CITYSCAPES_CHECKPOINT_URL,
+            "strict": True,
+            "backbone_key_count": backbone_keys,
+            "decode_head_key_count": decode_keys,
+            "auxiliary_head_key_count": auxiliary_keys,
+            "num_classes": self.num_classes,
+        }
+        return self.checkpoint_load_report
+
+
+def default_checkpoint_path() -> Path:
+    hub_dir = Path(torch.hub.get_dir())
+    return hub_dir / "checkpoints" / CITYSCAPES_CHECKPOINT_NAME
+
+
+def load_official_cityscapes_checkpoint(checkpoint_path: Optional[str] = None):
+    if checkpoint_path is None:
+        checkpoint = torch.hub.load_state_dict_from_url(
+            CITYSCAPES_CHECKPOINT_URL,
+            model_dir=str(default_checkpoint_path().parent),
+            map_location="cpu",
+            file_name=CITYSCAPES_CHECKPOINT_NAME,
+        )
+    else:
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    if not isinstance(checkpoint, dict) or "state_dict" not in checkpoint:
+        raise RuntimeError("Expected an MMSegmentation checkpoint with a state_dict.")
+    return checkpoint
+
 
 def build_deeplabv3plus_resnet50_host(
-    num_classes: int = 21,
-    pretrained_backbone: bool = True,
+    num_classes: int = CITYSCAPES_NUM_CLASSES,
+    checkpoint_path: Optional[str] = None,
+    load_cityscapes_checkpoint: bool = True,
     freeze_backbone: bool = False,
 ) -> DeepLabV3PlusResNet50Host:
     return DeepLabV3PlusResNet50Host(
         num_classes=num_classes,
-        pretrained_backbone=pretrained_backbone,
+        checkpoint_path=checkpoint_path,
+        load_cityscapes_checkpoint=load_cityscapes_checkpoint,
         freeze_backbone=freeze_backbone,
     )

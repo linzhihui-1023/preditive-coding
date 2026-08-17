@@ -180,9 +180,10 @@ def get_model(
     future_feature_prediction_form="current_residual",
     future_motion_radius=1,
     future_motion_patch_size=3,
-    segmentation_num_classes=21,
+    segmentation_num_classes=19,
     segmentation_pretrained_backbone=None,
     segmentation_freeze_backbone=False,
+    segmentation_checkpoint_path=None,
 ):
     canonical_name = canonicalize_model_name(name)
 
@@ -287,7 +288,8 @@ def get_model(
             segmentation_pretrained_backbone = pretrained
         pnet = build_deeplabv3plus_resnet50_host(
             num_classes=segmentation_num_classes,
-            pretrained_backbone=segmentation_pretrained_backbone,
+            checkpoint_path=segmentation_checkpoint_path,
+            load_cityscapes_checkpoint=segmentation_pretrained_backbone,
             freeze_backbone=segmentation_freeze_backbone,
         )
 
