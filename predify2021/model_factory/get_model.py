@@ -13,12 +13,15 @@ MODEL_ALIASES = {
     "pvggtargetflow": "pvgg_tf",
     "peffb0": "peffb0",
     "pefficientnetb0": "peffb0",
+    "deeplabv3plus_resnet50": "deeplabv3plus_resnet50",
+    "deeplabv3plus-resnet50": "deeplabv3plus_resnet50",
 }
 
 MODEL_PCODER_COUNTS = {
     "pvgg": 5,
     "pvgg_tf": 5,
     "peffb0": 8,
+    "deeplabv3plus_resnet50": 0,
 }
 
 
@@ -177,6 +180,9 @@ def get_model(
     future_feature_prediction_form="current_residual",
     future_motion_radius=1,
     future_motion_patch_size=3,
+    segmentation_num_classes=21,
+    segmentation_pretrained_backbone=None,
+    segmentation_freeze_backbone=False,
 ):
     canonical_name = canonicalize_model_name(name)
 
@@ -274,10 +280,21 @@ def get_model(
                 er_multiplier=0.01,
             )
 
+    elif canonical_name == "deeplabv3plus_resnet50":
+        from .deeplabv3plus_resnet50 import build_deeplabv3plus_resnet50_host
+
+        if segmentation_pretrained_backbone is None:
+            segmentation_pretrained_backbone = pretrained
+        pnet = build_deeplabv3plus_resnet50_host(
+            num_classes=segmentation_num_classes,
+            pretrained_backbone=segmentation_pretrained_backbone,
+            freeze_backbone=segmentation_freeze_backbone,
+        )
+
     else:
         raise ValueError("The model name is not supported yet.")
 
-    if pretrained:
+    if pretrained and canonical_name != "deeplabv3plus_resnet50":
         checkpoint_paths = _resolve_weight_paths(pcoder_weights, pnet.number_of_pcoders)
         print(f"Loading feedback weights from {checkpoint_paths}")
         if canonical_name == "pvgg_tf":
@@ -286,6 +303,8 @@ def get_model(
             _load_pcoder_weights(pnet, checkpoint_paths)
 
     if hyperparams is not None:
+        if canonical_name == "deeplabv3plus_resnet50":
+            raise ValueError("deeplabv3plus_resnet50 does not use PCoder hyperparameters.")
         if canonical_name == "pvgg_tf":
             raise ValueError("pvgg_tf does not use legacy PCoder hyperparameters.")
         set_hyperparams(pnet, hyperparams)
