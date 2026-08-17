@@ -19,6 +19,8 @@ CITYSCAPES_CHECKPOINT_URL = (
     "deeplabv3plus_r50-d8_512x1024_80k_cityscapes/"
     f"{CITYSCAPES_CHECKPOINT_NAME}"
 )
+CITYSCAPES_RGB_MEAN = (123.675, 116.28, 103.53)
+CITYSCAPES_RGB_STD = (58.395, 57.12, 57.375)
 
 
 @dataclass(frozen=True)
@@ -222,6 +224,16 @@ class DeepLabV3PlusResNet50Host(nn.Module):
         self.backbone = MMSegResNetV1cBackbone()
         self.decode_head = MMSegDepthwiseSeparableASPPHead(num_classes=num_classes)
         self.auxiliary_head = MMSegFCNAuxiliaryHead(num_classes=num_classes)
+        self.register_buffer(
+            "input_mean",
+            torch.tensor(CITYSCAPES_RGB_MEAN).view(1, 3, 1, 1),
+            persistent=False,
+        )
+        self.register_buffer(
+            "input_std",
+            torch.tensor(CITYSCAPES_RGB_STD).view(1, 3, 1, 1),
+            persistent=False,
+        )
         self.cityscapes_checkpoint_loaded = False
         self.checkpoint_load_report = None
         if load_cityscapes_checkpoint:
@@ -229,8 +241,11 @@ class DeepLabV3PlusResNet50Host(nn.Module):
         if freeze_backbone:
             self.backbone.requires_grad_(False)
 
+    def preprocess_images(self, images: torch.Tensor) -> torch.Tensor:
+        return (images * 255.0 - self.input_mean) / self.input_std
+
     def extract_host_feature(self, images: torch.Tensor) -> HostFeature:
-        c1, _, _, c4 = self.backbone(images)
+        c1, _, _, c4 = self.backbone(self.preprocess_images(images))
         return HostFeature(
             tensor=c4,
             low_level=c1,

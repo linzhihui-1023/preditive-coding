@@ -18,6 +18,15 @@ logits = model.decode_from_host_feature(host_feature)
 logits = model.decode_from_host_feature(host_feature.replace(modified_tensor))
 ```
 
+External images must be RGB PyTorch tensors with shape `B x 3 x H x W` and
+values in `[0, 1]`. Before the backbone, the host converts them to the
+OpenMMLab Cityscapes normalization space:
+
+```text
+mean = [123.675, 116.28, 103.53]
+std  = [58.395, 57.12, 57.375]
+```
+
 `HostFeature.tensor` is the high-level spatial feature intended for later
 adapter modules. `HostFeature.low_level` and `HostFeature.output_size` are the
 decoder context required by DeepLabV3+ and should be preserved when replacing
