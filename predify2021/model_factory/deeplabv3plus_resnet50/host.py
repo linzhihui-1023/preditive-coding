@@ -7,6 +7,8 @@ from torch import nn
 from torch.nn import functional as F
 from torchvision.models import resnet50
 
+from .adapters import BackboneFeatures, MultiLayerAdapter, UnifiedFeatures
+
 
 CITYSCAPES_NUM_CLASSES = 19
 CITYSCAPES_CONFIG_NAME = "deeplabv3plus_r50-d8_4xb2-80k_cityscapes-512x1024"
@@ -224,6 +226,7 @@ class DeepLabV3PlusResNet50Host(nn.Module):
         self.backbone = MMSegResNetV1cBackbone()
         self.decode_head = MMSegDepthwiseSeparableASPPHead(num_classes=num_classes)
         self.auxiliary_head = MMSegFCNAuxiliaryHead(num_classes=num_classes)
+        self.multi_layer_adapter = MultiLayerAdapter()
         self.register_buffer(
             "input_mean",
             torch.tensor(CITYSCAPES_RGB_MEAN).view(1, 3, 1, 1),
@@ -245,12 +248,29 @@ class DeepLabV3PlusResNet50Host(nn.Module):
         return (images * 255.0 - self.input_mean) / self.input_std
 
     def extract_host_feature(self, images: torch.Tensor) -> HostFeature:
-        c1, _, _, c4 = self.backbone(self.preprocess_images(images))
+        stages = self.extract_backbone_features(images)
         return HostFeature(
-            tensor=c4,
-            low_level=c1,
+            tensor=stages.c4,
+            low_level=stages.c1,
             output_size=tuple(images.shape[-2:]),
         )
+
+    def extract_backbone_features(self, images: torch.Tensor) -> BackboneFeatures:
+        """Return c1..c4 without changing the static segmentation path."""
+        return BackboneFeatures(*self.backbone(self.preprocess_images(images)))
+
+    def encode_backbone_features(self, features: BackboneFeatures) -> UnifiedFeatures:
+        return self.multi_layer_adapter.encode(features)
+
+    def decode_adapter_deltas(self, deltas: UnifiedFeatures) -> BackboneFeatures:
+        return self.multi_layer_adapter.decode_deltas(deltas)
+
+    def apply_adapter_deltas(
+        self,
+        features: BackboneFeatures,
+        deltas: UnifiedFeatures,
+    ) -> BackboneFeatures:
+        return self.multi_layer_adapter.apply_deltas(features, deltas)
 
     def decode_from_host_feature(self, host_feature: HostFeature) -> torch.Tensor:
         return self.decode_head(host_feature)
@@ -266,7 +286,18 @@ class DeepLabV3PlusResNet50Host(nn.Module):
     def load_cityscapes_checkpoint(self, checkpoint_path: Optional[str] = None):
         checkpoint = load_official_cityscapes_checkpoint(checkpoint_path)
         state_dict = checkpoint["state_dict"]
-        self.load_state_dict(state_dict, strict=True)
+        static_modules = (
+            ("backbone", self.backbone),
+            ("decode_head", self.decode_head),
+            ("auxiliary_head", self.auxiliary_head),
+        )
+        for prefix, module in static_modules:
+            module_state = {
+                key[len(prefix) + 1 :]: value
+                for key, value in state_dict.items()
+                if key.startswith(prefix + ".")
+            }
+            module.load_state_dict(module_state, strict=True)
         backbone_keys = sum(key.startswith("backbone.") for key in state_dict)
         decode_keys = sum(key.startswith("decode_head.") for key in state_dict)
         auxiliary_keys = sum(key.startswith("auxiliary_head.") for key in state_dict)

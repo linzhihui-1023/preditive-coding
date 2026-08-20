@@ -32,5 +32,21 @@ adapter modules. `HostFeature.low_level` and `HostFeature.output_size` are the
 decoder context required by DeepLabV3+ and should be preserved when replacing
 the feature tensor.
 
+The backbone also exposes all four spatial stage features without changing the
+static decoder path:
+
+```python
+stages = model.extract_backbone_features(images)
+z = model.encode_backbone_features(stages)
+delta_c = model.decode_adapter_deltas(z)
+updated = model.apply_adapter_deltas(stages, z)
+```
+
+`stages.c1` through `stages.c4` have 256, 512, 1024, and 2048 channels. The
+adapter outputs `z1` through `z4` all have 128 channels and keep their own
+spatial resolution. The four output mappings restore the original channels.
+Their per-layer gains start at zero, and these adapter mappings are not wired
+into the static segmentation decoder.
+
 No predictor, prediction-error path, state correction, or Predify feedback
 recurrence is implemented in this host.

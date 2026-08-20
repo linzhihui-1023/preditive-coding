@@ -10,6 +10,15 @@ from .host import (
     HostFeature,
     build_deeplabv3plus_resnet50_host,
 )
+from .adapters import (
+    HOST_STAGE_CHANNELS,
+    UNIFIED_STATE_CHANNELS,
+    BackboneFeatures,
+    InputAdapter,
+    MultiLayerAdapter,
+    OutputAdapter,
+    UnifiedFeatures,
+)
 
 __all__ = [
     "CITYSCAPES_CHECKPOINT_NAME",
@@ -22,4 +31,11 @@ __all__ = [
     "DeepLabV3PlusResNet50Host",
     "HostFeature",
     "build_deeplabv3plus_resnet50_host",
+    "HOST_STAGE_CHANNELS",
+    "UNIFIED_STATE_CHANNELS",
+    "BackboneFeatures",
+    "InputAdapter",
+    "MultiLayerAdapter",
+    "OutputAdapter",
+    "UnifiedFeatures",
 ]
