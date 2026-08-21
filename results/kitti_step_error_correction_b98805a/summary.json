@@ -1,0 +1,55 @@
+{
+  "best": {
+    "checkpoint_path": "/home/lin/predify/experiments/kitti_step_error_correction_b98805a/best_correction.pt",
+    "epoch": 3,
+    "val_correction_mse": 0.0002632645262223404
+  },
+  "config": {
+    "batch_size": 1,
+    "corrected_layers": [
+      1,
+      4
+    ],
+    "epochs": 3,
+    "gaussian_noise_sigma": 0.1,
+    "learning_rate": 0.0001,
+    "trainable_parameter_count": 328192,
+    "weight_decay": 0.01
+  },
+  "dataset": {
+    "train_triplet_count": 5003,
+    "val_triplet_count": 2963
+  },
+  "decision": {
+    "go": true
+  },
+  "experiment": "kitti_step_error_correction",
+  "fixed_adapter_checkpoint": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+  "fixed_predictor_checkpoint": "/home/lin/predify/experiments/kitti_step_fixed_adapter_predictor_41aa5cc/best_predictor.pt",
+  "git_revision": "b98805a0f8344edf4c2f33f26af0c013f2253922",
+  "history": [
+    {
+      "epoch": 1,
+      "train_correction_mse": 0.0002685347469265029,
+      "val_correction_mse": 0.0002727116621990306
+    },
+    {
+      "epoch": 2,
+      "train_correction_mse": 0.00024781818567386503,
+      "val_correction_mse": 0.0002668434852778448
+    },
+    {
+      "epoch": 3,
+      "train_correction_mse": 0.0002438823257109498,
+      "val_correction_mse": 0.0002632645262223404
+    }
+  ],
+  "metrics": {
+    "mIoU_clean": 0.6552125561916007,
+    "mIoU_corr": 0.3885742037756719,
+    "mIoU_noisy": 0.29471196154206336,
+    "mIoU_pred": 0.386815281186899,
+    "recovery": 0.2603664005737834
+  },
+  "static_host_checkpoint": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt"
+}
