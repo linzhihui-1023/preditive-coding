@@ -48,5 +48,12 @@ spatial resolution. The four output mappings restore the original channels.
 Their per-layer gains start at zero, and these adapter mappings are not wired
 into the static segmentation decoder.
 
+The first-stage state predictor is separate from the static host. It consumes
+same-sequence RGB triplets from
+`predify2021.datasets.kitti_step_triplets.KITTISTEPTripletDataset`, predicts
+the next unified state from the previous unified state and its finite
+difference, and trains only the adapters and predictors. It has no prediction
+error, dynamic-error, or host write-back path.
+
 No predictor, prediction-error path, state correction, or Predify feedback
 recurrence is implemented in this host.

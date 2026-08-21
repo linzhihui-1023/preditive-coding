@@ -19,6 +19,7 @@ from .adapters import (
     OutputAdapter,
     UnifiedFeatures,
 )
+from .predictors import MultiLayerPredictor, SpatialPredictor
 
 __all__ = [
     "CITYSCAPES_CHECKPOINT_NAME",
@@ -38,4 +39,6 @@ __all__ = [
     "MultiLayerAdapter",
     "OutputAdapter",
     "UnifiedFeatures",
+    "MultiLayerPredictor",
+    "SpatialPredictor",
 ]
