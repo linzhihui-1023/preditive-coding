@@ -1,0 +1,68 @@
+{
+  "best": {
+    "checkpoint_path": "/home/lin/predify/experiments/kitti_step_dynamic_error_correction_374453f/best_dynamic_correction.pt",
+    "epoch": 3
+  },
+  "config": {
+    "alpha": 0.207,
+    "beta": 0.793,
+    "corrected_layers": [
+      1,
+      4
+    ],
+    "epochs": 3,
+    "gaussian_noise_sigma": 0.1,
+    "learning_rate": 0.0001,
+    "trainable_parameter_count": 328192,
+    "weight_decay": 0.01
+  },
+  "dataset": {
+    "train_sequence_count": 12,
+    "val_sequence_count": 9
+  },
+  "decision": {
+    "go": true
+  },
+  "diagnostics": {
+    "mean_abs_dynamic_error": {
+      "z1": 0.010662205568840084,
+      "z4": 0.010775762985196748
+    },
+    "mean_abs_error": {
+      "z1": 0.017469357126783748,
+      "z4": 0.012814245797464907
+    }
+  },
+  "experiment": "kitti_step_dynamic_error_correction",
+  "fixed_adapter_checkpoint": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+  "fixed_predictor_checkpoint": "/home/lin/predify/experiments/kitti_step_fixed_adapter_predictor_41aa5cc/best_predictor.pt",
+  "git_revision": "374453f9b6410d8d72118c69fd343b268f6412c7",
+  "history": [
+    {
+      "epoch": 1,
+      "train_dynamic_correction_mse": 0.0002607383665865913,
+      "val_dynamic_correction_mse": 0.0002837129653038539
+    },
+    {
+      "epoch": 2,
+      "train_dynamic_correction_mse": 0.0002452364952350403,
+      "val_dynamic_correction_mse": 0.0002766624828632203
+    },
+    {
+      "epoch": 3,
+      "train_dynamic_correction_mse": 0.00024148980841182227,
+      "val_dynamic_correction_mse": 0.00027240905621951216
+    }
+  ],
+  "instant_correction_checkpoint": "/home/lin/predify/experiments/kitti_step_error_correction_b98805a/best_correction.pt",
+  "metrics": {
+    "delta_dyn_minus_inst": 0.00022294847678638874,
+    "mIoU_clean": 0.6552125561916007,
+    "mIoU_dyn": 0.38880089982295035,
+    "mIoU_inst": 0.38857795134616396,
+    "mIoU_noisy": 0.29471196154206336,
+    "mIoU_pred": 0.38681869294709303,
+    "recovery_dyn": 0.260995237393037
+  },
+  "static_host_checkpoint": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt"
+}
