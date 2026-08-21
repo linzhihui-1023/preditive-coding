@@ -1,0 +1,218 @@
+{
+  "best": {
+    "checkpoint_path": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "checkpoint_sha256": "be73abf3330ff5548f31c2e0094cace3fe1423d8efe2c2caccbb272f34f23123",
+    "epoch": 3,
+    "val_copy_mse": [
+      0.00043773100883847684,
+      0.00011156530869851428,
+      4.521373739392516e-05,
+      8.157629735163154e-05
+    ],
+    "val_layer_improvement": [
+      0.30121983712407974,
+      0.2788946589899551,
+      0.25010424328292985,
+      0.009739459462506025
+    ],
+    "val_mean_copy_mse": 0.00016902158807063697,
+    "val_mean_improvement": 0.25894752635970913,
+    "val_mean_prediction_mse": 0.0001252538659383558,
+    "val_prediction_mse": [
+      0.00030587774565199173,
+      8.045033997393307e-05,
+      3.39055898170244e-05,
+      8.078178831047398e-05
+    ]
+  },
+  "config": {
+    "batch_size": 1,
+    "epochs": 3,
+    "lambda_recon": 0.1,
+    "learning_rate": 0.0001,
+    "official_cityscapes_checkpoint": "deeplabv3plus_r50-d8_512x1024_80k_cityscapes_20200606_114049-f9fb496d.pth",
+    "seed": 0,
+    "state_channels": 128,
+    "trainable_parameter_count": 2754564,
+    "weight_decay": 0.01
+  },
+  "dataset": {
+    "root": "/home/lin/predify/kitti_step",
+    "train_sequence_count": 12,
+    "train_triplet_count": 5003,
+    "val_sequence_count": 9,
+    "val_triplet_count": 2963
+  },
+  "decision": {
+    "criterion": "val mean predictor MSE < copy and at least 3 of 4 layer wins",
+    "go": true,
+    "layer_wins": 4
+  },
+  "experiment": "kitti_step_multilayer_state_predictor",
+  "git_revision": "d655a0dea54363f4ba844f62cc0404536a86339d",
+  "history": [
+    {
+      "epoch": 1,
+      "train": {
+        "copy_mse": [
+          0.018283747228645435,
+          0.013782197815143777,
+          0.008878243928515276,
+          0.024182727928390192
+        ],
+        "layer_improvement": [
+          0.1490545966239936,
+          0.07608141444524434,
+          0.057255977852192476,
+          0.1225688558664074
+        ],
+        "mean_copy_mse": 0.016281729225173673,
+        "mean_improvement": 0.1112631742506554,
+        "mean_prediction_mse": 0.014470172349291186,
+        "prediction_loss": 0.05788068922265229,
+        "prediction_mse": [
+          0.01555847066070463,
+          0.012733628711203482,
+          0.008369911390777843,
+          0.02121867863447879
+        ],
+        "reconstruction_loss": 0.049721311966589084
+      },
+      "val": {
+        "copy_mse": [
+          0.003898520307323713,
+          0.002602195540469819,
+          0.0019120754788125153,
+          0.011332804068029235
+        ],
+        "layer_improvement": [
+          0.28877318245935674,
+          0.2714450792567945,
+          0.2530955127590154,
+          0.23040535408583518
+        ],
+        "mean_copy_mse": 0.00493639884865882,
+        "mean_improvement": 0.24953503047647535,
+        "mean_prediction_mse": 0.0037045944115147037,
+        "prediction_loss": 0.014818377644477404,
+        "prediction_mse": [
+          0.002772732191295415,
+          0.0018958423657453117,
+          0.001428137755068522,
+          0.008721665333949566
+        ],
+        "reconstruction_loss": 0.031000907037192167
+      }
+    },
+    {
+      "epoch": 2,
+      "train": {
+        "copy_mse": [
+          0.0019347250657245347,
+          0.0014523195501617106,
+          0.0011161719738826568,
+          0.005156784650315444
+        ],
+        "layer_improvement": [
+          0.3012272002482555,
+          0.30136234134766793,
+          0.27470357188132577,
+          0.23878829308902544
+        ],
+        "mean_copy_mse": 0.0024150003100210865,
+        "mean_improvement": 0.2648511530971208,
+        "mean_prediction_mse": 0.0017753846931820975,
+        "prediction_loss": 0.0071015387697237675,
+        "prediction_mse": [
+          0.001351933250926211,
+          0.0010146451301399856,
+          0.0008095555458232612,
+          0.003925404845838932
+        ],
+        "reconstruction_loss": 0.030566968819394174
+      },
+      "val": {
+        "copy_mse": [
+          0.0010646430794892998,
+          0.000746100050726622,
+          0.000554795505778729,
+          0.002087725334001785
+        ],
+        "layer_improvement": [
+          0.3190331541157469,
+          0.33553744649590034,
+          0.29612304321649585,
+          0.2334433731647437
+        ],
+        "mean_copy_mse": 0.001113315992499109,
+        "mean_improvement": 0.2788189363169819,
+        "mean_prediction_mse": 0.0008029024116858225,
+        "prediction_loss": 0.003211609643008315,
+        "prediction_mse": [
+          0.0007249866398323266,
+          0.0004957555448753496,
+          0.00039050777224469674,
+          0.001600359689790917
+        ],
+        "reconstruction_loss": 0.02839061856921102
+      }
+    },
+    {
+      "epoch": 3,
+      "train": {
+        "copy_mse": [
+          0.0006330697583104908,
+          0.00036221744942008407,
+          0.00023674446235936065,
+          0.0005068631248625148
+        ],
+        "layer_improvement": [
+          0.30947796726563304,
+          0.32106355527856395,
+          0.2842491058533634,
+          0.2204679552834928
+        ],
+        "mean_copy_mse": 0.0004347236987381126,
+        "mean_improvement": 0.28251130772743455,
+        "mean_prediction_mse": 0.0003119093381075011,
+        "prediction_loss": 0.0012476373523531074,
+        "prediction_mse": [
+          0.0004371486163712145,
+          0.00024592262732533847,
+          0.00016945006061797714,
+          0.0003951160481154745
+        ],
+        "reconstruction_loss": 0.027447957130770386
+      },
+      "val": {
+        "copy_mse": [
+          0.00043773100883847684,
+          0.00011156530869851428,
+          4.521373739392516e-05,
+          8.157629735163154e-05
+        ],
+        "layer_improvement": [
+          0.30121983712407974,
+          0.2788946589899551,
+          0.25010424328292985,
+          0.009739459462506025
+        ],
+        "mean_copy_mse": 0.00016902158807063697,
+        "mean_improvement": 0.25894752635970913,
+        "mean_prediction_mse": 0.0001252538659383558,
+        "prediction_loss": 0.0005010154642169186,
+        "prediction_mse": [
+          0.00030587774565199173,
+          8.045033997393307e-05,
+          3.39055898170244e-05,
+          8.078178831047398e-05
+        ],
+        "reconstruction_loss": 0.025042028839935976
+      }
+    }
+  ],
+  "static_host_checkpoint": {
+    "path": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "sha256": "19057b288434956d0a6dd22e8a719fc03c44417025aad5512e74516fdc15dea0"
+  }
+}

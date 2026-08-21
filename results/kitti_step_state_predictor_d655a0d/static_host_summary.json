@@ -1,0 +1,124 @@
+{
+  "best": {
+    "checkpoint_path": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "checkpoint_sha256": "19057b288434956d0a6dd22e8a719fc03c44417025aad5512e74516fdc15dea0",
+    "epoch": 1,
+    "improvement_over_cityscapes_zero_train_mIoU": 0.05010590136020221,
+    "mIoU": 0.6541174065367945,
+    "per_class_iou": {
+      "bicycle": 0.6169163665751536,
+      "building": 0.8405687197200966,
+      "bus": 0.4164095304433658,
+      "car": 0.9107553225627087,
+      "fence": 0.3995338194837961,
+      "motorcycle": 0.4903131734408337,
+      "person": 0.7431887827527601,
+      "pole": 0.52529031314759,
+      "rider": 0.5253154391310108,
+      "road": 0.8750260468588662,
+      "sidewalk": 0.654025565678096,
+      "sky": 0.9369242697234198,
+      "terrain": 0.7831742710032717,
+      "traffic light": 0.664900730876388,
+      "traffic sign": 0.634202231710193,
+      "train": 0.6939182733626658,
+      "truck": 0.4795336649536716,
+      "vegetation": 0.9265814034994485,
+      "wall": 0.31165279927576045
+    }
+  },
+  "checkpoint_initialization": {
+    "loaded_strict": true,
+    "path": "/home/lin/predify/.torch/hub/checkpoints/deeplabv3plus_r50-d8_512x1024_80k_cityscapes_20200606_114049-f9fb496d.pth",
+    "sha256": "f9fb496d052e9c02573dd68c191ffd3d9319e99910a462f094159e7ccf843bd1",
+    "source": "https://download.openmmlab.com/mmsegmentation/v0.5/deeplabv3plus/deeplabv3plus_r50-d8_512x1024_80k_cityscapes/deeplabv3plus_r50-d8_512x1024_80k_cityscapes_20200606_114049-f9fb496d.pth"
+  },
+  "cityscapes_zero_train_mIoU": 0.6040115051765923,
+  "dataset": {
+    "root": "/home/lin/predify/kitti_step",
+    "train_frame_count": 5027,
+    "train_sequence_count": 12,
+    "train_sequence_frame_counts": {
+      "0000": 154,
+      "0001": 447,
+      "0003": 144,
+      "0004": 314,
+      "0005": 297,
+      "0009": 803,
+      "0011": 373,
+      "0012": 78,
+      "0015": 376,
+      "0017": 145,
+      "0019": 1059,
+      "0020": 837
+    },
+    "train_split": "train",
+    "val_frame_count": 2981,
+    "val_sequence_count": 9,
+    "val_sequence_frame_counts": {
+      "0002": 233,
+      "0006": 270,
+      "0007": 800,
+      "0008": 390,
+      "0010": 294,
+      "0013": 340,
+      "0014": 106,
+      "0016": 209,
+      "0018": 339
+    },
+    "val_split": "val"
+  },
+  "experiment": "kitti_step_static_deeplabv3plus_resnet50_finetune",
+  "git_revision": "16d0229ca45df487d2184ce43b0ec82a5a081484",
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.1718460845249941,
+      "val_mIoU": 0.6541174065367945,
+      "val_per_class_iou": {
+        "bicycle": 0.6169163665751536,
+        "building": 0.8405687197200966,
+        "bus": 0.4164095304433658,
+        "car": 0.9107553225627087,
+        "fence": 0.3995338194837961,
+        "motorcycle": 0.4903131734408337,
+        "person": 0.7431887827527601,
+        "pole": 0.52529031314759,
+        "rider": 0.5253154391310108,
+        "road": 0.8750260468588662,
+        "sidewalk": 0.654025565678096,
+        "sky": 0.9369242697234198,
+        "terrain": 0.7831742710032717,
+        "traffic light": 0.664900730876388,
+        "traffic sign": 0.634202231710193,
+        "train": 0.6939182733626658,
+        "truck": 0.4795336649536716,
+        "vegetation": 0.9265814034994485,
+        "wall": 0.31165279927576045
+      }
+    }
+  ],
+  "model": "deeplabv3plus_r50-d8_4xb2-80k_cityscapes-512x1024",
+  "training": {
+    "augmentation": {
+      "crop_size": [
+        512,
+        1024
+      ],
+      "horizontal_flip_prob": 0.5,
+      "mask_interpolation": "nearest",
+      "resize_size": [
+        512,
+        1700
+      ]
+    },
+    "batch_size": 2,
+    "epochs": 1,
+    "loss": "CrossEntropyLoss(ignore_index=255) + 0.4 auxiliary CrossEntropyLoss",
+    "lr": 2e-05,
+    "optimizer": "AdamW",
+    "static_single_frame": true,
+    "temporal_state": false,
+    "weight_decay": 0.01
+  }
+}
