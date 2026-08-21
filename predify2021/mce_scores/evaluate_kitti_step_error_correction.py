@@ -81,16 +81,16 @@ def build_prediction_and_error(model, predictor, clean_images, sigma):
     return noisy_images, clean_current, noisy_current, predicted, error
 
 
-def correction_states(predicted, error, corrections):
+def correction_states(predicted, gain_error, correction_error, corrections):
     gains = (
-        corrections[0](error.z1),
-        corrections[1](error.z4),
+        corrections[0](gain_error.z1),
+        corrections[1](gain_error.z4),
     )
     return UnifiedFeatures(
-        predicted.z1 + gains[0] * error.z1,
+        predicted.z1 + gains[0] * correction_error.z1,
         predicted.z2,
         predicted.z3,
-        predicted.z4 + gains[1] * error.z4,
+        predicted.z4 + gains[1] * correction_error.z4,
     )
 
 
@@ -111,7 +111,7 @@ def run_correction_epoch(model, predictor, corrections, loader, optimizer, sigma
         _, clean_current, _, predicted, error = build_prediction_and_error(
             model, predictor, images, sigma
         )
-        corrected = correction_states(predicted, error, corrections)
+        corrected = correction_states(predicted, error, error, corrections)
         loss = correction_loss(clean_current, corrected)
         if training:
             optimizer.zero_grad(set_to_none=True)
@@ -156,7 +156,7 @@ def evaluate_paths(model, predictor, corrections, loader, mask_paths, sigma):
             clean_current = clean_images[:, 2]
             noisy_current = noisy_images[:, 2]
             noisy_features = model.extract_backbone_features(noisy_current)
-            corrected = correction_states(predicted, error, corrections)
+            corrected = correction_states(predicted, error, error, corrections)
             output_size = tuple(clean_current.shape[-2:])
             pred_host = corrected_host_feature(
                 model, noisy_features, noisy_state, predicted, output_size

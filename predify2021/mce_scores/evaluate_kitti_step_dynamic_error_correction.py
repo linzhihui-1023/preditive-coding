@@ -126,7 +126,7 @@ def run_epoch(model, predictor, corrections, groups, optimizer, training, sigma)
                     predictor, previous_previous, previous, noisy_state
                 )
                 dynamic_error = update_dynamic_error(error, dynamic_error)
-            corrected = correction_states(predicted, error, corrections)
+            corrected = correction_states(predicted, dynamic_error, error, corrections)
             loss = F.mse_loss(corrected.z1, clean_state.z1) + F.mse_loss(
                 corrected.z4, clean_state.z4
             )
@@ -180,10 +180,10 @@ def evaluate(model, predictor, dynamic_corrections, instant_corrections, groups,
                 )
                 dynamic_error = update_dynamic_error(error, dynamic_error)
                 instant_state = correction_states(
-                    predicted, error, instant_corrections
+                    predicted, error, error, instant_corrections
                 )
                 dynamic_state = correction_states(
-                    predicted, error, dynamic_corrections
+                    predicted, dynamic_error, error, dynamic_corrections
                 )
                 noisy_features = model.extract_backbone_features(noisy_image)
                 output_size = tuple(clean_image.shape[-2:])
