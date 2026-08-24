@@ -132,6 +132,11 @@ def attention_diagnostics(weights, valid, window_size):
 def collect_aligned_rows(model, predictor, corrections, alignments, groups, sigma):
     rows = []
     finite = True
+    diagnostic_sums = {
+        "z1": {"max_weight": 0.0, "entropy": 0.0, "offset": 0.0},
+        "z4": {"max_weight": 0.0, "entropy": 0.0, "offset": 0.0},
+    }
+    frame_count = 0
     model.eval()
     predictor.eval()
     corrections.eval()
@@ -154,12 +159,13 @@ def collect_aligned_rows(model, predictor, corrections, alignments, groups, sigm
                 predicted, error = predict_current(
                     predictor, previous_previous, previous, observation
                 )
-                dynamic_error = aligned_dynamic_error(
+                dynamic_error, attention = aligned_dynamic_error(
                     error,
                     dynamic_error,
                     observation,
                     previous,
                     alignments,
+                    return_attention=True,
                 )
                 posterior = posterior_state(
                     predicted, error, dynamic_error, observation, corrections
@@ -182,10 +188,26 @@ def collect_aligned_rows(model, predictor, corrections, alignments, groups, sigm
                 }
                 row.update(state_metrics(error, dynamic_error, posterior, observation))
                 rows.append(row)
+                for name, (weights, valid) in zip(("z1", "z4"), attention):
+                    maximum, entropy, offset = attention_diagnostics(
+                        weights, valid, alignments[0].window_size
+                    )
+                    diagnostic_sums[name]["max_weight"] += maximum
+                    diagnostic_sums[name]["entropy"] += entropy
+                    diagnostic_sums[name]["offset"] += offset
+                frame_count += 1
                 dynamic_error = detach_state(dynamic_error)
                 previous_previous = previous
                 previous = detach_state(posterior)
-    return rows, finite
+    diagnostics = {
+        name: {
+            "mean_max_attention_weight": values["max_weight"] / frame_count,
+            "normalized_attention_entropy": values["entropy"] / frame_count,
+            "mean_argmax_offset_magnitude": values["offset"] / frame_count,
+        }
+        for name, values in diagnostic_sums.items()
+    }
+    return rows, finite, diagnostics
 
 
 def run_training_epoch(
@@ -568,7 +590,7 @@ def main():
     selected_ids = sorted(val_groups)[:2]
     stability_groups = {sequence_id: val_groups[sequence_id] for sequence_id in selected_ids}
     output_dir.mkdir(parents=True, exist_ok=True)
-    stability_rows, finite = collect_aligned_rows(
+    stability_rows, finite, stability_attention = collect_aligned_rows(
         model, predictor, corrections, alignments, stability_groups, sigma
     )
     stability_phases, ratio_stable = phase_statistics(stability_rows)
@@ -578,6 +600,7 @@ def main():
         "selected_sequences": selected_ids,
         "finite": finite,
         "stable": stable,
+        "attention_diagnostics": stability_attention,
         "phase_statistics": stability_phases,
     }
     print(json.dumps({"phase_one_stable": stable}, sort_keys=True), flush=True)
