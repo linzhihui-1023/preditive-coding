@@ -232,7 +232,6 @@ def run_training_epoch(
         previous_previous = None
         previous = None
         dynamic_error = None
-        initial_metrics = None
         for sample in samples:
             clean_image = load_image(sample)
             clean_state = encode_image(model, clean_image)
@@ -259,9 +258,6 @@ def run_training_epoch(
             posterior = posterior_state(
                 predicted, error, dynamic_error, observation, corrections
             )
-            current_metrics = state_metrics(
-                error, dynamic_error, posterior, observation
-            )
             values_finite = all(
                 torch.isfinite(value).all().item()
                 for value in (
@@ -273,26 +269,12 @@ def run_training_epoch(
                     posterior.z4,
                 )
             )
-            if initial_metrics is None:
-                initial_metrics = current_metrics
-            unstable_metrics = {
-                name: {
-                    "initial": initial_metrics[name],
-                    "current": value,
-                    "ratio": value / initial_metrics[name],
-                }
-                for name, value in current_metrics.items()
-                if value > 10.0 * initial_metrics[name]
-            }
-            if instability_report is not None and (
-                not values_finite or unstable_metrics
-            ):
+            if instability_report is not None and not values_finite:
                 instability_report.update(
                     {
                         "sequence_id": sample["sequence_id"],
                         "frame_id": sample["frame_id"],
                         "finite": values_finite,
-                        "unstable_metrics": unstable_metrics,
                     }
                 )
                 return total_loss / max(frame_count, 1)
@@ -522,6 +504,29 @@ def decision_label(aligned_miou, baseline_miou):
     return "STRONG GO"
 
 
+def attention_matching_learned(diagnostics):
+    uniform_max = 1.0 / 49.0
+
+    def strong(value):
+        return (
+            value["mean_max_attention_weight"] > 0.03
+            and value["normalized_attention_entropy"] < 0.98
+        )
+
+    def uniform(value):
+        return (
+            value["mean_max_attention_weight"] < 0.03
+            and value["normalized_attention_entropy"] >= 0.999
+            and abs(value["mean_max_attention_weight"] - uniform_max) < 0.01
+        )
+
+    z1_strong = strong(diagnostics["z1"])
+    z4_strong = strong(diagnostics["z4"])
+    return (z1_strong and not uniform(diagnostics["z4"])) or (
+        z4_strong and not uniform(diagnostics["z1"])
+    )
+
+
 def main():
     if not torch.cuda.is_available():
         raise RuntimeError("Local error-memory alignment expects GPU 0.")
@@ -699,6 +704,56 @@ def main():
     alignments.load_state_dict(best_payload["alignment_state_dict"], strict=True)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+    matching_rows, matching_finite, matching_diagnostics = collect_aligned_rows(
+        model, predictor, corrections, alignments, val_groups, sigma
+    )
+    matching_phases, matching_ratio_stable = phase_statistics(matching_rows)
+    matching_stable = matching_finite and matching_ratio_stable
+    write_rows(output_dir / "matching_per_frame.csv", matching_rows)
+    matching_learned = attention_matching_learned(matching_diagnostics)
+    if not matching_stable or not matching_learned:
+        summary = {
+            "experiment": "kitti_step_local_error_memory_alignment",
+            "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
+            "checkpoints": {
+                "static_host": str(static_checkpoint),
+                "fixed_adapter": str(adapter_checkpoint),
+                "fixed_predictor": str(predictor_checkpoint),
+                "fixed_closed_loop_correction": str(correction_checkpoint),
+                "best_alignment": str(best_checkpoint),
+            },
+            "config": {
+                "epochs": epochs,
+                "learning_rate": learning_rate,
+                "weight_decay": weight_decay,
+                "gaussian_noise_sigma": sigma,
+                "alpha": ALPHA,
+                "beta": BETA,
+                "window_size": 7,
+                "query_key_channels": 32,
+                "trainable_parameter_count": sum(
+                    parameter.numel() for parameter in alignments.parameters()
+                ),
+            },
+            "phase_one": phase_one,
+            "gradient_boundary": gradient_report,
+            "history": history,
+            "best": {"epoch": best_epoch, "val_mse": best_val_loss},
+            "attention_diagnostics": matching_diagnostics,
+            "matching_stability": {
+                "finite": matching_finite,
+                "stable": matching_stable,
+                "phase_statistics": matching_phases,
+            },
+            "decision": (
+                "ALIGNED CLOSED-LOOP UNSTABLE"
+                if not matching_stable
+                else "MATCHING NOT LEARNED"
+            ),
+        }
+        with (output_dir / "summary.json").open("w") as handle:
+            json.dump(summary, handle, indent=2, sort_keys=True)
+        return
     metrics, diagnostics, aligned_rows, formal_finite = evaluate_paths(
         model, predictor, corrections, alignments, val_groups, sigma
     )

@@ -1,5 +1,3 @@
-import math
-
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -45,7 +43,6 @@ class LocalErrorMemoryAlignment(nn.Module):
             width,
         )
         scores = (query.unsqueeze(2) * key_windows).sum(dim=1)
-        scores = scores / math.sqrt(self.projection_channels)
         valid = F.unfold(
             torch.ones(
                 batch_size,
