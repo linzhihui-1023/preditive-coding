@@ -1,0 +1,287 @@
+{
+  "checkpoints": {
+    "fixed_adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "fixed_predictor": "/home/lin/predify/experiments/kitti_step_fixed_adapter_predictor_41aa5cc/best_predictor.pt",
+    "legacy_correction": "/home/lin/predify/experiments/kitti_step_closed_loop_dynamic_correction_9820f4e/best_closed_loop_correction.pt",
+    "static_host": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt"
+  },
+  "config": {
+    "context_channels": [
+      640,
+      128,
+      128,
+      128
+    ],
+    "corrected_layers": [
+      1,
+      4
+    ],
+    "epochs": 3,
+    "gaussian_noise_sigma": 0.1,
+    "learning_rate": 0.0001,
+    "optimizer": "AdamW",
+    "seed": 0,
+    "trainable_parameter_count_per_variant": 492288,
+    "weight_decay": 0.01
+  },
+  "dataset": {
+    "train_sequence_count": 12,
+    "val_evaluated_frame_count": 2963,
+    "val_frame_count": 2981,
+    "val_sequence_count": 9
+  },
+  "experiment": "kitti_step_context_residual_input_ablation",
+  "full_context_reproduction": {
+    "mIoU_at_least_0.3080": true,
+    "pass": true,
+    "relative_to_legacy_at_least_0.005": true
+  },
+  "git_revision": "5144081",
+  "legacy_paired_mIoU": 0.30113056937906,
+  "variants": {
+    "FULL_CONTEXT": {
+      "best_epoch": 3,
+      "best_val_posterior_mse": 0.0006829157224505067,
+      "checkpoint": "/home/lin/predify/experiments/kitti_step_context_residual_ablation_working_tree/best_full_context.pt",
+      "diagnostics": {
+        "z1": {
+          "mean_abs_gain_change": 0.17377093349342365,
+          "mean_abs_logit_residual": 1.1523233120641796
+        },
+        "z4": {
+          "mean_abs_gain_change": 0.11151825535037893,
+          "mean_abs_logit_residual": 0.7306482018931186
+        }
+      },
+      "evaluated_frame_count": 2963,
+      "finite": true,
+      "full_context_reproduction": {
+        "mIoU_at_least_0.3080": true,
+        "pass": true,
+        "relative_to_legacy_at_least_0.005": true
+      },
+      "history": [
+        {
+          "epoch": 1,
+          "train_posterior_mse": 0.0008048963967663078,
+          "val_posterior_mse": 0.000734626421292111
+        },
+        {
+          "epoch": 2,
+          "train_posterior_mse": 0.0007639898114132932,
+          "val_posterior_mse": 0.000717869653331774
+        },
+        {
+          "epoch": 3,
+          "train_posterior_mse": 0.0007351705246450845,
+          "val_posterior_mse": 0.0006829157224505067
+        }
+      ],
+      "initial_legacy_equivalence": {
+        "finite": true,
+        "mIoU_absolute_difference": 6.205120452795754e-06,
+        "mIoU_legacy": 0.30113056937906,
+        "mIoU_zero_residual": 0.3011243642586072,
+        "max_abs_gain_difference": 9.999997701015673e-07,
+        "pass": true
+      },
+      "input_mask": {
+        "dynamic_error": true,
+        "instant_error": true,
+        "legacy_gain": true,
+        "observation": true,
+        "prediction": true
+      },
+      "metrics": {
+        "clean": 0.6552125561916007,
+        "context": 0.3099579653006314,
+        "legacy": 0.30113056937906,
+        "noisy": 0.294076490502174,
+        "prediction": 0.2897704726741891
+      },
+      "nested_contribution": "NO CONTRIBUTION",
+      "nested_delta_from_previous": -0.005804572453478762,
+      "val_context_posterior_mse": 0.0006822512517677707,
+      "val_legacy_posterior_mse": 0.0008552176847210304
+    },
+    "GAIN_DYNAMIC": {
+      "best_epoch": 3,
+      "best_val_posterior_mse": 0.0007402573092198619,
+      "checkpoint": "/home/lin/predify/experiments/kitti_step_context_residual_ablation_working_tree/best_gain_dynamic.pt",
+      "diagnostics": {
+        "z1": {
+          "mean_abs_gain_change": 0.12599026400204894,
+          "mean_abs_logit_residual": 0.8591736628322878
+        },
+        "z4": {
+          "mean_abs_gain_change": 0.10258315927800077,
+          "mean_abs_logit_residual": 0.7520093706524779
+        }
+      },
+      "evaluated_frame_count": 2963,
+      "finite": true,
+      "history": [
+        {
+          "epoch": 1,
+          "train_posterior_mse": 0.0008046374645009402,
+          "val_posterior_mse": 0.0007790891611804023
+        },
+        {
+          "epoch": 2,
+          "train_posterior_mse": 0.0007823411652395941,
+          "val_posterior_mse": 0.0007491795136491129
+        },
+        {
+          "epoch": 3,
+          "train_posterior_mse": 0.0007648122409213328,
+          "val_posterior_mse": 0.0007402573092198619
+        }
+      ],
+      "initial_legacy_equivalence": {
+        "finite": true,
+        "mIoU_absolute_difference": 6.205120452795754e-06,
+        "mIoU_legacy": 0.30113056937906,
+        "mIoU_zero_residual": 0.3011243642586072,
+        "max_abs_gain_difference": 9.999997701015673e-07,
+        "pass": true
+      },
+      "input_mask": {
+        "dynamic_error": true,
+        "instant_error": false,
+        "legacy_gain": true,
+        "observation": false,
+        "prediction": false
+      },
+      "metrics": {
+        "clean": 0.6552125561916007,
+        "context": 0.31312253523543276,
+        "legacy": 0.30113056937906,
+        "noisy": 0.294076490502174,
+        "prediction": 0.2897704726741891
+      },
+      "nested_contribution": "NO CONTRIBUTION",
+      "nested_delta_from_previous": -7.740162251235194e-05,
+      "val_context_posterior_mse": 0.0007400718822528696,
+      "val_legacy_posterior_mse": 0.0008552176847210304
+    },
+    "GAIN_DYNAMIC_INSTANT": {
+      "best_epoch": 3,
+      "best_val_posterior_mse": 0.0006977811937143073,
+      "checkpoint": "/home/lin/predify/experiments/kitti_step_context_residual_ablation_working_tree/best_gain_dynamic_instant.pt",
+      "diagnostics": {
+        "z1": {
+          "mean_abs_gain_change": 0.16399540764996623,
+          "mean_abs_logit_residual": 1.0893216657348874
+        },
+        "z4": {
+          "mean_abs_gain_change": 0.12162514819744427,
+          "mean_abs_logit_residual": 0.8864455759786811
+        }
+      },
+      "evaluated_frame_count": 2963,
+      "finite": true,
+      "history": [
+        {
+          "epoch": 1,
+          "train_posterior_mse": 0.0008063619365013187,
+          "val_posterior_mse": 0.0007404705793195264
+        },
+        {
+          "epoch": 2,
+          "train_posterior_mse": 0.0007588541911774958,
+          "val_posterior_mse": 0.000723200660635671
+        },
+        {
+          "epoch": 3,
+          "train_posterior_mse": 0.0007327557183609367,
+          "val_posterior_mse": 0.0006977811937143073
+        }
+      ],
+      "initial_legacy_equivalence": {
+        "finite": true,
+        "mIoU_absolute_difference": 6.205120452795754e-06,
+        "mIoU_legacy": 0.30113056937906,
+        "mIoU_zero_residual": 0.3011243642586072,
+        "max_abs_gain_difference": 9.999997701015673e-07,
+        "pass": true
+      },
+      "input_mask": {
+        "dynamic_error": true,
+        "instant_error": true,
+        "legacy_gain": true,
+        "observation": false,
+        "prediction": false
+      },
+      "metrics": {
+        "clean": 0.6552125561916007,
+        "context": 0.3157625377541102,
+        "legacy": 0.30113056937906,
+        "noisy": 0.294076490502174,
+        "prediction": 0.2897704726741891
+      },
+      "nested_contribution": "WEAK CONTRIBUTION",
+      "nested_delta_from_previous": 0.002640002518677409,
+      "val_context_posterior_mse": 0.000697838861171588,
+      "val_legacy_posterior_mse": 0.0008552176847210304
+    },
+    "GAIN_ONLY": {
+      "best_epoch": 3,
+      "best_val_posterior_mse": 0.0007438135803342394,
+      "checkpoint": "/home/lin/predify/experiments/kitti_step_context_residual_ablation_working_tree/best_gain_only.pt",
+      "delta_from_legacy": 0.012069367478885096,
+      "diagnostics": {
+        "z1": {
+          "mean_abs_gain_change": 0.12702337250369972,
+          "mean_abs_logit_residual": 0.8622099775701529
+        },
+        "z4": {
+          "mean_abs_gain_change": 0.10973475391684534,
+          "mean_abs_logit_residual": 0.8028604394271894
+        }
+      },
+      "evaluated_frame_count": 2963,
+      "finite": true,
+      "history": [
+        {
+          "epoch": 1,
+          "train_posterior_mse": 0.0008051885216274526,
+          "val_posterior_mse": 0.0007810026073358121
+        },
+        {
+          "epoch": 2,
+          "train_posterior_mse": 0.0008072383436149587,
+          "val_posterior_mse": 0.0007696874962406597
+        },
+        {
+          "epoch": 3,
+          "train_posterior_mse": 0.0008188811964297702,
+          "val_posterior_mse": 0.0007438135803342394
+        }
+      ],
+      "initial_legacy_equivalence": {
+        "finite": true,
+        "mIoU_absolute_difference": 6.205120452795754e-06,
+        "mIoU_legacy": 0.30113056937906,
+        "mIoU_zero_residual": 0.3011243642586072,
+        "max_abs_gain_difference": 9.999997701015673e-07,
+        "pass": true
+      },
+      "input_mask": {
+        "dynamic_error": false,
+        "instant_error": false,
+        "legacy_gain": true,
+        "observation": false,
+        "prediction": false
+      },
+      "metrics": {
+        "clean": 0.6552125561916007,
+        "context": 0.3131999368579451,
+        "legacy": 0.30113056937906,
+        "noisy": 0.294076490502174,
+        "prediction": 0.2897704726741891
+      },
+      "val_context_posterior_mse": 0.0007433342919420134,
+      "val_legacy_posterior_mse": 0.0008552176847210304
+    }
+  }
+}
