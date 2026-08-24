@@ -1,0 +1,45 @@
+{
+  "checkpoints": {
+    "fixed_adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "fixed_closed_loop_correction": "/home/lin/predify/experiments/kitti_step_closed_loop_dynamic_correction_9820f4e/best_closed_loop_correction.pt",
+    "fixed_predictor": "/home/lin/predify/experiments/kitti_step_fixed_adapter_predictor_41aa5cc/best_predictor.pt",
+    "static_host": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt"
+  },
+  "dataset": {
+    "evaluated_frame_count": 2963,
+    "frame_count": 2981,
+    "name": "KITTI-STEP",
+    "sequence_count": 9,
+    "split": "val"
+  },
+  "decision": "BASELINE REPRODUCTION PASS",
+  "experiment": "kitti_step_baseline_reproduction",
+  "finite": true,
+  "frozen": {
+    "adapter": true,
+    "correction": true,
+    "host": true,
+    "predictor": true
+  },
+  "gaussian_noise_sigma": 0.1,
+  "git_revision": "43f3a4a",
+  "metrics": {
+    "mIoU_noisy_static": 0.294076490502174,
+    "mIoU_unaligned_closed_loop": 0.30113056937906
+  },
+  "protocol": {
+    "alignment_ran": false,
+    "dynamic_error_gamma": 0.207,
+    "dynamic_error_history_weight": 0.793,
+    "optimizer": null,
+    "raft_ran": false,
+    "same_noisy_frame_for_noisy_and_unaligned": true
+  },
+  "reference": {
+    "mIoU_noisy_static": 0.2940764905,
+    "mIoU_unaligned_closed_loop": 0.3011305694,
+    "noisy_absolute_difference": 2.1739832156697503e-12,
+    "unaligned_absolute_difference": 2.093997197860631e-11
+  },
+  "seed": 0
+}
