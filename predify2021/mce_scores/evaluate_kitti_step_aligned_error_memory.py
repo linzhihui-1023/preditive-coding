@@ -198,6 +198,7 @@ def run_training_epoch(
     training,
     sigma,
     gradient_report=None,
+    instability_report=None,
 ):
     model.eval()
     predictor.eval()
@@ -209,6 +210,7 @@ def run_training_epoch(
         previous_previous = None
         previous = None
         dynamic_error = None
+        initial_metrics = None
         for sample in samples:
             clean_image = load_image(sample)
             clean_state = encode_image(model, clean_image)
@@ -235,6 +237,43 @@ def run_training_epoch(
             posterior = posterior_state(
                 predicted, error, dynamic_error, observation, corrections
             )
+            current_metrics = state_metrics(
+                error, dynamic_error, posterior, observation
+            )
+            values_finite = all(
+                torch.isfinite(value).all().item()
+                for value in (
+                    error.z1,
+                    error.z4,
+                    dynamic_error.z1,
+                    dynamic_error.z4,
+                    posterior.z1,
+                    posterior.z4,
+                )
+            )
+            if initial_metrics is None:
+                initial_metrics = current_metrics
+            unstable_metrics = {
+                name: {
+                    "initial": initial_metrics[name],
+                    "current": value,
+                    "ratio": value / initial_metrics[name],
+                }
+                for name, value in current_metrics.items()
+                if value > 10.0 * initial_metrics[name]
+            }
+            if instability_report is not None and (
+                not values_finite or unstable_metrics
+            ):
+                instability_report.update(
+                    {
+                        "sequence_id": sample["sequence_id"],
+                        "frame_id": sample["frame_id"],
+                        "finite": values_finite,
+                        "unstable_metrics": unstable_metrics,
+                    }
+                )
+                return total_loss / max(frame_count, 1)
             loss = F.mse_loss(posterior.z1, clean_state.z1) + F.mse_loss(
                 posterior.z4, clean_state.z4
             )
@@ -562,7 +601,9 @@ def main():
     best_epoch = None
     history = []
     gradient_report = {}
+    training_instability = None
     for epoch in range(1, epochs + 1):
+        epoch_instability = {}
         train_loss = run_training_epoch(
             model,
             predictor,
@@ -573,7 +614,13 @@ def main():
             True,
             sigma,
             gradient_report,
+            epoch_instability,
         )
+        if epoch_instability:
+            epoch_instability["epoch"] = epoch
+            training_instability = epoch_instability
+            print(json.dumps({"training_instability": epoch_instability}, sort_keys=True), flush=True)
+            break
         with torch.no_grad():
             val_loss = run_training_epoch(
                 model,
@@ -603,6 +650,28 @@ def main():
                 },
                 best_checkpoint,
             )
+    if training_instability is not None:
+        summary = {
+            "experiment": "kitti_step_local_error_memory_alignment",
+            "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
+            "config": {
+                "gaussian_noise_sigma": sigma,
+                "alpha": ALPHA,
+                "beta": BETA,
+                "window_size": 7,
+                "query_key_channels": 32,
+                "trainable_parameter_count": sum(
+                    parameter.numel() for parameter in alignments.parameters()
+                ),
+            },
+            "phase_one": phase_one,
+            "gradient_boundary": gradient_report,
+            "training_instability": training_instability,
+            "decision": "ALIGNED CLOSED-LOOP UNSTABLE",
+        }
+        with (output_dir / "summary.json").open("w") as handle:
+            json.dump(summary, handle, indent=2, sort_keys=True)
+        return
     best_payload = torch.load(best_checkpoint, map_location="cpu", weights_only=False)
     alignments.load_state_dict(best_payload["alignment_state_dict"], strict=True)
     torch.manual_seed(seed)
