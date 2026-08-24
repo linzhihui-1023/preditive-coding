@@ -239,7 +239,7 @@ def evaluate_paths(model, predictor, legacy, context, groups):
                     legacy,
                 )
                 gain = legacy_gains(context_error, legacy)
-                context_posterior, new_gain, residuals = context_outputs(
+                context_posterior, new_gains, residuals = context_outputs(
                     context_prior,
                     observation,
                     context_instant,
