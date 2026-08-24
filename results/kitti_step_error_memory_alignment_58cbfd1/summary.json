@@ -1,0 +1,138 @@
+{
+  "config": {
+    "alpha": 0.207,
+    "beta": 0.793,
+    "gaussian_noise_sigma": 0.1,
+    "query_key_channels": 32,
+    "trainable_parameter_count": 16512,
+    "window_size": 7
+  },
+  "decision": "ALIGNED CLOSED-LOOP UNSTABLE",
+  "experiment": "kitti_step_local_error_memory_alignment",
+  "git_revision": "58cbfd1beb0d428f0269c2fb8bf27a2e782253ea",
+  "gradient_boundary": {
+    "alignment_gradient_tensor_count": 8,
+    "correction_has_gradient": false,
+    "host_has_gradient": false,
+    "predictor_has_gradient": false
+  },
+  "phase_one": {
+    "attention_diagnostics": {
+      "z1": {
+        "mean_argmax_offset_magnitude": 2.820555355840312,
+        "mean_max_attention_weight": 0.021193279524544677,
+        "normalized_attention_entropy": 0.999999888196498
+      },
+      "z4": {
+        "mean_argmax_offset_magnitude": 3.1419934194408103,
+        "mean_max_attention_weight": 0.021953567832648634,
+        "normalized_attention_entropy": 0.9999998698014774
+      }
+    },
+    "finite": true,
+    "phase_statistics": {
+      "0002": {
+        "correction_z1": {
+          "first_20_percent_mean": 0.00949389755766353,
+          "last_20_percent_mean": 0.01120805060086043,
+          "last_over_first": 1.1805531429832237
+        },
+        "correction_z4": {
+          "first_20_percent_mean": 0.0051276103704762845,
+          "last_20_percent_mean": 0.0030313941407138886,
+          "last_over_first": 0.5911904223784292
+        },
+        "dynamic_error_z1": {
+          "first_20_percent_mean": 0.005494077963268627,
+          "last_20_percent_mean": 0.007635282990320221,
+          "last_over_first": 1.3897296400536903
+        },
+        "dynamic_error_z4": {
+          "first_20_percent_mean": 0.003324797118851996,
+          "last_20_percent_mean": 0.0021894801251144836,
+          "last_over_first": 0.6585304446698027
+        },
+        "error_z1": {
+          "first_20_percent_mean": 0.01596183435100576,
+          "last_20_percent_mean": 0.01535408119873508,
+          "last_over_first": 0.9619246047223649
+        },
+        "error_z4": {
+          "first_20_percent_mean": 0.007208512012806275,
+          "last_20_percent_mean": 0.004624544065850584,
+          "last_over_first": 0.6415393437140501
+        },
+        "state_z1": {
+          "first_20_percent_mean": 0.341940155495768,
+          "last_20_percent_mean": 0.3433285057544708,
+          "last_over_first": 1.0040602141526487
+        },
+        "state_z4": {
+          "first_20_percent_mean": 0.20926902540352033,
+          "last_20_percent_mean": 0.21386743790429572,
+          "last_over_first": 1.021973689091869
+        }
+      },
+      "0006": {
+        "correction_z1": {
+          "first_20_percent_mean": 0.0078159249036239,
+          "last_20_percent_mean": 0.013033615442801197,
+          "last_over_first": 1.6675717338018543
+        },
+        "correction_z4": {
+          "first_20_percent_mean": 0.002892083523548999,
+          "last_20_percent_mean": 0.00492608827486072,
+          "last_over_first": 1.703300833032549
+        },
+        "dynamic_error_z1": {
+          "first_20_percent_mean": 0.0043888285641892335,
+          "last_20_percent_mean": 0.008825069908404126,
+          "last_over_first": 2.0108030603912224
+        },
+        "dynamic_error_z4": {
+          "first_20_percent_mean": 0.001813420819399773,
+          "last_20_percent_mean": 0.0031797260854322957,
+          "last_over_first": 1.7534408182678516
+        },
+        "error_z1": {
+          "first_20_percent_mean": 0.012785012201177623,
+          "last_20_percent_mean": 0.017885178503281664,
+          "last_over_first": 1.3989175936519065
+        },
+        "error_z4": {
+          "first_20_percent_mean": 0.0046096458011921845,
+          "last_20_percent_mean": 0.007498882192556026,
+          "last_over_first": 1.6267805631870031
+        },
+        "state_z1": {
+          "first_20_percent_mean": 0.3413554548092608,
+          "last_20_percent_mean": 0.34396030205600664,
+          "last_over_first": 1.0076308938675123
+        },
+        "state_z4": {
+          "first_20_percent_mean": 0.21695196487993565,
+          "last_20_percent_mean": 0.21661012886830097,
+          "last_over_first": 0.998424370058949
+        }
+      }
+    },
+    "selected_sequences": [
+      "0002",
+      "0006"
+    ],
+    "stable": true
+  },
+  "training_instability": {
+    "epoch": 1,
+    "finite": true,
+    "frame_id": "000576",
+    "sequence_id": "0020",
+    "unstable_metrics": {
+      "dynamic_error_z1": {
+        "current": 0.024966586381196976,
+        "initial": 0.0024640001356601715,
+        "ratio": 10.132542616320823
+      }
+    }
+  }
+}
