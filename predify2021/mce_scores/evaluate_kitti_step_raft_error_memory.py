@@ -104,6 +104,77 @@ def update_flow_dynamic_error(error, previous_error, backward_flow):
     return state, valid_z1.float().mean().item(), valid_z4.float().mean().item()
 
 
+def evaluate_unaligned_baselines(model, predictor, corrections, groups, sigma):
+    confusion = {
+        name: torch.zeros((19, 19), dtype=torch.int64)
+        for name in ("noisy", "unaligned")
+    }
+    finite = True
+    evaluated_frame_count = 0
+    model.eval()
+    predictor.eval()
+    corrections.eval()
+    with torch.no_grad():
+        for samples in groups.values():
+            previous_previous = None
+            previous = None
+            dynamic_error = None
+            for sample in samples:
+                clean_image = load_image(sample)
+                noisy_image = add_frame_noise(clean_image, sigma)
+                observation = encode_image(model, noisy_image)
+                if previous is None:
+                    previous = observation
+                    continue
+                if previous_previous is None:
+                    previous_previous = previous
+                    previous = observation
+                    continue
+                predicted, error = predict_current(
+                    predictor, previous_previous, previous, observation
+                )
+                dynamic_error = update_dynamic_error(error, dynamic_error)
+                posterior = posterior_state(
+                    predicted, error, dynamic_error, observation, corrections
+                )
+                finite = finite and all(
+                    torch.isfinite(value).all().item()
+                    for value in (
+                        error.z1,
+                        error.z4,
+                        dynamic_error.z1,
+                        dynamic_error.z4,
+                        posterior.z1,
+                        posterior.z4,
+                    )
+                )
+                noisy_features = model.extract_backbone_features(noisy_image)
+                noisy_host = corrected_host_feature(
+                    model,
+                    noisy_features,
+                    observation,
+                    posterior,
+                    tuple(clean_image.shape[-2:]),
+                )
+                logits = {
+                    "noisy": model(noisy_image),
+                    "unaligned": model.decode_from_host_feature(noisy_host),
+                }
+                mask = semantic_mask_from_panoptic_png(sample["mask_path"])
+                for name, value in logits.items():
+                    prediction = value.argmax(dim=1).squeeze(0).cpu().to(torch.int64)
+                    update_confusion_matrix(confusion[name], prediction, mask)
+                evaluated_frame_count += 1
+                dynamic_error = detach_state(dynamic_error)
+                previous_previous = previous
+                previous = detach_state(posterior)
+    metrics = {
+        name: float(torch.nanmean(compute_iou(value)).item())
+        for name, value in confusion.items()
+    }
+    return metrics, finite, evaluated_frame_count
+
+
 def write_rows(path, rows):
     with path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
