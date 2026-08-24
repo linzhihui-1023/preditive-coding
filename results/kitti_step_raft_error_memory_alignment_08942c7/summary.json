@@ -1,0 +1,436 @@
+{
+  "checkpoints": {
+    "fixed_adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "fixed_closed_loop_correction": "/home/lin/predify/experiments/kitti_step_closed_loop_dynamic_correction_9820f4e/best_closed_loop_correction.pt",
+    "fixed_predictor": "/home/lin/predify/experiments/kitti_step_fixed_adapter_predictor_41aa5cc/best_predictor.pt",
+    "raft_weights": "https://download.pytorch.org/models/raft_large_C_T_SKHT_V2-ff5fadd5.pth",
+    "static_host": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt"
+  },
+  "config": {
+    "flow_aligned_layers": [
+      1,
+      4
+    ],
+    "gamma": 0.207,
+    "gaussian_noise_sigma": 0.1,
+    "history_weight": 0.793,
+    "optimizer": null,
+    "raft": "torchvision.models.optical_flow.raft_large",
+    "raft_weight_enum": "Raft_Large_Weights.C_T_SKHT_V2",
+    "trainable_parameter_count": 0
+  },
+  "dataset": {
+    "frame_count": 2981,
+    "sequence_count": 9,
+    "split": "val"
+  },
+  "decision": "ALIGNMENT INCONCLUSIVE",
+  "experiment": "kitti_step_raft_error_memory_alignment",
+  "flow_alignment": {
+    "z1_mean_valid_warp_ratio": 0.9925425010398559,
+    "z4_mean_valid_warp_ratio": 0.9887078856641361
+  },
+  "git_revision": "08942c7",
+  "gradient_boundary": {
+    "adapter_trainable": false,
+    "correction_trainable": false,
+    "host_trainable": false,
+    "predictor_trainable": false,
+    "raft_trainable": false
+  },
+  "metrics": {
+    "flow_aligned_minus_noisy": 0.008019132296848142,
+    "flow_aligned_minus_prediction": 0.01232515012483304,
+    "flow_aligned_minus_unaligned": 0.0009650534199621141,
+    "mIoU_clean_static": 0.6552125561916007,
+    "mIoU_closed_loop_no_alignment": 0.30113056937906,
+    "mIoU_closed_loop_raft_flow_aligned": 0.30209562279902213,
+    "mIoU_continuous_prediction_only": 0.2897704726741891,
+    "mIoU_noisy_static": 0.294076490502174,
+    "recovery_flow_aligned": 0.022205293402472057
+  },
+  "stability": {
+    "finite": true,
+    "phase_stable": true,
+    "phase_statistics": {
+      "0002": {
+        "correction_z1": {
+          "first_20_percent_mean": 0.009361818179731135,
+          "last_20_percent_mean": 0.010942874941974878,
+          "last_over_first": 1.168883515134573
+        },
+        "correction_z4": {
+          "first_20_percent_mean": 0.0049703787232789655,
+          "last_20_percent_mean": 0.0031485943397021165,
+          "last_over_first": 0.6334717161401706
+        },
+        "dynamic_error_z1": {
+          "first_20_percent_mean": 0.008172699543849929,
+          "last_20_percent_mean": 0.010419693755228882,
+          "last_over_first": 1.2749390454552862
+        },
+        "dynamic_error_z4": {
+          "first_20_percent_mean": 0.0035877182608996722,
+          "last_20_percent_mean": 0.0027766491782487087,
+          "last_over_first": 0.7739317795685617
+        },
+        "error_z1": {
+          "first_20_percent_mean": 0.016168183890049873,
+          "last_20_percent_mean": 0.015418049150510975,
+          "last_over_first": 0.9536042672052647
+        },
+        "error_z4": {
+          "first_20_percent_mean": 0.00715422135291864,
+          "last_20_percent_mean": 0.004756097833666465,
+          "last_over_first": 0.6647960132972632
+        },
+        "state_z1": {
+          "first_20_percent_mean": 0.3423067862572877,
+          "last_20_percent_mean": 0.3433717599381571,
+          "last_over_first": 1.0031111673026223
+        },
+        "state_z4": {
+          "first_20_percent_mean": 0.20915322232505548,
+          "last_20_percent_mean": 0.21391241187634674,
+          "last_over_first": 1.0227545600224832
+        }
+      },
+      "0006": {
+        "correction_z1": {
+          "first_20_percent_mean": 0.008278930700331364,
+          "last_20_percent_mean": 0.01016595617006972,
+          "last_over_first": 1.2279310623608466
+        },
+        "correction_z4": {
+          "first_20_percent_mean": 0.002887505295528275,
+          "last_20_percent_mean": 0.00491831845709316,
+          "last_over_first": 1.7033106275891154
+        },
+        "dynamic_error_z1": {
+          "first_20_percent_mean": 0.007276822913894957,
+          "last_20_percent_mean": 0.00943216175403235,
+          "last_over_first": 1.2961922896353317
+        },
+        "dynamic_error_z4": {
+          "first_20_percent_mean": 0.0023331036439762924,
+          "last_20_percent_mean": 0.004511483663798503,
+          "last_over_first": 1.933683347264253
+        },
+        "error_z1": {
+          "first_20_percent_mean": 0.01321982288346538,
+          "last_20_percent_mean": 0.01642232324998334,
+          "last_over_first": 1.242249869362733
+        },
+        "error_z4": {
+          "first_20_percent_mean": 0.004610991193297899,
+          "last_20_percent_mean": 0.007502055164637431,
+          "last_over_first": 1.6269940345021066
+        },
+        "state_z1": {
+          "first_20_percent_mean": 0.34170860726878327,
+          "last_20_percent_mean": 0.34281368975369436,
+          "last_over_first": 1.0032339907787042
+        },
+        "state_z4": {
+          "first_20_percent_mean": 0.21696264760674172,
+          "last_20_percent_mean": 0.21663119939138303,
+          "last_over_first": 0.9984723259094834
+        }
+      },
+      "0007": {
+        "correction_z1": {
+          "first_20_percent_mean": 0.010393526984976148,
+          "last_20_percent_mean": 0.010319675313039395,
+          "last_over_first": 0.9928944551696931
+        },
+        "correction_z4": {
+          "first_20_percent_mean": 0.005119148968373361,
+          "last_20_percent_mean": 0.006608355781590601,
+          "last_over_first": 1.2909090597710118
+        },
+        "dynamic_error_z1": {
+          "first_20_percent_mean": 0.00950541372598389,
+          "last_20_percent_mean": 0.009122278848838693,
+          "last_over_first": 0.9596929825265929
+        },
+        "dynamic_error_z4": {
+          "first_20_percent_mean": 0.004431315910791591,
+          "last_20_percent_mean": 0.0054976712420301615,
+          "last_over_first": 1.2406407831681947
+        },
+        "error_z1": {
+          "first_20_percent_mean": 0.016651287071594276,
+          "last_20_percent_mean": 0.01593481897487768,
+          "last_over_first": 0.9569722091970396
+        },
+        "error_z4": {
+          "first_20_percent_mean": 0.00744003184584889,
+          "last_20_percent_mean": 0.008733185552904065,
+          "last_over_first": 1.1738102381613704
+        },
+        "state_z1": {
+          "first_20_percent_mean": 0.34279918127089926,
+          "last_20_percent_mean": 0.3429727797988076,
+          "last_over_first": 1.0005064146514724
+        },
+        "state_z4": {
+          "first_20_percent_mean": 0.20686972038176074,
+          "last_20_percent_mean": 0.21019946188671784,
+          "last_over_first": 1.0160958379931695
+        }
+      },
+      "0008": {
+        "correction_z1": {
+          "first_20_percent_mean": 0.010060280113928503,
+          "last_20_percent_mean": 0.010845067027907867,
+          "last_over_first": 1.0780084555392073
+        },
+        "correction_z4": {
+          "first_20_percent_mean": 0.004243800718966242,
+          "last_20_percent_mean": 0.004016971911073892,
+          "last_over_first": 0.9465505515189214
+        },
+        "dynamic_error_z1": {
+          "first_20_percent_mean": 0.008432402750235293,
+          "last_20_percent_mean": 0.009877945659319301,
+          "last_over_first": 1.1714271663605813
+        },
+        "dynamic_error_z4": {
+          "first_20_percent_mean": 0.003537563164113694,
+          "last_20_percent_mean": 0.003288180029092284,
+          "last_over_first": 0.9295042594429855
+        },
+        "error_z1": {
+          "first_20_percent_mean": 0.015136162145668037,
+          "last_20_percent_mean": 0.016412199571631945,
+          "last_over_first": 1.0843038951144635
+        },
+        "error_z4": {
+          "first_20_percent_mean": 0.006343216338956898,
+          "last_20_percent_mean": 0.00607003772316815,
+          "last_over_first": 0.9569337381556703
+        },
+        "state_z1": {
+          "first_20_percent_mean": 0.3419765125621449,
+          "last_20_percent_mean": 0.3429183596140378,
+          "last_over_first": 1.002754127892692
+        },
+        "state_z4": {
+          "first_20_percent_mean": 0.20936923909496952,
+          "last_20_percent_mean": 0.20856556218939942,
+          "last_over_first": 0.9961614375204108
+        }
+      },
+      "0010": {
+        "correction_z1": {
+          "first_20_percent_mean": 0.009326991456528676,
+          "last_20_percent_mean": 0.01044525546503478,
+          "last_over_first": 1.1198954682995175
+        },
+        "correction_z4": {
+          "first_20_percent_mean": 0.004061052001659469,
+          "last_20_percent_mean": 0.0037140942074294233,
+          "last_over_first": 0.9145645527099213
+        },
+        "dynamic_error_z1": {
+          "first_20_percent_mean": 0.007999785388980446,
+          "last_20_percent_mean": 0.0088792124698902,
+          "last_over_first": 1.109931334173183
+        },
+        "dynamic_error_z4": {
+          "first_20_percent_mean": 0.0031845476297693775,
+          "last_20_percent_mean": 0.0030522442800153433,
+          "last_over_first": 0.9584545859772191
+        },
+        "error_z1": {
+          "first_20_percent_mean": 0.015986582585449875,
+          "last_20_percent_mean": 0.0153475781292494,
+          "last_over_first": 0.9600287020202765
+        },
+        "error_z4": {
+          "first_20_percent_mean": 0.006417437978410001,
+          "last_20_percent_mean": 0.005657291272655129,
+          "last_over_first": 0.8815498165604075
+        },
+        "state_z1": {
+          "first_20_percent_mean": 0.34226223826408386,
+          "last_20_percent_mean": 0.3425314010217272,
+          "last_over_first": 1.000786422595167
+        },
+        "state_z4": {
+          "first_20_percent_mean": 0.2115236166222342,
+          "last_20_percent_mean": 0.2101256112600195,
+          "last_over_first": 0.9933907835704632
+        }
+      },
+      "0013": {
+        "correction_z1": {
+          "first_20_percent_mean": 0.010005646287950117,
+          "last_20_percent_mean": 0.010583225623773994,
+          "last_over_first": 1.0577253401931128
+        },
+        "correction_z4": {
+          "first_20_percent_mean": 0.0036952523306123357,
+          "last_20_percent_mean": 0.00408864751416467,
+          "last_over_first": 1.1064596266656423
+        },
+        "dynamic_error_z1": {
+          "first_20_percent_mean": 0.0082081285089866,
+          "last_20_percent_mean": 0.009787040957208,
+          "last_over_first": 1.1923596160187724
+        },
+        "dynamic_error_z4": {
+          "first_20_percent_mean": 0.0028828418111678826,
+          "last_20_percent_mean": 0.0033561845080676807,
+          "last_over_first": 1.16419308720517
+        },
+        "error_z1": {
+          "first_20_percent_mean": 0.015511892527453046,
+          "last_20_percent_mean": 0.01647273932041517,
+          "last_over_first": 1.061942589613847
+        },
+        "error_z4": {
+          "first_20_percent_mean": 0.005796256732306818,
+          "last_20_percent_mean": 0.006364485116870101,
+          "last_over_first": 1.0980336811853288
+        },
+        "state_z1": {
+          "first_20_percent_mean": 0.3421132782501961,
+          "last_20_percent_mean": 0.34284560360125643,
+          "last_over_first": 1.002140593182486
+        },
+        "state_z4": {
+          "first_20_percent_mean": 0.2066679619141479,
+          "last_20_percent_mean": 0.20738904511750633,
+          "last_over_first": 1.0034890904070461
+        }
+      },
+      "0014": {
+        "correction_z1": {
+          "first_20_percent_mean": 0.007564184069633484,
+          "last_20_percent_mean": 0.012810975592583419,
+          "last_over_first": 1.6936361509251538
+        },
+        "correction_z4": {
+          "first_20_percent_mean": 0.002919813629705459,
+          "last_20_percent_mean": 0.004899783059954643,
+          "last_over_first": 1.6781150036788193
+        },
+        "dynamic_error_z1": {
+          "first_20_percent_mean": 0.005721452250145376,
+          "last_20_percent_mean": 0.011593529023230076,
+          "last_over_first": 2.0263262745809856
+        },
+        "dynamic_error_z4": {
+          "first_20_percent_mean": 0.0019977801857749,
+          "last_20_percent_mean": 0.003951362520456314,
+          "last_over_first": 1.9778765194448347
+        },
+        "error_z1": {
+          "first_20_percent_mean": 0.013626218494027852,
+          "last_20_percent_mean": 0.016784107498824596,
+          "last_over_first": 1.2317509444150476
+        },
+        "error_z4": {
+          "first_20_percent_mean": 0.004636242613196373,
+          "last_20_percent_mean": 0.006572888628579676,
+          "last_over_first": 1.417718867832958
+        },
+        "state_z1": {
+          "first_20_percent_mean": 0.3413828134536743,
+          "last_20_percent_mean": 0.3438954085111618,
+          "last_over_first": 1.0073600514099355
+        },
+        "state_z4": {
+          "first_20_percent_mean": 0.21067885607481002,
+          "last_20_percent_mean": 0.20216788575053216,
+          "last_over_first": 0.959602161874015
+        }
+      },
+      "0016": {
+        "correction_z1": {
+          "first_20_percent_mean": 0.008146941605046755,
+          "last_20_percent_mean": 0.011378635629648116,
+          "last_over_first": 1.3966757319825929
+        },
+        "correction_z4": {
+          "first_20_percent_mean": 0.0031854686747509534,
+          "last_20_percent_mean": 0.0033269022341545036,
+          "last_over_first": 1.0443996076698534
+        },
+        "dynamic_error_z1": {
+          "first_20_percent_mean": 0.007030976601172148,
+          "last_20_percent_mean": 0.010768299672480037,
+          "last_over_first": 1.5315510608703822
+        },
+        "dynamic_error_z4": {
+          "first_20_percent_mean": 0.0025585071941860386,
+          "last_20_percent_mean": 0.0029751723007548875,
+          "last_over_first": 1.1628547723124172
+        },
+        "error_z1": {
+          "first_20_percent_mean": 0.01326132845133543,
+          "last_20_percent_mean": 0.01603602131874096,
+          "last_over_first": 1.2092318938926603
+        },
+        "error_z4": {
+          "first_20_percent_mean": 0.004834029153443691,
+          "last_20_percent_mean": 0.004947859135161086,
+          "last_over_first": 1.0235476407162964
+        },
+        "state_z1": {
+          "first_20_percent_mean": 0.3414331136680231,
+          "last_20_percent_mean": 0.3433731947003341,
+          "last_over_first": 1.0056821701078396
+        },
+        "state_z4": {
+          "first_20_percent_mean": 0.210166359820017,
+          "last_20_percent_mean": 0.20982371270656586,
+          "last_over_first": 0.9983696386341535
+        }
+      },
+      "0018": {
+        "correction_z1": {
+          "first_20_percent_mean": 0.009912939860360391,
+          "last_20_percent_mean": 0.010581908775354499,
+          "last_over_first": 1.0674844117302842
+        },
+        "correction_z4": {
+          "first_20_percent_mean": 0.004313620213947412,
+          "last_20_percent_mean": 0.0034137431483493366,
+          "last_over_first": 0.7913870436047049
+        },
+        "dynamic_error_z1": {
+          "first_20_percent_mean": 0.00833094504369951,
+          "last_20_percent_mean": 0.0092151983599387,
+          "last_over_first": 1.106140817350359
+        },
+        "dynamic_error_z4": {
+          "first_20_percent_mean": 0.0032210557082139736,
+          "last_20_percent_mean": 0.002696034175329911,
+          "last_over_first": 0.8370032745645436
+        },
+        "error_z1": {
+          "first_20_percent_mean": 0.015558606514067793,
+          "last_20_percent_mean": 0.015720129972184773,
+          "last_over_first": 1.0103816147012223
+        },
+        "error_z4": {
+          "first_20_percent_mean": 0.0064290506528940665,
+          "last_20_percent_mean": 0.005241020513114644,
+          "last_over_first": 0.8152090870143285
+        },
+        "state_z1": {
+          "first_20_percent_mean": 0.34296675137619476,
+          "last_20_percent_mean": 0.34332373293478097,
+          "last_over_first": 1.0010408634573287
+        },
+        "state_z4": {
+          "first_20_percent_mean": 0.2050258490576673,
+          "last_20_percent_mean": 0.20589393844355397,
+          "last_over_first": 1.0042340484864545
+        }
+      }
+    }
+  }
+}
