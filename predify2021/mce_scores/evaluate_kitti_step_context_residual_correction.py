@@ -271,10 +271,10 @@ def evaluate_paths(model, predictor, legacy, context, groups):
                     update_confusion_matrix(confusion[name], prediction, mask)
                 legacy_mse += posterior_mse(legacy_posterior, clean_state).item()
                 context_mse += posterior_mse(context_posterior, clean_state).item()
-                for name, old_gain, new_gain, residual in zip(
-                    ("z1", "z4"), gain, new_gain, residuals
+                for name, old_gain, updated_gain, residual in zip(
+                    ("z1", "z4"), gain, new_gains, residuals
                 ):
-                    gain_change = (new_gain - old_gain).abs()
+                    gain_change = (updated_gain - old_gain).abs()
                     stats[name]["gain_change"] += gain_change.mean().item()
                     stats[name]["max_gain_change"] = max(
                         stats[name]["max_gain_change"], gain_change.max().item()
@@ -291,8 +291,8 @@ def evaluate_paths(model, predictor, legacy, context, groups):
                         context_posterior.z4,
                         gain[0],
                         gain[1],
-                        new_gain[0],
-                        new_gain[1],
+                        new_gains[0],
+                        new_gains[1],
                         residuals[0],
                         residuals[1],
                     )
@@ -301,9 +301,9 @@ def evaluate_paths(model, predictor, legacy, context, groups):
                     "sequence_id": sequence_id,
                     "frame_id": sample["frame_id"],
                     "frame_index": frame_index,
-                    "gain_change_z1": (new_gain[0] - gain[0]).abs().mean().item(),
+                    "gain_change_z1": (new_gains[0] - gain[0]).abs().mean().item(),
                     "logit_residual_z1": residuals[0].abs().mean().item(),
-                    "gain_change_z4": (new_gain[1] - gain[1]).abs().mean().item(),
+                    "gain_change_z4": (new_gains[1] - gain[1]).abs().mean().item(),
                     "logit_residual_z4": residuals[1].abs().mean().item(),
                 }
                 row.update(
