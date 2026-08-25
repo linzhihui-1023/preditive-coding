@@ -1,0 +1,23 @@
+{
+  "experiment": "kitti_step_oracle_upper_bound_diagnostic",
+  "status": "BLOCKED_BEFORE_EXECUTION",
+  "block_reason": {
+    "dataset_and_checkpoints_mounted": false,
+    "cuda_available": false,
+    "detail": "Current agent environment contains neither KITTI-STEP data/checkpoints nor CUDA; no full validation run was possible."
+  },
+  "code_commit": "b9151188b621d8c36cde993aabea730b054ef761",
+  "protocol": {
+    "sigma": 0.1,
+    "seed": 0,
+    "expected_sequence_count": 9,
+    "expected_total_frame_count": 2981,
+    "expected_evaluated_frame_count": 2963,
+    "paired_noisy_stream": true
+  },
+  "measurements": null,
+  "gates": null,
+  "diagnosis": null,
+  "historical_values_used_as_measurements": false,
+  "finite_is_not_stability": true
+}
