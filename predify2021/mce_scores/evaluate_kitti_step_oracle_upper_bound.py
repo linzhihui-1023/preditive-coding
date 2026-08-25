@@ -117,11 +117,11 @@ def main():
     legacy.eval()
     context.eval()
     modules = (model, predictor, legacy, context)
-    parameter_snapshot = {
-        name: parameter.detach().cpu().clone()
+    parameter_snapshot = [
+        (module, name, parameter.detach().cpu().clone())
         for module in modules
         for name, parameter in module.named_parameters()
-    }
+    ]
 
     dataset = KITTISTEPSegmentationDataset.from_kitti_step_root(root, "val")
     groups = sequence_groups(dataset)
@@ -355,9 +355,10 @@ def main():
         for name, value in state_sums.items()
     }
     parameter_unchanged = all(
-        torch.equal(parameter.detach().cpu(), parameter_snapshot[name])
-        for module in modules
-        for name, parameter in module.named_parameters()
+        torch.equal(parameter.detach().cpu(), snapshot)
+        for module, name, snapshot in parameter_snapshot
+        for current_name, parameter in module.named_parameters()
+        if current_name == name
     )
     gates = {
         "learned_context_reproduction": {
