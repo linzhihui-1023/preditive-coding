@@ -1,23 +1,95 @@
 {
+  "checkpoints": {
+    "fixed_adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "fixed_predictor": "/home/lin/predify/experiments/kitti_step_fixed_adapter_predictor_41aa5cc/best_predictor.pt",
+    "learned_context": "/home/lin/predify/experiments/kitti_step_context_residual_ablation_working_tree/best_gain_dynamic_instant.pt",
+    "legacy_correction": "/home/lin/predify/experiments/kitti_step_closed_loop_dynamic_correction_9820f4e/best_closed_loop_correction.pt",
+    "static_host": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt"
+  },
+  "diagnosis": "ADAPTER_WRITEBACK_BOTTLENECK",
   "experiment": "kitti_step_oracle_upper_bound_diagnostic",
-  "status": "BLOCKED_BEFORE_EXECUTION",
-  "block_reason": {
-    "dataset_and_checkpoints_mounted": false,
-    "cuda_available": false,
-    "detail": "Current agent environment contains neither KITTI-STEP data/checkpoints nor CUDA; no full validation run was possible."
+  "finite_is_not_stability": true,
+  "gates": {
+    "all_pass": true,
+    "dataset_protocol": {
+      "evaluated_frame_count": 2963,
+      "pass": true,
+      "sequence_count": 9,
+      "total_frame_count": 2981
+    },
+    "finite": {
+      "pass": true
+    },
+    "injection_exact_before_decode": {
+      "pass": true
+    },
+    "learned_context_reproduction": {
+      "absolute_error": 4.588984747755376e-11,
+      "actual": 0.3157625377541102,
+      "expected": 0.3157625378,
+      "pass": true
+    },
+    "no_training": {
+      "backward_called": false,
+      "optimizer_created": false,
+      "parameters_unchanged": true,
+      "pass": true
+    },
+    "oracle_gain_range": {
+      "pass": true
+    },
+    "oracle_mse_dominance": {
+      "pass": true,
+      "z1": {
+        "posterior_not_above_observation": true,
+        "posterior_not_above_prediction": true
+      },
+      "z4": {
+        "posterior_not_above_observation": true,
+        "posterior_not_above_prediction": true
+      }
+    }
   },
-  "code_commit": "314d9d986b1ff44b5ec23875b3086ac05b1f900d",
+  "git_revision": "314d9d986b1ff44b5ec23875b3086ac05b1f900d",
+  "headroom": {
+    "oracle_clipped_gain_closed_loop_minus_learned_context": 0.0412020034058988
+  },
+  "mIoU": {
+    "clean_state_injection": 0.40530998449985156,
+    "clean_static": 0.6552125561916007,
+    "learned_context": 0.3157625377541102,
+    "noisy_static": 0.294076490502174,
+    "oracle_clipped_gain_closed_loop": 0.356964541160009
+  },
+  "oracle_gain": {
+    "max": 1.0,
+    "mean": 0.40262929707901857,
+    "min": 0.0,
+    "near_one_fraction": 0.2636001991349758,
+    "near_threshold": 1e-06,
+    "near_zero_fraction": 0.42544052624353046
+  },
+  "oracle_state_mse": {
+    "z1": {
+      "observation": 0.0004981252424789978,
+      "posterior": 0.0001609943872969684,
+      "prediction": 0.0003659878433940158
+    },
+    "z4": {
+      "observation": 0.0004260090797551956,
+      "posterior": 0.00016206846327227294,
+      "prediction": 0.00020125471529832323
+    }
+  },
   "protocol": {
-    "sigma": 0.1,
+    "evaluated_frame_count": 2963,
+    "paired_noisy_stream": true,
     "seed": 0,
-    "expected_sequence_count": 9,
-    "expected_total_frame_count": 2981,
-    "expected_evaluated_frame_count": 2963,
-    "paired_noisy_stream": true
+    "sequence_count": 9,
+    "sigma": 0.1,
+    "total_frame_count": 2981
   },
-  "measurements": null,
-  "gates": null,
-  "diagnosis": null,
-  "historical_values_used_as_measurements": false,
-  "finite_is_not_stability": true
+  "recovery": {
+    "clean_state_injection_relative_to_clean_noisy": 0.3080099291255425
+  }
 }
