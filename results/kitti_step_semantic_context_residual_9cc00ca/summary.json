@@ -1,0 +1,90 @@
+{
+  "best": {
+    "epoch": 3,
+    "val_semantic_cross_entropy": 249837039.8350325
+  },
+  "checkpoints": {
+    "best_semantic_context_residual": "/home/lin/predify/experiments/kitti_step_semantic_context_residual_9cc00ca/best_semantic_context_residual.pt",
+    "fixed_adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "fixed_predictor": "/home/lin/predify/experiments/kitti_step_fixed_adapter_predictor_41aa5cc/best_predictor.pt",
+    "legacy_correction": "/home/lin/predify/experiments/kitti_step_closed_loop_dynamic_correction_9820f4e/best_closed_loop_correction.pt",
+    "static_host": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt"
+  },
+  "config": {
+    "epochs": 3,
+    "gaussian_noise_sigma": 0.1,
+    "input_variant": "GAIN_DYNAMIC_INSTANT",
+    "learning_rate": 0.0001,
+    "loss": "CrossEntropyLoss(ignore_index=255)",
+    "optimizer": "AdamW",
+    "seed": 0,
+    "trainable_parameter_count": 492288,
+    "weight_decay": 0.01
+  },
+  "dataset": {
+    "train_sequence_count": 12,
+    "val_evaluated_frame_count": 2963,
+    "val_frame_count": 2981,
+    "val_sequence_count": 9
+  },
+  "decision": "SEMANTIC CORRECTION NO-GO",
+  "experiment": "kitti_step_semantic_gain_dynamic_instant_correction",
+  "gates": {
+    "closed_loop": true,
+    "finite": true,
+    "gradient_path": {
+      "context_has_nonzero_gradient": true,
+      "host_trainable": false,
+      "legacy_trainable": false,
+      "predictor_trainable": false
+    },
+    "trainable_parameters": {
+      "context_only": true,
+      "expected_parameter_count": 492288,
+      "trainable_parameter_count": 492288
+    }
+  },
+  "git_revision": "9cc00ca",
+  "historical_mIoU": {
+    "clean": 0.6552125562,
+    "feature_mse_gain_dynamic_instant": 0.3157625378,
+    "legacy": 0.3011305694,
+    "noisy": 0.2940764905,
+    "prediction_only": 0.2897704727
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_semantic_cross_entropy": 7.716117175535403e+21,
+      "val_semantic_cross_entropy": 7300601698.43311
+    },
+    {
+      "epoch": 2,
+      "train_semantic_cross_entropy": 7497716283793.337,
+      "val_semantic_cross_entropy": 4854847536.393378
+    },
+    {
+      "epoch": 3,
+      "train_semantic_cross_entropy": 1287606526803388.8,
+      "val_semantic_cross_entropy": 249837039.8350325
+    }
+  ],
+  "semantic_result": {
+    "diagnostics": {
+      "z1": {
+        "mean_abs_gain_change": 0.304043847983285,
+        "mean_abs_logit_residual": 12833527.396904236
+      },
+      "z4": {
+        "mean_abs_gain_change": 0.5024582071055683,
+        "mean_abs_logit_residual": 1147007203.5720465
+      }
+    },
+    "finite": true,
+    "mIoU": 0.19110312797854498,
+    "semantic_minus_feature_mse": -0.12465940982145504,
+    "semantic_minus_legacy": -0.11002744142145501,
+    "val_posterior_mse": 2.954907925388461e+18,
+    "val_semantic_cross_entropy": 249837039.9620259
+  }
+}
