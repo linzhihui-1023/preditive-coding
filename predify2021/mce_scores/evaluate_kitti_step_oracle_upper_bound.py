@@ -8,11 +8,9 @@ import torch
 from predify2021.datasets.kitti_step import KITTISTEPSegmentationDataset, semantic_mask_from_panoptic_png
 from predify2021.mce_scores.evaluate_kitti_step_adaptive_dynamic_correction import detach_state
 from predify2021.mce_scores.evaluate_kitti_step_closed_loop_dynamic_correction import add_frame_noise
-from predify2021.mce_scores.evaluate_kitti_step_context_residual_ablation import split_state
+from predify2021.mce_scores.evaluate_kitti_step_context_residual_ablation import context_step
 from predify2021.mce_scores.evaluate_kitti_step_context_residual_correction import (
-    LEGACY_CORRECTION_CHECKPOINT_DEFAULT,
     SIGMA,
-    context_outputs,
     legacy_gains,
     load_components,
 )
@@ -31,6 +29,7 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import BackboneFeatures, U
 
 
 SEED = 0
+CONTEXT_MASK = (False, False, True, True, True)
 EXPECTED_MIOU = 0.3157625378
 EXPECTED_SEQUENCES = 9
 EXPECTED_TOTAL_FRAMES = 2981
@@ -164,13 +163,13 @@ def main():
     evaluated_frame_count = 0
     learned_previous_previous = learned_previous = None
     oracle_previous_previous = oracle_previous = None
-    learned_dynamic_error = oracle_dynamic_error = None
+    learned_dynamic_error = None
 
     with torch.inference_mode():
         for samples in groups.values():
             learned_previous_previous = learned_previous = None
             oracle_previous_previous = oracle_previous = None
-            learned_dynamic_error = oracle_dynamic_error = None
+            learned_dynamic_error = None
             for sample in samples:
                 clean_image = load_image(sample)
                 noisy_image = add_frame_noise(clean_image, SIGMA)
@@ -180,16 +179,6 @@ def main():
 
                 clean_logits = model(clean_image)
                 noisy_logits = model(noisy_image)
-                update_confusion_matrix(
-                    confusion["clean_static"],
-                    clean_logits.argmax(dim=1).squeeze(0).cpu().to(torch.int64),
-                    mask,
-                )
-                update_confusion_matrix(
-                    confusion["noisy_static"],
-                    noisy_logits.argmax(dim=1).squeeze(0).cpu().to(torch.int64),
-                    mask,
-                )
 
                 if learned_previous is None:
                     learned_previous = observation
@@ -212,13 +201,14 @@ def main():
                     learned_instant, learned_dynamic_error
                 )
                 learned_gain = legacy_gains(learned_dynamic_error, legacy)
-                learned_posterior, _, _ = context_outputs(
+                learned_posterior, _, _ = context_step(
                     learned_predicted,
                     observation,
                     learned_instant,
                     learned_dynamic_error,
                     learned_gain,
                     context,
+                    CONTEXT_MASK,
                 )
 
                 oracle_predicted, oracle_instant = predict_current(
@@ -227,10 +217,6 @@ def main():
                     oracle_previous,
                     observation,
                 )
-                oracle_dynamic_error = update_dynamic_error(
-                    oracle_instant, oracle_dynamic_error
-                )
-                oracle_legacy_gain = legacy_gains(oracle_dynamic_error, legacy)
                 oracle_gains = solve_oracle_gain(oracle_predicted, observation, clean_state)
                 oracle_state = build_oracle_posterior(
                     oracle_predicted, observation, oracle_gains
@@ -267,10 +253,20 @@ def main():
                     oracle_state,
                     output_size,
                 )
-                update_confusion(
+                update_confusion_matrix(
+                    confusion["clean_static"],
+                    clean_logits.argmax(dim=1).squeeze(0).cpu().to(torch.int64),
+                    mask,
+                )
+                update_confusion_matrix(
+                    confusion["noisy_static"],
+                    noisy_logits.argmax(dim=1).squeeze(0).cpu().to(torch.int64),
+                    mask,
+                )
+                learned_logits = update_confusion(
                     confusion["learned_context"], model, learned_host, mask
                 )
-                update_confusion(
+                injection_logits = update_confusion(
                     confusion["clean_state_injection"], model, injection_host, mask
                 )
                 oracle_logits = update_confusion(
@@ -317,6 +313,10 @@ def main():
                         oracle_predicted.z4,
                         oracle_state.z1,
                         oracle_state.z4,
+                        clean_logits,
+                        noisy_logits,
+                        learned_logits,
+                        injection_logits,
                         oracle_gains[0],
                         oracle_gains[1],
                         oracle_logits,
@@ -328,7 +328,6 @@ def main():
                 )
                 evaluated_frame_count += 1
                 learned_dynamic_error = detach_state(learned_dynamic_error)
-                oracle_dynamic_error = detach_state(oracle_dynamic_error)
                 learned_previous_previous = learned_previous
                 learned_previous = detach_state(learned_posterior)
                 oracle_previous_previous = oracle_previous
@@ -389,6 +388,11 @@ def main():
         },
         "finite": {"pass": finite},
     }
+    gates["no_training"]["pass"] = (
+        not gates["no_training"]["optimizer_created"]
+        and not gates["no_training"]["backward_called"]
+        and gates["no_training"]["parameters_unchanged"]
+    )
     gates["oracle_mse_dominance"]["pass"] = all(
         value["posterior_not_above_prediction"] and value["posterior_not_above_observation"]
         for name, value in gates["oracle_mse_dominance"].items()
