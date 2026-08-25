@@ -52,7 +52,7 @@ def encode_frame(model, image):
     return state, raw_features
 
 
-def oracle_gain(predicted, observation, clean):
+def solve_oracle_gain(predicted, observation, clean):
     gains = []
     for predicted_value, observed_value, clean_value in (
         (predicted.z1, observation.z1, clean.z1),
@@ -231,9 +231,9 @@ def main():
                     oracle_instant, oracle_dynamic_error
                 )
                 oracle_legacy_gain = legacy_gains(oracle_dynamic_error, legacy)
-                oracle_gain = oracle_gain(oracle_predicted, observation, clean_state)
+                oracle_gains = solve_oracle_gain(oracle_predicted, observation, clean_state)
                 oracle_posterior = oracle_posterior(
-                    oracle_predicted, observation, oracle_gain
+                    oracle_predicted, observation, oracle_gains
                 )
 
                 output_size = tuple(clean_image.shape[-2:])
@@ -294,7 +294,7 @@ def main():
                         torch.mean((posterior_value - clean_value).square()).item()
                     )
 
-                for gain in oracle_gain:
+                for gain in oracle_gains:
                     values = gain.flatten()
                     gain_stats["min"] = min(gain_stats["min"], values.min().item())
                     gain_stats["max"] = max(gain_stats["max"], values.max().item())
@@ -317,14 +317,14 @@ def main():
                         oracle_predicted.z4,
                         oracle_posterior.z1,
                         oracle_posterior.z4,
-                        oracle_gain[0],
-                        oracle_gain[1],
+                        oracle_gains[0],
+                        oracle_gains[1],
                         oracle_logits,
                     )
                 )
                 gains_in_range = gains_in_range and all(
                     bool(((gain >= 0.0) & (gain <= 1.0)).all())
-                    for gain in oracle_gain
+                    for gain in oracle_gains
                 )
                 evaluated_frame_count += 1
                 learned_dynamic_error = detach_state(learned_dynamic_error)
