@@ -6,7 +6,7 @@
     "cuda_available": false,
     "detail": "Current agent environment contains neither KITTI-STEP data/checkpoints nor CUDA; no full validation run was possible."
   },
-  "code_commit": "b9151188b621d8c36cde993aabea730b054ef761",
+  "code_commit": "217f199d582e59c014d4ff65af8f34b5be671ae4",
   "protocol": {
     "sigma": 0.1,
     "seed": 0,
