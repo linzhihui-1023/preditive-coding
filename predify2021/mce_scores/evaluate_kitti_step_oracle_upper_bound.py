@@ -71,7 +71,7 @@ def solve_oracle_gain(predicted, observation, clean):
     return tuple(gains)
 
 
-def oracle_posterior(predicted, observation, gains):
+def build_oracle_posterior(predicted, observation, gains):
     return UnifiedFeatures(
         predicted.z1 + gains[0] * (observation.z1 - predicted.z1),
         observation.z2,
@@ -232,7 +232,7 @@ def main():
                 )
                 oracle_legacy_gain = legacy_gains(oracle_dynamic_error, legacy)
                 oracle_gains = solve_oracle_gain(oracle_predicted, observation, clean_state)
-                oracle_posterior = oracle_posterior(
+                oracle_state = build_oracle_posterior(
                     oracle_predicted, observation, oracle_gains
                 )
 
@@ -264,7 +264,7 @@ def main():
                     model,
                     noisy_features,
                     observation,
-                    oracle_posterior,
+                    oracle_state,
                     output_size,
                 )
                 update_confusion(
@@ -281,8 +281,8 @@ def main():
                 )
 
                 for name, predicted_value, observed_value, posterior_value, clean_value in (
-                    ("z1", oracle_predicted.z1, observation.z1, oracle_posterior.z1, clean_state.z1),
-                    ("z4", oracle_predicted.z4, observation.z4, oracle_posterior.z4, clean_state.z4),
+                    ("z1", oracle_predicted.z1, observation.z1, oracle_state.z1, clean_state.z1),
+                    ("z4", oracle_predicted.z4, observation.z4, oracle_state.z4, clean_state.z4),
                 ):
                     state_sums[name]["prediction"] += (
                         torch.mean((predicted_value - clean_value).square()).item()
@@ -332,7 +332,7 @@ def main():
                 learned_previous_previous = learned_previous
                 learned_previous = detach_state(learned_posterior)
                 oracle_previous_previous = oracle_previous
-                oracle_previous = detach_state(oracle_posterior)
+                oracle_previous = detach_state(oracle_state)
 
     if evaluated_frame_count != EXPECTED_EVALUATED_FRAMES:
         raise RuntimeError(
