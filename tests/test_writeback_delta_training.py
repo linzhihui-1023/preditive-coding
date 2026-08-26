@@ -27,6 +27,8 @@ class AdapterHost(nn.Module):
     def __init__(self):
         super().__init__()
         self.host_weight = nn.Parameter(torch.ones(1))
+        self.predictor = nn.Conv2d(128, 128, kernel_size=1, bias=False)
+        self.correction = nn.Conv2d(128, 128, kernel_size=1, bias=False)
         self.multi_layer_adapter = MultiLayerAdapter()
         self.host_conditioned_writebacks = nn.ModuleDict(
             {
@@ -182,6 +184,8 @@ def test_configure_and_one_step_change_only_conditioned_writeback():
 def test_loss_is_exact_equal_mean_of_c1_and_c4_target_delta_mse():
     model = AdapterHost()
     writebacks, output_adapters, _, _ = configure_writeback_only(model)
+    for writeback in writebacks:
+        nn.init.normal_(writeback.output_projection.weight)
     clean_features, noisy_features, clean_state, noisy_state = sample_pair()
 
     loss, loss_c1, loss_c4 = writeback_loss(
