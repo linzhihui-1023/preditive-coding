@@ -3,6 +3,7 @@ import inspect
 import torch
 from torch import nn
 
+from predify2021.mce_scores import train_kitti_step_writeback_delta as training
 from predify2021.mce_scores.evaluate_kitti_step_error_correction import (
     corrected_host_feature,
 )
@@ -10,9 +11,13 @@ from predify2021.mce_scores.evaluate_kitti_step_oracle_upper_bound import (
     load_writeback_checkpoint,
 )
 from predify2021.mce_scores.train_kitti_step_writeback_delta import (
+    CHECKPOINT_FILENAME,
+    EPOCHS,
+    EXPECTED_FRAMES_PER_EPOCH,
     EXPECTED_TRAINABLE_PARAMETERS,
     WRITEBACK_INDICES,
     configure_writeback_only,
+    train_writeback_epochs,
     writeback_loss,
 )
 from predify2021.model_factory.deeplabv3plus_resnet50 import (
@@ -47,6 +52,25 @@ class AdapterHost(nn.Module):
             base.c2,
             base.c3,
             base.c4 + self.host_conditioned_writebacks["3"](features.c4, deltas.z4),
+        )
+
+
+class TrainingAdapterHost(AdapterHost):
+    def extract_backbone_features(self, images):
+        base = images.mean(dim=1, keepdim=True)
+        return BackboneFeatures(
+            base.repeat(1, 256, 1, 1),
+            torch.empty(images.shape[0], 512, 1, 1),
+            torch.empty(images.shape[0], 1024, 1, 1),
+            base.repeat(1, 2048, 1, 1),
+        )
+
+    def encode_backbone_features(self, features):
+        return UnifiedFeatures(
+            features.c1[:, :128],
+            torch.empty(features.c1.shape[0], 128, 1, 1),
+            torch.empty(features.c1.shape[0], 128, 1, 1),
+            features.c4[:, :128],
         )
 
 
@@ -233,12 +257,18 @@ def test_checkpoint_round_trip_and_old_checkpoint_compatibility(tmp_path):
                 str(index): model.host_conditioned_writebacks[str(index)].state_dict()
                 for index in WRITEBACK_INDICES
             },
+            "epoch": EPOCHS,
+            "history": [{"epoch": epoch} for epoch in range(1, EPOCHS + 1)],
+            "config": {"epochs": EPOCHS},
         },
         checkpoint,
     )
     restored = AdapterHost()
-    load_writeback_checkpoint(restored, checkpoint)
+    payload = load_writeback_checkpoint(restored, checkpoint)
     actual = predicted_delta(restored, host_c1, host_c4, delta_z1, delta_z4)
+    assert payload["epoch"] == 3
+    assert payload["config"]["epochs"] == 3
+    assert len(payload["history"]) == 3
     assert restored.host_conditioned_writeback_enabled
     assert all(torch.equal(left, right) for left, right in zip(expected, actual))
 
@@ -247,6 +277,53 @@ def test_checkpoint_round_trip_and_old_checkpoint_compatibility(tmp_path):
     old_restored = AdapterHost()
     load_writeback_checkpoint(old_restored, old_checkpoint)
     assert not old_restored.host_conditioned_writeback_enabled
+
+
+def test_three_epochs_share_model_and_optimizer_and_count_each_epoch(monkeypatch):
+    assert EPOCHS == 3
+    assert EXPECTED_FRAMES_PER_EPOCH == 5_027
+    assert CHECKPOINT_FILENAME == "host_conditioned_writeback_epoch3.pt"
+    model = TrainingAdapterHost()
+    writebacks, output_adapters, parameters, _ = configure_writeback_only(model)
+    optimizer = torch.optim.AdamW(parameters, lr=1e-4, weight_decay=0.01)
+    optimizer_identity = id(optimizer)
+    model_identity = id(model)
+    loader = [
+        [torch.zeros(1, 1, 1, 1)],
+        [torch.ones(1, 1, 1, 1)],
+    ]
+    monkeypatch.setattr(training, "load_image", lambda sample: sample)
+    monkeypatch.setattr(training, "add_frame_noise", lambda images, sigma: images + sigma)
+
+    history = train_writeback_epochs(
+        model,
+        writebacks,
+        output_adapters,
+        optimizer,
+        loader,
+        frames_per_epoch=2,
+    )
+
+    assert id(model) == model_identity
+    assert id(optimizer) == optimizer_identity
+    assert [item["epoch"] for item in history] == [1, 2, 3]
+    assert [item["trained_frame_count"] for item in history] == [2, 2, 2]
+    assert sum(item["trained_frame_count"] for item in history) == 6
+    assert set(history[0]) == {
+        "epoch",
+        "average_l_write",
+        "average_z1_to_c1_mse",
+        "average_z4_to_c4_mse",
+        "trained_frame_count",
+    }
+    step_count = optimizer.state[writebacks[0].output_projection.weight]["step"]
+    assert int(step_count) == 6
+    trainable_ids = {id(parameter) for parameter in parameters}
+    assert all(
+        parameter.grad is None
+        for parameter in model.parameters()
+        if id(parameter) not in trainable_ids
+    )
 
 
 def test_inference_boundary_uses_only_noisy_host_and_delta_z():

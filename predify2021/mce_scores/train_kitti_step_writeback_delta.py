@@ -38,12 +38,14 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
 
 SEED = 0
 SIGMA = 0.10
-EPOCHS = 1
+EPOCHS = 3
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.01
 EXPECTED_TRAIN_SEQUENCES = 12
+EXPECTED_FRAMES_PER_EPOCH = 5_027
 EXPECTED_TRAINABLE_PARAMETERS = 884_736
 WRITEBACK_INDICES = (0, 3)
+CHECKPOINT_FILENAME = "host_conditioned_writeback_epoch3.pt"
 BASE_WRITEBACK_CHECKPOINT_DEFAULT = (
     "/home/lin/predify/experiments/kitti_step_writeback_delta/"
     "writeback_delta_epoch1.pt"
@@ -118,6 +120,67 @@ def collate_samples(samples):
     return samples
 
 
+def train_writeback_epochs(
+    model,
+    writebacks,
+    output_adapters,
+    optimizer,
+    loader,
+    frames_per_epoch,
+):
+    history = []
+    for epoch in range(1, EPOCHS + 1):
+        total_loss = 0.0
+        total_z1_c1_loss = 0.0
+        total_z4_c4_loss = 0.0
+        trained_frame_count = 0
+
+        for samples in loader:
+            clean_images = torch.cat([load_image(sample) for sample in samples], dim=0)
+            noisy_images = add_frame_noise(clean_images, SIGMA)
+            with torch.no_grad():
+                clean_features = model.extract_backbone_features(clean_images)
+                noisy_features = model.extract_backbone_features(noisy_images)
+                clean_state = model.encode_backbone_features(clean_features)
+                noisy_state = model.encode_backbone_features(noisy_features)
+
+            optimizer.zero_grad(set_to_none=True)
+            loss, loss_z1_c1, loss_z4_c4 = writeback_loss(
+                writebacks,
+                output_adapters,
+                clean_features,
+                noisy_features,
+                clean_state,
+                noisy_state,
+            )
+            if not bool(torch.isfinite(loss)):
+                raise RuntimeError("Non-finite L_write encountered.")
+            loss.backward()
+            optimizer.step()
+
+            current_batch_size = len(samples)
+            total_loss += loss.detach().item() * current_batch_size
+            total_z1_c1_loss += loss_z1_c1.detach().item() * current_batch_size
+            total_z4_c4_loss += loss_z4_c4.detach().item() * current_batch_size
+            trained_frame_count += current_batch_size
+
+        if trained_frame_count != frames_per_epoch:
+            raise RuntimeError(
+                f"Epoch {epoch} consumed {trained_frame_count} frames; "
+                f"expected {frames_per_epoch}."
+            )
+        history.append(
+            {
+                "epoch": epoch,
+                "average_l_write": total_loss / trained_frame_count,
+                "average_z1_to_c1_mse": total_z1_c1_loss / trained_frame_count,
+                "average_z4_to_c4_mse": total_z4_c4_loss / trained_frame_count,
+                "trained_frame_count": trained_frame_count,
+            }
+        )
+    return history
+
+
 def main():
     if not torch.cuda.is_available():
         raise RuntimeError("Writeback delta training requires CUDA.")
@@ -183,6 +246,12 @@ def main():
             f"Dataset protocol mismatch: expected {EXPECTED_TRAIN_SEQUENCES} train "
             f"sequences, got {sequence_count}."
         )
+    frames_per_epoch = len(dataset.samples)
+    if frames_per_epoch != EXPECTED_FRAMES_PER_EPOCH:
+        raise RuntimeError(
+            f"Dataset protocol mismatch: expected {EXPECTED_FRAMES_PER_EPOCH} train "
+            f"frames, got {frames_per_epoch}."
+        )
     loader = DataLoader(
         dataset.samples,
         batch_size=batch_size,
@@ -196,39 +265,14 @@ def main():
     model.eval()
     for writeback in writebacks:
         writeback.train()
-    total_loss = 0.0
-    total_z1_c1_loss = 0.0
-    total_z4_c4_loss = 0.0
-    trained_frame_count = 0
-
-    for samples in loader:
-        clean_images = torch.cat([load_image(sample) for sample in samples], dim=0)
-        noisy_images = add_frame_noise(clean_images, SIGMA)
-        with torch.no_grad():
-            clean_features = model.extract_backbone_features(clean_images)
-            noisy_features = model.extract_backbone_features(noisy_images)
-            clean_state = model.encode_backbone_features(clean_features)
-            noisy_state = model.encode_backbone_features(noisy_features)
-
-        optimizer.zero_grad(set_to_none=True)
-        loss, loss_z1_c1, loss_z4_c4 = writeback_loss(
-            writebacks,
-            output_adapters,
-            clean_features,
-            noisy_features,
-            clean_state,
-            noisy_state,
-        )
-        if not bool(torch.isfinite(loss)):
-            raise RuntimeError("Non-finite L_write encountered.")
-        loss.backward()
-        optimizer.step()
-
-        current_batch_size = len(samples)
-        total_loss += loss.detach().item() * current_batch_size
-        total_z1_c1_loss += loss_z1_c1.detach().item() * current_batch_size
-        total_z4_c4_loss += loss_z4_c4.detach().item() * current_batch_size
-        trained_frame_count += current_batch_size
+    history = train_writeback_epochs(
+        model,
+        writebacks,
+        output_adapters,
+        optimizer,
+        loader,
+        frames_per_epoch,
+    )
 
     frozen_gradients_absent = all(
         parameter.grad is None
@@ -237,14 +281,19 @@ def main():
     )
     if not frozen_gradients_absent:
         raise RuntimeError("A frozen model parameter received a gradient.")
-    if trained_frame_count != len(dataset.samples):
-        raise RuntimeError("Training did not consume every KITTI-STEP Train frame once.")
+    total_training_frame_visits = sum(
+        item["trained_frame_count"] for item in history
+    )
+    expected_frame_visits = frames_per_epoch * EPOCHS
+    if total_training_frame_visits != expected_frame_visits:
+        raise RuntimeError(
+            f"Training consumed {total_training_frame_visits} frame visits; "
+            f"expected {expected_frame_visits}."
+        )
 
-    average_loss = total_loss / trained_frame_count
-    average_z1_c1_loss = total_z1_c1_loss / trained_frame_count
-    average_z4_c4_loss = total_z4_c4_loss / trained_frame_count
+    final_epoch = history[-1]
     output_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = output_dir / "host_conditioned_writeback_epoch1.pt"
+    checkpoint_path = output_dir / CHECKPOINT_FILENAME
     fixed_config = {
         "epochs": EPOCHS,
         "sigma": SIGMA,
@@ -266,7 +315,10 @@ def main():
                 for index, writeback in zip(WRITEBACK_INDICES, writebacks)
             },
             "epoch": EPOCHS,
-            "train_average_l_write": average_loss,
+            "train_average_l_write": final_epoch["average_l_write"],
+            "history": history,
+            "frames_per_epoch": frames_per_epoch,
+            "total_training_frame_visits": total_training_frame_visits,
             "config": fixed_config,
         },
         checkpoint_path,
@@ -301,7 +353,8 @@ def main():
         "dataset": {
             "split": "train",
             "sequence_count": sequence_count,
-            "trained_frame_count": trained_frame_count,
+            "frames_per_epoch": frames_per_epoch,
+            "total_training_frame_visits": total_training_frame_visits,
             "labels_used": False,
         },
         "checkpoints": {
@@ -311,11 +364,12 @@ def main():
             "trained_writeback": str(checkpoint_path),
         },
         "train": {
-            "average_l_write": average_loss,
-            "average_z1_to_c1_mse": average_z1_c1_loss,
-            "average_z4_to_c4_mse": average_z4_c4_loss,
+            "average_l_write": final_epoch["average_l_write"],
+            "average_z1_to_c1_mse": final_epoch["average_z1_to_c1_mse"],
+            "average_z4_to_c4_mse": final_epoch["average_z4_to_c4_mse"],
             "finite": True,
         },
+        "history": history,
         "parameter_gate": parameter_gate,
     }
     with (output_dir / "summary.json").open("w") as handle:
