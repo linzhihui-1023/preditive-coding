@@ -1,0 +1,125 @@
+{
+  "checkpoints": {
+    "fixed_adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "fixed_predictor": "/home/lin/predify/experiments/kitti_step_fixed_adapter_predictor_41aa5cc/best_predictor.pt",
+    "learned_context": "/home/lin/predify/experiments/kitti_step_context_residual_ablation_working_tree/best_gain_dynamic_instant.pt",
+    "legacy_correction": "/home/lin/predify/experiments/kitti_step_closed_loop_dynamic_correction_9820f4e/best_closed_loop_correction.pt",
+    "static_host": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "trained_writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "diagnosis": "ADAPTER_WRITEBACK_BOTTLENECK",
+  "experiment": "kitti_step_oracle_upper_bound_diagnostic",
+  "finite_is_not_stability": true,
+  "gates": {
+    "all_pass": true,
+    "dataset_protocol": {
+      "evaluated_frame_count": 2963,
+      "pass": true,
+      "sequence_count": 9,
+      "total_frame_count": 2981
+    },
+    "finite": {
+      "pass": true
+    },
+    "injection_exact_before_decode": {
+      "pass": true
+    },
+    "learned_context_reproduction": {
+      "absolute_error": 0.021916791367993682,
+      "actual": 0.3376793291679937,
+      "expected": 0.3157625378,
+      "pass": true,
+      "required": false
+    },
+    "no_training": {
+      "backward_called": false,
+      "optimizer_created": false,
+      "parameters_unchanged": true,
+      "pass": true
+    },
+    "oracle_gain_range": {
+      "pass": true
+    },
+    "oracle_mse_dominance": {
+      "pass": true,
+      "z1": {
+        "posterior_not_above_observation": true,
+        "posterior_not_above_prediction": true
+      },
+      "z4": {
+        "posterior_not_above_observation": true,
+        "posterior_not_above_prediction": true
+      }
+    },
+    "static_protocol_reproduction": {
+      "clean_static_absolute_error": 8.39928127049916e-12,
+      "noisy_static_absolute_error": 2.1739832156697503e-12,
+      "pass": true
+    },
+    "writeback_checkpoint_loaded": {
+      "pass": true,
+      "path": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+    }
+  },
+  "git_revision": "0d30bb9",
+  "headroom": {
+    "oracle_clipped_gain_closed_loop_minus_learned_context": 0.08452711907348509
+  },
+  "historical_mIoU": {
+    "clean_state_injection": 0.4053099845,
+    "clean_static": 0.6552125562,
+    "learned_context": 0.3157625378,
+    "noisy_static": 0.2940764905,
+    "oracle_clipped_gain_closed_loop": 0.3569645412
+  },
+  "mIoU": {
+    "clean_state_injection": 0.5305473217112645,
+    "clean_static": 0.6552125561916007,
+    "learned_context": 0.3376793291679937,
+    "noisy_static": 0.294076490502174,
+    "oracle_clipped_gain_closed_loop": 0.4222064482414788
+  },
+  "oracle_gain": {
+    "max": 1.0,
+    "mean": 0.40262929707901857,
+    "min": 0.0,
+    "near_one_fraction": 0.2636001991349758,
+    "near_threshold": 1e-06,
+    "near_zero_fraction": 0.42544052624353046
+  },
+  "oracle_state_mse": {
+    "z1": {
+      "observation": 0.0004981252424789978,
+      "posterior": 0.0001609943872969684,
+      "prediction": 0.0003659878433940158
+    },
+    "z4": {
+      "observation": 0.0004260090797551956,
+      "posterior": 0.00016206846327227294,
+      "prediction": 0.00020125471529832323
+    }
+  },
+  "protocol": {
+    "evaluated_frame_count": 2963,
+    "paired_noisy_stream": true,
+    "seed": 0,
+    "sequence_count": 9,
+    "sigma": 0.1,
+    "total_frame_count": 2981
+  },
+  "recovery": {
+    "clean_state_injection_relative_to_clean_noisy": 0.6547970520686045
+  },
+  "writeback_comparison": {
+    "clean_state_injection_delta": 0.1252373372112645,
+    "learned_context_delta": 0.021916791367993682
+  },
+  "writeback_decision": {
+    "all_gates_required": true,
+    "clean_state_injection_delta": 0.1252373372112645,
+    "clean_state_injection_threshold": 0.02,
+    "learned_context_delta": 0.021916791367993682,
+    "learned_context_threshold": 0.005,
+    "result": "WRITEBACK GO"
+  }
+}
