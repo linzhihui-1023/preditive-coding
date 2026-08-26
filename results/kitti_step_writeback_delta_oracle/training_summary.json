@@ -1,0 +1,53 @@
+{
+  "checkpoints": {
+    "fixed_adapter_initialization": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "static_host": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "trained_writeback": "/home/lin/predify/experiments/kitti_step_writeback_delta/writeback_delta_epoch1.pt"
+  },
+  "config": {
+    "batch_size": 1,
+    "epochs": 1,
+    "learning_rate": 0.0001,
+    "optimizer": "AdamW",
+    "seed": 0,
+    "sigma": 0.1,
+    "weight_decay": 0.01,
+    "writeback_indices": [
+      0,
+      3
+    ]
+  },
+  "dataset": {
+    "labels_used": false,
+    "sequence_count": 12,
+    "split": "train",
+    "trained_frame_count": 5027
+  },
+  "experiment": "kitti_step_writeback_delta_training",
+  "git_revision": "fd6deae",
+  "objective": "0.5 * (MSE(D1(delta_z1), delta_c1) + MSE(D4(delta_z4), delta_c4))",
+  "parameter_gate": {
+    "actual_trainable_parameter_count": 294912,
+    "expected_trainable_parameter_count": 294912,
+    "frozen_gradients_absent": true,
+    "optimizer_parameters_exact": true,
+    "parameter_details": [
+      {
+        "name": "multi_layer_adapter.output_adapters.0.projection.weight",
+        "parameter_count": 32768
+      },
+      {
+        "name": "multi_layer_adapter.output_adapters.3.projection.weight",
+        "parameter_count": 262144
+      }
+    ],
+    "pass": true,
+    "predictor_or_correction_executed": false
+  },
+  "train": {
+    "average_l_write": 0.008630168675355166,
+    "average_z1_to_c1_mse": 0.009072831362969054,
+    "average_z4_to_c4_mse": 0.008187505981812828,
+    "finite": true
+  }
+}
