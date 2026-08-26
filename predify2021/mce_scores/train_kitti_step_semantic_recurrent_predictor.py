@@ -37,7 +37,7 @@ def clip_loss(model, predictor, samples, training):
         states = model.encode_backbone_features(features)
         teacher = model.decode_from_host_feature(HostFeature(features.c4, features.c1, tuple(images.shape[-2:])))
     hidden4, hidden1 = predictor.initial_state()
-    error = zero_error(states)
+    error = zero_error(UnifiedFeatures(*(value[:1] for value in states.as_tuple())))
     semantic_total = states.z1.new_zeros(())
     state_total = states.z1.new_zeros(())
     for index in range(len(samples) - 1):
