@@ -1,0 +1,100 @@
+{
+  "experiment": "z4_context_only_predictor_ablation",
+  "code_commit": "c40a167",
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_balanced_semantic_recurrent_predictor_b0dcb11/best_semantic_recurrent_predictor.pt",
+  "evaluation_mode": "Z4 ConvGRU retained; direct Z4 delta disabled; h4 continues into Z1 predictor",
+  "parameters_updated": false,
+  "DYNAMICS": "GO",
+  "NEW_PREDICTOR": "GO",
+  "SEMANTIC_PREDICTION": "GO",
+  "metrics": {
+    "constant_velocity": {
+      "miou": 0.1196465669021563,
+      "mvc16": 0.3037155202103739,
+      "mvc8": 0.3421398841684581,
+      "wiou": 0.3432037664412473
+    },
+    "new_predictor": {
+      "miou": 0.26966561543978856,
+      "mvc16": 0.9053662269226661,
+      "mvc8": 0.888398586706647,
+      "wiou": 0.7478526539910105
+    },
+    "old_cnn": {
+      "miou": 0.11143092791162047,
+      "mvc16": 0.327418929107481,
+      "mvc8": 0.3633676085636165,
+      "wiou": 0.32806064713886396
+    },
+    "oracle_current": {
+      "miou": 0.11959460536927423,
+      "mvc16": 0.33500055126416545,
+      "mvc8": 0.3734490828204262,
+      "wiou": 0.345507093969028
+    },
+    "persistence": {
+      "miou": 0.11376863104912939,
+      "mvc16": 0.33301846360992937,
+      "mvc8": 0.3698966963815458,
+      "wiou": 0.335671635582155
+    },
+    "z4_context_only": {
+      "miou": 0.13016906605721412,
+      "mvc16": 0.36335252227618525,
+      "mvc8": 0.40176621827922177,
+      "wiou": 0.38226476222384237
+    }
+  },
+  "mvc_window_counts": {
+    "8": 485,
+    "16": 469
+  },
+  "new_vs_constant_velocity_mse_improvement": 0.27710305116023703,
+  "new_vs_strongest_miou_improvement": 0.15001904853763226,
+  "oracle_current_state_decode_miou": 0.11959460536927423,
+  "protocol": {
+    "evaluated_frame_count": 499,
+    "sequence_count": 2,
+    "split": "val",
+    "total_frame_count": 2981
+  },
+  "state_mse": {
+    "constant_velocity": {
+      "mean": 0.00043700753148330767,
+      "nmse": 2.7043373435948457,
+      "z1": 0.000741212100334389,
+      "z4": 0.00013280296263222633
+    },
+    "new_predictor": {
+      "mean": 0.00031591141112927975,
+      "nmse": 1.9549572143181435,
+      "z1": 0.00028551300044613845,
+      "z4": 0.00034630982181242106
+    },
+    "old_cnn": {
+      "mean": 0.0001322474422135336,
+      "nmse": 0.8183879471345477,
+      "z1": 0.0002116447989928036,
+      "z4": 5.285008543426362e-05
+    },
+    "persistence": {
+      "mean": 0.00016159505119372363,
+      "nmse": 1.0,
+      "z1": 0.00026588269891195186,
+      "z4": 5.730740347549537e-05
+    },
+    "z4_context_only": {
+      "mean": 0.00018744245996234446,
+      "nmse": 1.1599517347696149,
+      "z1": 0.00031757751644919356,
+      "z4": 5.730740347549537e-05
+    }
+  },
+  "decisions": {
+    "z4_direct_prediction_harmful": true,
+    "z4_context_only_reaches_persistence_mse": true,
+    "overall_dynamics_recovered": false,
+    "semantic_retention": false,
+    "final": "Z4_NOT_SOLE_DYNAMICS_BOTTLENECK"
+  }
+}
