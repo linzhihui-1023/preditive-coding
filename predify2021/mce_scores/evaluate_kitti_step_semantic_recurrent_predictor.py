@@ -38,6 +38,9 @@ def main():
     old = MultiLayerPredictor().cuda(); old.load_state_dict(torch.load(PREDICTOR, map_location="cpu", weights_only=False)["predictor_state_dict"], strict=True); old.eval()
     new = SemanticRecurrentPredictor().cuda(); new.load_state_dict(torch.load(checkpoint, map_location="cpu", weights_only=False)["predictor_state_dict"], strict=True); new.eval()
     dataset = KITTISTEPSegmentationDataset.from_kitti_step_root(root, "val"); groups = sequence_groups(dataset)
+    sequence_limit = int(os.environ.get("PREDIFY_SEMANTIC_RECURRENT_EVAL_SEQUENCE_LIMIT", "0"))
+    if sequence_limit:
+        groups = dict(list(groups.items())[:sequence_limit])
     confusion = {name: torch.zeros((19, 19), dtype=torch.int64) for name in NAMES}; vc = VideoConsistency(NAMES); state_mse = {name: {"z1": 0.0, "z4": 0.0} for name in NAMES if name != "oracle_current"}; count = 0
     with torch.inference_mode():
         for samples in groups.values():

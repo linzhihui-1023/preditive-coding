@@ -15,7 +15,8 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import HostFeature, Semant
 
 PREDICTOR_CHECKPOINT = "/home/lin/predify/experiments/kitti_step_fixed_adapter_predictor_41aa5cc/best_predictor.pt"
 WRITEBACK_CHECKPOINT = "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
-STATE_LOSS_WEIGHT = 666411538.8399073
+STATE_LOSS_WEIGHT = 1593.4333312535177
+VALIDATION_CLIP_LIMIT = 64
 
 
 def clips(groups, length=8):
@@ -84,14 +85,14 @@ def main():
     adapter = torch.load(ADAPTER_CHECKPOINT_DEFAULT, map_location="cpu", weights_only=False); model.multi_layer_adapter.load_state_dict(adapter["adapter_state_dict"], strict=True); load_writeback_checkpoint(model, Path(WRITEBACK_CHECKPOINT)); model.requires_grad_(False); model.eval()
     predictor = SemanticRecurrentPredictor().cuda(); optimizer = torch.optim.AdamW(predictor.parameters(), lr=1e-4, weight_decay=0.01)
     train = KITTISTEPSegmentationDataset.from_kitti_step_root(root, "train"); val = KITTISTEPSegmentationDataset.from_kitti_step_root(root, "val")
-    train_clips = clips(sequence_groups(train)); val_clips = clips(sequence_groups(val)); history=[]; best=None
+    train_clips = clips(sequence_groups(train)); val_clips = clips(sequence_groups(val))[:VALIDATION_CLIP_LIMIT]; history=[]; best=None
     for epoch in range(1, 4):
         train_metrics = run_epoch(model, predictor, train_clips, optimizer)
         with torch.no_grad(): val_metrics = run_epoch(model, predictor, val_clips, None)
         row = {"epoch": epoch, "train": train_metrics, "val": val_metrics}; history.append(row); print(json.dumps(row, sort_keys=True), flush=True)
         if best is None or val_metrics["total_loss"] < best["val"]["total_loss"]:
             best = row; output.mkdir(parents=True, exist_ok=True); torch.save({"predictor_state_dict": predictor.state_dict(), "epoch": epoch, "val_metrics": val_metrics}, output / "best_semantic_recurrent_predictor.pt")
-    summary = {"experiment":"kitti_step_semantic_recurrent_predictor", "git_revision":os.environ.get("PREDIFY_GIT_REVISION"), "config":{"epochs":3,"clip_length":8,"batch_size":1,"optimizer":"AdamW","learning_rate":1e-4,"weight_decay":0.01,"seed":0,"labels_used":False,"semantic_loss":"per_pixel_mean_kl","state_loss_weight":STATE_LOSS_WEIGHT}, "trainable_parameter_count":sum(p.numel() for p in predictor.parameters()), "dataset":{"train_clip_count":len(train_clips),"val_clip_count":len(val_clips)}, "history":history,"best":best,"checkpoint":str(output / "best_semantic_recurrent_predictor.pt")}
+    summary = {"experiment":"kitti_step_semantic_recurrent_predictor", "git_revision":os.environ.get("PREDIFY_GIT_REVISION"), "config":{"epochs":3,"clip_length":8,"batch_size":1,"optimizer":"AdamW","learning_rate":1e-4,"weight_decay":0.01,"seed":0,"labels_used":False,"semantic_loss":"per_pixel_mean_kl","state_loss_weight":STATE_LOSS_WEIGHT,"validation_clip_limit":VALIDATION_CLIP_LIMIT}, "trainable_parameter_count":sum(p.numel() for p in predictor.parameters()), "dataset":{"train_clip_count":len(train_clips),"val_clip_count":len(val_clips)}, "history":history,"best":best,"checkpoint":str(output / "best_semantic_recurrent_predictor.pt")}
     (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
 
 
