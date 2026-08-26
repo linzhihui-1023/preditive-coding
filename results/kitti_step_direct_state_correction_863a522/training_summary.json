@@ -1,0 +1,30 @@
+{
+  "base_writeback_checkpoint": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt",
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_direct_state_correction/direct_state_correction_epoch3.pt",
+  "dataset": {
+    "frame_count": 5027,
+    "labels_used": false,
+    "sequence_count": 12,
+    "split": "train"
+  },
+  "experiment": "kitti_step_direct_state_correction_training",
+  "git_revision": "863a522",
+  "history": [
+    {
+      "average_correction_mse": 0.0005802987188190355,
+      "epoch": 1,
+      "trained_frame_count": 5003
+    },
+    {
+      "average_correction_mse": 0.000516522542944235,
+      "epoch": 2,
+      "trained_frame_count": 5003
+    },
+    {
+      "average_correction_mse": 0.0004973021458958481,
+      "epoch": 3,
+      "trained_frame_count": 5003
+    }
+  ],
+  "trainable_parameter_count": 393728
+}

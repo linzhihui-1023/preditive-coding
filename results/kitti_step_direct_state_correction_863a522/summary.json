@@ -1,0 +1,37 @@
+{
+  "checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "direct_correction": "/home/lin/predify/experiments/kitti_step_direct_state_correction/direct_state_correction_epoch3.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_fixed_adapter_predictor_41aa5cc/best_predictor.pt",
+    "static_host": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "decision": "NO-GO",
+  "direct_minus_oracle_gain": -0.1351332268986401,
+  "experiment": "kitti_step_direct_state_correction_evaluation",
+  "finite": true,
+  "git_revision": "863a522",
+  "historical_references": {
+    "clean_state_injection": 0.5305473217,
+    "learned_context": 0.3376793292,
+    "oracle_gain": 0.4222064482
+  },
+  "mIoU": {
+    "clean_static": 0.6552125561916007,
+    "direct_state_correction": 0.28707322130135987,
+    "noisy_static": 0.294076490502174
+  },
+  "protocol": {
+    "evaluated_frame_count": 2963,
+    "seed": 0,
+    "sequence_count": 9,
+    "sigma": 0.1,
+    "split": "val",
+    "total_frame_count": 2981
+  },
+  "static_reference_checks": {
+    "clean_absolute_error": 8.39928127049916e-12,
+    "noisy_absolute_error": 2.1739832156697503e-12,
+    "pass": true
+  }
+}

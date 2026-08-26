@@ -127,19 +127,10 @@ def main():
             for sample in samples:
                 clean_image = load_image(sample)
                 noisy_image = add_frame_noise(clean_image, SIGMA)
+                encode_image(model, clean_image)
+                observation = encode_image(model, noisy_image)
                 clean_logits = model(clean_image)
                 noisy_logits = model(noisy_image)
-                update_confusion_matrix(
-                    confusion["clean_static"],
-                    clean_logits.argmax(dim=1).squeeze(0).cpu().to(torch.int64),
-                    semantic_mask_from_panoptic_png(sample["mask_path"]),
-                )
-                update_confusion_matrix(
-                    confusion["noisy_static"],
-                    noisy_logits.argmax(dim=1).squeeze(0).cpu().to(torch.int64),
-                    semantic_mask_from_panoptic_png(sample["mask_path"]),
-                )
-                observation = encode_image(model, noisy_image)
                 if previous is None:
                     previous = observation
                     continue
@@ -158,6 +149,16 @@ def main():
                 )
                 direct_logits = model.decode_from_host_feature(host_feature)
                 mask = semantic_mask_from_panoptic_png(sample["mask_path"])
+                update_confusion_matrix(
+                    confusion["clean_static"],
+                    clean_logits.argmax(dim=1).squeeze(0).cpu().to(torch.int64),
+                    mask,
+                )
+                update_confusion_matrix(
+                    confusion["noisy_static"],
+                    noisy_logits.argmax(dim=1).squeeze(0).cpu().to(torch.int64),
+                    mask,
+                )
                 update_confusion_matrix(
                     confusion["direct_state_correction"],
                     direct_logits.argmax(dim=1).squeeze(0).cpu().to(torch.int64),
