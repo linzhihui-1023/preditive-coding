@@ -110,7 +110,7 @@ def main():
             "/home/lin/predify/experiments/kitti_step_writeback_delta",
         )
     )
-    batch_size = int(os.environ.get("PREDIFY_KITTI_STEP_WRITEBACK_BATCH_SIZE", "4"))
+    batch_size = int(os.environ.get("PREDIFY_KITTI_STEP_WRITEBACK_BATCH_SIZE", "1"))
     num_workers = int(os.environ.get("PREDIFY_KITTI_STEP_NUM_WORKERS", "4"))
 
     model = build_deeplabv3plus_resnet50_host(
