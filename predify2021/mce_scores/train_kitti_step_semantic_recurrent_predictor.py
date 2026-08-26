@@ -15,6 +15,7 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import HostFeature, Semant
 
 PREDICTOR_CHECKPOINT = "/home/lin/predify/experiments/kitti_step_fixed_adapter_predictor_41aa5cc/best_predictor.pt"
 WRITEBACK_CHECKPOINT = "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+STATE_LOSS_WEIGHT = 666411538.8399073
 
 
 def clips(groups, length=8):
@@ -30,7 +31,7 @@ def prediction_step(model, states, output_size):
     return HostFeature(decoded.c4, decoded.c1, output_size)
 
 
-def clip_loss(model, predictor, samples, training):
+def clip_loss(model, predictor, samples, training, semantic_normalized=True):
     images = torch.cat([load_image(sample) for sample in samples], dim=0)
     with torch.no_grad():
         features = model.extract_backbone_features(images)
@@ -47,7 +48,12 @@ def clip_loss(model, predictor, samples, training):
         predicted_host = prediction_step(model, predicted, tuple(images.shape[-2:]))
         predicted_logits = model.decode_from_host_feature(predicted_host)
         target_logits = teacher[index + 1:index + 2]
-        semantic_total = semantic_total + F.kl_div(F.log_softmax(predicted_logits, dim=1), F.softmax(target_logits, dim=1), reduction="batchmean")
+        log_prediction = F.log_softmax(predicted_logits, dim=1)
+        target_distribution = F.softmax(target_logits, dim=1)
+        if semantic_normalized:
+            semantic_total = semantic_total + F.kl_div(log_prediction, target_distribution, reduction="none").sum(dim=1).mean()
+        else:
+            semantic_total = semantic_total + F.kl_div(log_prediction, target_distribution, reduction="batchmean")
         state_total = state_total + 0.5 * (F.mse_loss(predicted.z1, target.z1) + F.mse_loss(predicted.z4, target.z4))
         error = UnifiedFeatures(*(value.detach() for value in (target.z1 - predicted.z1, target.z2 - predicted.z2, target.z3 - predicted.z3, target.z4 - predicted.z4)))
     return semantic_total / 7, state_total / 7
@@ -58,7 +64,7 @@ def run_epoch(model, predictor, clip_list, optimizer):
     semantic = state = 0.0
     for samples in clip_list:
         semantic_loss, state_loss = clip_loss(model, predictor, samples, optimizer is not None)
-        total = semantic_loss + 10.0 * state_loss
+        total = semantic_loss + STATE_LOSS_WEIGHT * state_loss
         if optimizer is not None:
             optimizer.zero_grad(set_to_none=True)
             total.backward()
@@ -85,7 +91,7 @@ def main():
         row = {"epoch": epoch, "train": train_metrics, "val": val_metrics}; history.append(row); print(json.dumps(row, sort_keys=True), flush=True)
         if best is None or val_metrics["total_loss"] < best["val"]["total_loss"]:
             best = row; output.mkdir(parents=True, exist_ok=True); torch.save({"predictor_state_dict": predictor.state_dict(), "epoch": epoch, "val_metrics": val_metrics}, output / "best_semantic_recurrent_predictor.pt")
-    summary = {"experiment":"kitti_step_semantic_recurrent_predictor", "git_revision":os.environ.get("PREDIFY_GIT_REVISION"), "config":{"epochs":3,"clip_length":8,"batch_size":1,"optimizer":"AdamW","learning_rate":1e-4,"weight_decay":0.01,"seed":0,"labels_used":False}, "trainable_parameter_count":sum(p.numel() for p in predictor.parameters()), "dataset":{"train_clip_count":len(train_clips),"val_clip_count":len(val_clips)}, "history":history,"best":best,"checkpoint":str(output / "best_semantic_recurrent_predictor.pt")}
+    summary = {"experiment":"kitti_step_semantic_recurrent_predictor", "git_revision":os.environ.get("PREDIFY_GIT_REVISION"), "config":{"epochs":3,"clip_length":8,"batch_size":1,"optimizer":"AdamW","learning_rate":1e-4,"weight_decay":0.01,"seed":0,"labels_used":False,"semantic_loss":"per_pixel_mean_kl","state_loss_weight":STATE_LOSS_WEIGHT}, "trainable_parameter_count":sum(p.numel() for p in predictor.parameters()), "dataset":{"train_clip_count":len(train_clips),"val_clip_count":len(val_clips)}, "history":history,"best":best,"checkpoint":str(output / "best_semantic_recurrent_predictor.pt")}
     (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
 
 
