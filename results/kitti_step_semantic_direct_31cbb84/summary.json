@@ -1,0 +1,118 @@
+{
+  "checkpoints": {
+    "full_error": "/home/lin/predify/experiments/kitti_step_semantic_direct_full_error/semantic_direct_correction_epoch3.pt",
+    "observation_only": "/home/lin/predify/experiments/kitti_step_semantic_direct_observation_only/semantic_direct_correction_epoch3.pt"
+  },
+  "checks": {
+    "full_error": {
+      "clean_state_in_history": false,
+      "finite": true,
+      "history_source": "noisy_observation",
+      "parameters_unchanged": true,
+      "protocol": true
+    },
+    "observation_only": {
+      "clean_state_in_history": false,
+      "finite": true,
+      "history_source": "noisy_observation",
+      "parameters_unchanged": true,
+      "protocol": true
+    }
+  },
+  "decision": "NO-GO: semantic error input does not show an independent contribution over observation-only control",
+  "deltas": {
+    "full_error_vs_baseline": 0.00905766342399067,
+    "full_error_vs_observation_only": -0.00047116842121464053,
+    "observation_only_vs_baseline": 0.00952883184520531
+  },
+  "experiment": "kitti_step_semantic_direct_correction",
+  "git_revision": "31cbb84",
+  "mIoU": {
+    "direct_open_loop_baseline": 0.3347162547,
+    "full_error": 0.34377391812399066,
+    "observation_only": 0.3442450865452053
+  },
+  "protocol": {
+    "evaluated_frame_count": 2963,
+    "seed": 0,
+    "sequence_count": 9,
+    "sigma": 0.1,
+    "split": "val",
+    "total_frame_count": 2981
+  },
+  "state_mse": {
+    "full_error": {
+      "direct_open_loop_to_clean": {
+        "mean": 0.0006778241787378862,
+        "z1": 0.0005479184514123926,
+        "z4": 0.0008077299060633798
+      },
+      "noisy_to_clean": {
+        "mean": 0.0004620671611170967,
+        "z1": 0.0004981252424789978,
+        "z4": 0.0004260090797551956
+      }
+    },
+    "observation_only": {
+      "direct_open_loop_to_clean": {
+        "mean": 0.0006983684607259074,
+        "z1": 0.0005375211655902178,
+        "z4": 0.000859215755861597
+      },
+      "noisy_to_clean": {
+        "mean": 0.0004620671611170967,
+        "z1": 0.0004981252424789978,
+        "z4": 0.0004260090797551956
+      }
+    }
+  },
+  "training": {
+    "full_error": [
+      {
+        "epoch": 1,
+        "semantic": 0.20964631795147504,
+        "state": 0.0007220895683396419,
+        "total": 0.21686721371247392,
+        "trained_frame_count": 5003
+      },
+      {
+        "epoch": 2,
+        "semantic": 0.1775947666767774,
+        "state": 0.0006899242023456664,
+        "total": 0.18449400865880342,
+        "trained_frame_count": 5003
+      },
+      {
+        "epoch": 3,
+        "semantic": 0.1678163746281395,
+        "state": 0.000719682226580101,
+        "total": 0.17501319684616903,
+        "trained_frame_count": 5003
+      }
+    ],
+    "observation_only": [
+      {
+        "epoch": 1,
+        "semantic": 0.22029343432002774,
+        "state": 0.0007298008619398403,
+        "total": 0.22759144273166795,
+        "trained_frame_count": 5003
+      },
+      {
+        "epoch": 2,
+        "semantic": 0.19242491708540116,
+        "state": 0.0007116208936369064,
+        "total": 0.19954112605118238,
+        "trained_frame_count": 5003
+      },
+      {
+        "epoch": 3,
+        "semantic": 0.18481220589928715,
+        "state": 0.0007382851964760591,
+        "total": 0.19219505790991115,
+        "trained_frame_count": 5003
+      }
+    ],
+    "trainable_parameter_count": 393728
+  }
+}
