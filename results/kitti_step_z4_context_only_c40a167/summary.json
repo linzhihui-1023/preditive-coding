@@ -4,6 +4,7 @@
   "checkpoint": "/home/lin/predify/experiments/kitti_step_balanced_semantic_recurrent_predictor_b0dcb11/best_semantic_recurrent_predictor.pt",
   "evaluation_mode": "Z4 ConvGRU retained; direct Z4 delta disabled; h4 continues into Z1 predictor",
   "parameters_updated": false,
+  "sequences": ["0002", "0006"],
   "DYNAMICS": "GO",
   "NEW_PREDICTOR": "GO",
   "SEMANTIC_PREDICTION": "GO",
