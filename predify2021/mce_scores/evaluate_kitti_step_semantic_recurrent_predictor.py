@@ -79,7 +79,7 @@ def main():
                 if compare_context:
                     context_error = UnifiedFeatures(*(a - b for a, b in zip(current.as_tuple(), context_pending.as_tuple()))); context_pending, context_hidden4, context_hidden1 = context.step(current, context_error, context_hidden4, context_hidden1, persist_z4=True)
                 previous_previous, previous = previous, current; count += 1
-    mvc = vc.means(); metrics = {name: {"miou": float(torch.nanmean(compute_iou(confusion[name])).item()), "wiou": weighted_iou(confusion[name]), "mvc8": mvc[8][name], "mvc16": mvc[16][name]} for name in NAMES}
+    mvc = vc.means(); metrics = {name: {"miou": float(torch.nanmean(compute_iou(confusion[name])).item()), "wiou": weighted_iou(confusion[name]), "mvc8": mvc[8][name], "mvc16": mvc[16][name]} for name in names}
     for name in state_mse: state_mse[name]["mean"] = (state_mse[name]["z1"] + state_mse[name]["z4"]) / (2 * count)
     persistence_mean = state_mse["persistence"]["mean"]; constant_mean = state_mse["constant_velocity"]["mean"]; new_mean = state_mse["new_predictor"]["mean"]
     for name in state_mse: state_mse[name]["z1"] /= count; state_mse[name]["z4"] /= count
