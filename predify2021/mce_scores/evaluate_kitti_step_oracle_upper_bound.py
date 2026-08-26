@@ -31,6 +31,10 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import BackboneFeatures, U
 SEED = 0
 CONTEXT_MASK = (False, False, True, True, True)
 EXPECTED_MIOU = 0.3157625378
+EXPECTED_CLEAN_STATIC_MIOU = 0.6552125562
+EXPECTED_NOISY_STATIC_MIOU = 0.2940764905
+EXPECTED_CLEAN_STATE_INJECTION_MIOU = 0.4053099845
+EXPECTED_ORACLE_CLIPPED_GAIN_MIOU = 0.3569645412
 EXPECTED_SEQUENCES = 9
 EXPECTED_TOTAL_FRAMES = 2981
 EXPECTED_EVALUATED_FRAMES = 2963
@@ -39,6 +43,18 @@ CONTEXT_CHECKPOINT_DEFAULT = (
     "/home/lin/predify/experiments/"
     "kitti_step_context_residual_ablation_working_tree/best_gain_dynamic_instant.pt"
 )
+
+
+def load_writeback_checkpoint(model, checkpoint_path):
+    payload = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    output_adapters = payload["output_adapters"]
+    if set(output_adapters) != {"0", "3"}:
+        raise RuntimeError("Writeback checkpoint must contain only D1 and D4 weights.")
+    for index in (0, 3):
+        model.multi_layer_adapter.output_adapters[index].load_state_dict(
+            output_adapters[str(index)], strict=True
+        )
+    return payload
 
 
 def split_backbone_features(features, index):
@@ -104,6 +120,12 @@ def main():
     context_checkpoint = Path(
         os.environ.get("PREDIFY_KITTI_STEP_CONTEXT_CHECKPOINT", CONTEXT_CHECKPOINT_DEFAULT)
     )
+    writeback_checkpoint_value = os.environ.get(
+        "PREDIFY_KITTI_STEP_WRITEBACK_CHECKPOINT"
+    )
+    writeback_checkpoint = (
+        Path(writeback_checkpoint_value) if writeback_checkpoint_value else None
+    )
 
     random.seed(SEED)
     torch.manual_seed(SEED)
@@ -111,6 +133,10 @@ def main():
     model, predictor, legacy, context, checkpoints = load_components(root)
     context_payload = torch.load(context_checkpoint, map_location="cpu", weights_only=False)
     context.load_state_dict(context_payload["context_state_dict"], strict=True)
+    writeback_checkpoint_loaded = False
+    if writeback_checkpoint is not None:
+        load_writeback_checkpoint(model, writeback_checkpoint)
+        writeback_checkpoint_loaded = True
     model.eval()
     predictor.eval()
     legacy.eval()
@@ -388,6 +414,25 @@ def main():
         },
         "finite": {"pass": finite},
     }
+    if writeback_checkpoint is not None:
+        gates["learned_context_reproduction"]["required"] = False
+        gates["learned_context_reproduction"]["pass"] = True
+        gates["writeback_checkpoint_loaded"] = {
+            "path": str(writeback_checkpoint),
+            "pass": writeback_checkpoint_loaded,
+        }
+        gates["static_protocol_reproduction"] = {
+            "clean_static_absolute_error": abs(
+                mious["clean_static"] - EXPECTED_CLEAN_STATIC_MIOU
+            ),
+            "noisy_static_absolute_error": abs(
+                mious["noisy_static"] - EXPECTED_NOISY_STATIC_MIOU
+            ),
+            "pass": (
+                abs(mious["clean_static"] - EXPECTED_CLEAN_STATIC_MIOU) <= 1e-6
+                and abs(mious["noisy_static"] - EXPECTED_NOISY_STATIC_MIOU) <= 1e-6
+            ),
+        }
     gates["no_training"]["pass"] = (
         not gates["no_training"]["optimizer_created"]
         and not gates["no_training"]["backward_called"]
@@ -402,6 +447,26 @@ def main():
         gate.get("pass", False) for name, gate in gates.items()
         if name not in ("learned_context_reproduction", "oracle_mse_dominance")
     ) and gates["learned_context_reproduction"]["pass"] and gates["oracle_mse_dominance"]["pass"]
+
+    learned_delta = mious["learned_context"] - EXPECTED_MIOU
+    injection_delta = (
+        mious["clean_state_injection"] - EXPECTED_CLEAN_STATE_INJECTION_MIOU
+    )
+    writeback_decision = None
+    if writeback_checkpoint is not None:
+        writeback_go = (
+            gates["all_pass"]
+            and injection_delta >= 0.020
+            and learned_delta >= 0.005
+        )
+        writeback_decision = {
+            "result": "WRITEBACK GO" if writeback_go else "WRITEBACK NO-GO",
+            "clean_state_injection_delta": injection_delta,
+            "learned_context_delta": learned_delta,
+            "clean_state_injection_threshold": 0.020,
+            "learned_context_threshold": 0.005,
+            "all_gates_required": True,
+        }
 
     if not gates["learned_context_reproduction"]["pass"]:
         diagnosis = "REPRODUCTION_FAILED"
@@ -428,6 +493,11 @@ def main():
         "checkpoints": {
             **{name: str(path) for name, path in checkpoints.items()},
             "learned_context": str(context_checkpoint),
+            **(
+                {"trained_writeback": str(writeback_checkpoint)}
+                if writeback_checkpoint is not None
+                else {}
+            ),
         },
         "mIoU": mious,
         "recovery": {"clean_state_injection_relative_to_clean_noisy": recovery},
@@ -447,6 +517,19 @@ def main():
         "finite_is_not_stability": True,
         "diagnosis": diagnosis,
     }
+    if writeback_checkpoint is not None:
+        summary["historical_mIoU"] = {
+            "clean_static": EXPECTED_CLEAN_STATIC_MIOU,
+            "noisy_static": EXPECTED_NOISY_STATIC_MIOU,
+            "learned_context": EXPECTED_MIOU,
+            "clean_state_injection": EXPECTED_CLEAN_STATE_INJECTION_MIOU,
+            "oracle_clipped_gain_closed_loop": EXPECTED_ORACLE_CLIPPED_GAIN_MIOU,
+        }
+        summary["writeback_comparison"] = {
+            "clean_state_injection_delta": injection_delta,
+            "learned_context_delta": learned_delta,
+        }
+        summary["writeback_decision"] = writeback_decision
     output_dir.mkdir(parents=True, exist_ok=True)
     with (output_dir / "summary.json").open("w") as handle:
         json.dump(summary, handle, indent=2, sort_keys=True)
