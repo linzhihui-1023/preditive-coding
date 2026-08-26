@@ -21,6 +21,7 @@ from .adapters import (
     UnifiedFeatures,
 )
 from .predictors import MultiLayerPredictor, SpatialPredictor
+from .direct_state_correction import DirectStateCorrection
 
 __all__ = [
     "CITYSCAPES_CHECKPOINT_NAME",
@@ -43,4 +44,5 @@ __all__ = [
     "UnifiedFeatures",
     "MultiLayerPredictor",
     "SpatialPredictor",
+    "DirectStateCorrection",
 ]
