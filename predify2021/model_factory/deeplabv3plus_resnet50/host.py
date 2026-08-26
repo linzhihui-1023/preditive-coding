@@ -7,7 +7,12 @@ from torch import nn
 from torch.nn import functional as F
 from torchvision.models import resnet50
 
-from .adapters import BackboneFeatures, MultiLayerAdapter, UnifiedFeatures
+from .adapters import (
+    BackboneFeatures,
+    HostConditionedResidualWriteback,
+    MultiLayerAdapter,
+    UnifiedFeatures,
+)
 
 
 CITYSCAPES_NUM_CLASSES = 19
@@ -227,6 +232,13 @@ class DeepLabV3PlusResNet50Host(nn.Module):
         self.decode_head = MMSegDepthwiseSeparableASPPHead(num_classes=num_classes)
         self.auxiliary_head = MMSegFCNAuxiliaryHead(num_classes=num_classes)
         self.multi_layer_adapter = MultiLayerAdapter()
+        self.host_conditioned_writebacks = nn.ModuleDict(
+            {
+                "0": HostConditionedResidualWriteback(256),
+                "3": HostConditionedResidualWriteback(2048),
+            }
+        )
+        self.host_conditioned_writeback_enabled = False
         self.register_buffer(
             "input_mean",
             torch.tensor(CITYSCAPES_RGB_MEAN).view(1, 3, 1, 1),
@@ -264,6 +276,21 @@ class DeepLabV3PlusResNet50Host(nn.Module):
 
     def decode_adapter_deltas(self, deltas: UnifiedFeatures) -> BackboneFeatures:
         return self.multi_layer_adapter.decode_deltas(deltas)
+
+    def decode_conditioned_adapter_deltas(
+        self,
+        features: BackboneFeatures,
+        deltas: UnifiedFeatures,
+    ) -> BackboneFeatures:
+        base = self.decode_adapter_deltas(deltas)
+        if not self.host_conditioned_writeback_enabled:
+            return base
+        return BackboneFeatures(
+            base.c1 + self.host_conditioned_writebacks["0"](features.c1, deltas.z1),
+            base.c2,
+            base.c3,
+            base.c4 + self.host_conditioned_writebacks["3"](features.c4, deltas.z4),
+        )
 
     def apply_adapter_deltas(
         self,

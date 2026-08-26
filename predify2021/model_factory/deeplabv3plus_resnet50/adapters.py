@@ -64,6 +64,42 @@ class OutputAdapter(nn.Module):
         return self.projection(delta)
 
 
+class HostConditionedResidualWriteback(nn.Module):
+    """Convert a unified-state correction into a host-conditioned residual."""
+
+    def __init__(self, host_channels: int):
+        super().__init__()
+        self.host_projection = nn.Conv2d(
+            host_channels,
+            UNIFIED_STATE_CHANNELS,
+            kernel_size=1,
+            bias=False,
+        )
+        self.delta_projection = nn.Conv2d(
+            UNIFIED_STATE_CHANNELS,
+            UNIFIED_STATE_CHANNELS,
+            kernel_size=3,
+            padding=1,
+            bias=False,
+        )
+        self.output_projection = nn.Conv2d(
+            UNIFIED_STATE_CHANNELS,
+            host_channels,
+            kernel_size=1,
+            bias=False,
+        )
+        nn.init.zeros_(self.output_projection.weight)
+
+    def forward(
+        self,
+        host_feature: torch.Tensor,
+        delta: torch.Tensor,
+    ) -> torch.Tensor:
+        host_context = self.host_projection(host_feature)
+        correction_command = self.delta_projection(delta)
+        return self.output_projection(host_context * correction_command)
+
+
 class MultiLayerAdapter(nn.Module):
     """Independent spatial adapters for ResNet layers 1 through 4."""
 

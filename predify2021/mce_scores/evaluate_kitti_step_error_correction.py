@@ -129,7 +129,7 @@ def corrected_host_feature(model, raw_features, noisy_state, target_state, outpu
         torch.zeros_like(noisy_state.z3),
         target_state.z4 - noisy_state.z4,
     )
-    delta_features = model.decode_adapter_deltas(delta)
+    delta_features = model.decode_conditioned_adapter_deltas(raw_features, delta)
     return HostFeature(
         tensor=raw_features.c4 + delta_features.c4,
         low_level=raw_features.c1 + delta_features.c1,

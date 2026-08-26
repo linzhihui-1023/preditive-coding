@@ -54,6 +54,17 @@ def load_writeback_checkpoint(model, checkpoint_path):
         model.multi_layer_adapter.output_adapters[index].load_state_dict(
             output_adapters[str(index)], strict=True
         )
+    conditioned = payload.get("host_conditioned_writebacks")
+    model.host_conditioned_writeback_enabled = conditioned is not None
+    if conditioned is not None:
+        if set(conditioned) != {"0", "3"}:
+            raise RuntimeError(
+                "Host-conditioned checkpoint must contain only c1 and c4 residuals."
+            )
+        for index in (0, 3):
+            model.host_conditioned_writebacks[str(index)].load_state_dict(
+                conditioned[str(index)], strict=True
+            )
     return payload
 
 

@@ -1,12 +1,10 @@
-"""Train only the state-delta to host-feature-delta coordinate writeback.
+"""Train only host-conditioned residual writeback for c1 and c4.
 
 For paired clean/noisy views of the same KITTI-STEP Train frame, the frozen host
 and frozen input adapters produce (F_clean, F_noisy) and (Z_clean, Z_noisy).
-D1 and D4 alone minimize
-0.5 * [MSE(D1(Z1_clean-Z1_noisy), C1_clean-C1_noisy)
-       + MSE(D4(Z4_clean-Z4_noisy), C4_clean-C4_noisy)].
-Predictor, correction, segmentation labels, and closed-loop state are outside
-this training objective.
+The frozen D1/D4 coordinate converters provide the base correction.  Independent
+P/H/Q branches learn the remaining host-feature delta from F_noisy and delta_Z.
+Predictor, correction, labels, and closed-loop state remain outside the objective.
 """
 
 import json
@@ -44,26 +42,35 @@ EPOCHS = 1
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.01
 EXPECTED_TRAIN_SEQUENCES = 12
-EXPECTED_TRAINABLE_PARAMETERS = 294_912
+EXPECTED_TRAINABLE_PARAMETERS = 884_736
 WRITEBACK_INDICES = (0, 3)
+BASE_WRITEBACK_CHECKPOINT_DEFAULT = (
+    "/home/lin/predify/experiments/kitti_step_writeback_delta/"
+    "writeback_delta_epoch1.pt"
+)
 
 
 def configure_writeback_only(model):
     model.requires_grad_(False)
-    adapters = [
-        model.multi_layer_adapter.output_adapters[index]
-        for index in WRITEBACK_INDICES
+    model.host_conditioned_writeback_enabled = True
+    writebacks = [
+        model.host_conditioned_writebacks[str(index)] for index in WRITEBACK_INDICES
     ]
-    for adapter in adapters:
-        adapter.requires_grad_(True)
-    parameters = [parameter for adapter in adapters for parameter in adapter.parameters()]
+    output_adapters = [
+        model.multi_layer_adapter.output_adapters[index] for index in WRITEBACK_INDICES
+    ]
+    for writeback in writebacks:
+        writeback.requires_grad_(True)
+    parameters = [
+        parameter for writeback in writebacks for parameter in writeback.parameters()
+    ]
     details = [
         {
-            "name": f"multi_layer_adapter.output_adapters.{index}.{name}",
+            "name": f"host_conditioned_writebacks.{index}.{name}",
             "parameter_count": parameter.numel(),
         }
-        for index, adapter in zip(WRITEBACK_INDICES, adapters)
-        for name, parameter in adapter.named_parameters()
+        for index, writeback in zip(WRITEBACK_INDICES, writebacks)
+        for name, parameter in writeback.named_parameters()
     ]
     actual_count = sum(parameter.numel() for parameter in parameters)
     if actual_count != EXPECTED_TRAINABLE_PARAMETERS:
@@ -72,16 +79,38 @@ def configure_writeback_only(model):
             f"expected {EXPECTED_TRAINABLE_PARAMETERS}, got {actual_count}; "
             f"details={details}"
         )
-    return adapters, parameters, details
+    return writebacks, output_adapters, parameters, details
 
 
-def writeback_loss(adapters, clean_features, noisy_features, clean_state, noisy_state):
+def load_base_writeback_checkpoint(model, checkpoint_path):
+    payload = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    for index in WRITEBACK_INDICES:
+        model.multi_layer_adapter.output_adapters[index].load_state_dict(
+            payload["output_adapters"][str(index)], strict=True
+        )
+    return payload
+
+
+def writeback_loss(
+    writebacks,
+    output_adapters,
+    clean_features,
+    noisy_features,
+    clean_state,
+    noisy_state,
+):
     delta_z1 = clean_state.z1 - noisy_state.z1
     delta_z4 = clean_state.z4 - noisy_state.z4
     delta_c1 = clean_features.c1 - noisy_features.c1
     delta_c4 = clean_features.c4 - noisy_features.c4
-    loss_z1_c1 = F.mse_loss(adapters[0](delta_z1), delta_c1)
-    loss_z4_c4 = F.mse_loss(adapters[1](delta_z4), delta_c4)
+    predicted_c1 = output_adapters[0](delta_z1) + writebacks[0](
+        noisy_features.c1, delta_z1
+    )
+    predicted_c4 = output_adapters[1](delta_z4) + writebacks[1](
+        noisy_features.c4, delta_z4
+    )
+    loss_z1_c1 = F.mse_loss(predicted_c1, delta_c1)
+    loss_z4_c4 = F.mse_loss(predicted_c4, delta_c4)
     return 0.5 * (loss_z1_c1 + loss_z4_c4), loss_z1_c1, loss_z4_c4
 
 
@@ -104,10 +133,16 @@ def main():
     adapter_checkpoint = Path(
         os.environ.get("PREDIFY_KITTI_STEP_ADAPTER_CHECKPOINT", ADAPTER_CHECKPOINT_DEFAULT)
     )
+    base_writeback_checkpoint = Path(
+        os.environ.get(
+            "PREDIFY_KITTI_STEP_WRITEBACK_CHECKPOINT",
+            BASE_WRITEBACK_CHECKPOINT_DEFAULT,
+        )
+    )
     output_dir = Path(
         os.environ.get(
-            "PREDIFY_KITTI_STEP_WRITEBACK_OUTPUT_DIR",
-            "/home/lin/predify/experiments/kitti_step_writeback_delta",
+            "PREDIFY_KITTI_STEP_HOST_CONDITIONED_WRITEBACK_OUTPUT_DIR",
+            "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback",
         )
     )
     batch_size = int(os.environ.get("PREDIFY_KITTI_STEP_WRITEBACK_BATCH_SIZE", "1"))
@@ -121,7 +156,10 @@ def main():
     model.multi_layer_adapter.load_state_dict(
         adapter_payload["adapter_state_dict"], strict=True
     )
-    adapters, trainable_parameters, parameter_details = configure_writeback_only(model)
+    load_base_writeback_checkpoint(model, base_writeback_checkpoint)
+    writebacks, output_adapters, trainable_parameters, parameter_details = (
+        configure_writeback_only(model)
+    )
     trainable_ids = {id(parameter) for parameter in trainable_parameters}
 
     optimizer = torch.optim.AdamW(
@@ -136,7 +174,7 @@ def main():
     }
     optimizer_exact = optimizer_ids == trainable_ids
     if not optimizer_exact:
-        raise RuntimeError("Optimizer parameter set is not exactly D1 and D4.")
+        raise RuntimeError("Optimizer parameter set is not exactly c1/c4 P, H, and Q.")
 
     dataset = KITTISTEPSegmentationDataset.from_kitti_step_root(root, "train")
     sequence_count = len(sequence_groups(dataset))
@@ -156,8 +194,8 @@ def main():
     )
 
     model.eval()
-    for adapter in adapters:
-        adapter.train()
+    for writeback in writebacks:
+        writeback.train()
     total_loss = 0.0
     total_z1_c1_loss = 0.0
     total_z4_c4_loss = 0.0
@@ -174,7 +212,8 @@ def main():
 
         optimizer.zero_grad(set_to_none=True)
         loss, loss_z1_c1, loss_z4_c4 = writeback_loss(
-            adapters,
+            writebacks,
+            output_adapters,
             clean_features,
             noisy_features,
             clean_state,
@@ -205,7 +244,7 @@ def main():
     average_z1_c1_loss = total_z1_c1_loss / trained_frame_count
     average_z4_c4_loss = total_z4_c4_loss / trained_frame_count
     output_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = output_dir / "writeback_delta_epoch1.pt"
+    checkpoint_path = output_dir / "host_conditioned_writeback_epoch1.pt"
     fixed_config = {
         "epochs": EPOCHS,
         "sigma": SIGMA,
@@ -220,7 +259,11 @@ def main():
         {
             "output_adapters": {
                 str(index): adapter.state_dict()
-                for index, adapter in zip(WRITEBACK_INDICES, adapters)
+                for index, adapter in zip(WRITEBACK_INDICES, output_adapters)
+            },
+            "host_conditioned_writebacks": {
+                str(index): writeback.state_dict()
+                for index, writeback in zip(WRITEBACK_INDICES, writebacks)
             },
             "epoch": EPOCHS,
             "train_average_l_write": average_loss,
@@ -247,9 +290,13 @@ def main():
         and not parameter_gate["predictor_or_correction_executed"]
     )
     summary = {
-        "experiment": "kitti_step_writeback_delta_training",
+        "experiment": "kitti_step_host_conditioned_writeback_training",
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
-        "objective": "0.5 * (MSE(D1(delta_z1), delta_c1) + MSE(D4(delta_z4), delta_c4))",
+        "objective": (
+            "0.5 * (MSE(D1(delta_z1) + Q1(P1(c1_noisy) * H1(delta_z1)), "
+            "delta_c1) + MSE(D4(delta_z4) + Q4(P4(c4_noisy) * H4(delta_z4)), "
+            "delta_c4))"
+        ),
         "config": fixed_config,
         "dataset": {
             "split": "train",
@@ -260,6 +307,7 @@ def main():
         "checkpoints": {
             "static_host": str(static_checkpoint),
             "fixed_adapter_initialization": str(adapter_checkpoint),
+            "frozen_base_writeback": str(base_writeback_checkpoint),
             "trained_writeback": str(checkpoint_path),
         },
         "train": {
