@@ -88,7 +88,7 @@ def semantic_state_loss(model, clean_features, clean_state, noisy_features, obse
         noisy_features,
         observation,
         posterior,
-        tuple(clean_features.c1.shape[-2:]),
+        output_size,
     )
     clean_logits = model.decode_from_host_feature(clean_host)
     corrected_logits = model.decode_from_host_feature(corrected_host)
