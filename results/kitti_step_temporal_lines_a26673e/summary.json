@@ -1,0 +1,121 @@
+{
+  "checkpoints": {
+    "full_error": "/home/lin/predify/experiments/kitti_step_persistent_blur_full_error/semantic_direct_correction_epoch3.pt",
+    "observation_only": "/home/lin/predify/experiments/kitti_step_persistent_blur_observation_only/semantic_direct_correction_epoch3.pt"
+  },
+  "git_revision": "a26673e",
+  "historical_results": {
+    "clean_static_miou": 0.6552125562,
+    "direct_open_loop_baseline": 0.3347162547,
+    "iid_gaussian_noisy_static_miou": 0.2940764905,
+    "semantic_full_error": 0.3437739181,
+    "semantic_observation_only": 0.3442450865
+  },
+  "line_a": {
+    "PREDICTOR_TEMPORAL_SIGNAL": "GO",
+    "TEMPORAL_SEMANTIC_CAPABILITY": "NO-GO",
+    "historical_clean_static_miou": 0.6552125562,
+    "metrics": {
+      "persistence": {
+        "miou": 0.6043412403697831,
+        "mvc16": 0.9239870233182813,
+        "mvc8": 0.9209609840868613,
+        "wiou": 0.8264099566929091
+      },
+      "predictor": {
+        "miou": 0.6090962178396351,
+        "mvc16": 0.9252708024979627,
+        "mvc8": 0.9225980296168071,
+        "wiou": 0.8313474657732275
+      },
+      "static": {
+        "miou": 0.6552125561916007,
+        "mvc16": 0.9208394622427848,
+        "mvc8": 0.9224884818633494,
+        "wiou": 0.8575019577939713
+      }
+    },
+    "mvc_window_counts": {
+      "16": 2828,
+      "8": 2900
+    },
+    "parameters_updated": false,
+    "predictor_delta_cosine": {
+      "z1": 0.5368408515390576,
+      "z4": 0.2897994629171222
+    },
+    "protocol": {
+      "evaluated_frame_count": 2963,
+      "sequence_count": 9,
+      "total_frame_count": 2981
+    },
+    "state_mse": {
+      "persistence": {
+        "mean": 0.00025965723186492743,
+        "z1": 0.00043773841133096106,
+        "z4": 8.15760523988938e-05
+      },
+      "predictor": {
+        "mean": 0.00018743635100001776,
+        "z1": 0.00030051980051595085,
+        "z4": 7.435290148408466e-05
+      }
+    }
+  },
+  "line_b": {
+    "CLEAN_PERFORMANCE_REGRESSION": false,
+    "PERSISTENT_TEMPORAL_ERROR": "PARTIAL-GO",
+    "finite": true,
+    "full_minus_observation_persistent_miou": 0.001390236338201456,
+    "metrics": {
+      "full_error": {
+        "overall_miou": 0.5700630457866577,
+        "overall_mvc16": 0.9057084116595467,
+        "overall_mvc8": 0.9055307092683382,
+        "overall_wiou": 0.8267960400359203,
+        "persistent_mvc16": 0.9055611045252965,
+        "persistent_mvc8": 0.9062362204962104,
+        "phase_miou": {
+          "clean": 0.5784776711687794,
+          "persistent": 0.5310166825225122,
+          "transition": 0.5623331686293808
+        }
+      },
+      "observation_only": {
+        "overall_miou": 0.5680333919574737,
+        "overall_mvc16": 0.9008116024042986,
+        "overall_mvc8": 0.9021609420720741,
+        "overall_wiou": 0.8259348605316351,
+        "persistent_mvc16": 0.9007196625541812,
+        "persistent_mvc8": 0.9025449183774773,
+        "phase_miou": {
+          "clean": 0.5442824103263645,
+          "persistent": 0.5296264461843108,
+          "transition": 0.561033648065681
+        }
+      },
+      "static": {
+        "overall_miou": 0.5716020866353005,
+        "overall_mvc16": 0.8646232488277104,
+        "overall_mvc8": 0.8818812375462383,
+        "overall_wiou": 0.8206265570317568,
+        "persistent_mvc16": 0.8499226082424878,
+        "persistent_mvc8": 0.8709027514382331,
+        "phase_miou": {
+          "clean": 0.5739135737979411,
+          "persistent": 0.5166237873289674,
+          "transition": 0.5142144932470084
+        }
+      }
+    },
+    "protocol": {
+      "evaluated_frame_count": 2963,
+      "sequence_count": 9,
+      "total_frame_count": 2981
+    },
+    "recovery": {
+      "full_error": 0.2512296882331644,
+      "observation_only": 0.22696294848969606
+    }
+  }
+}

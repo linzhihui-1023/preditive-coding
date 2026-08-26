@@ -1,0 +1,38 @@
+{
+  "base_writeback_checkpoint": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt",
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_persistent_blur_observation_only/semantic_direct_correction_epoch3.pt",
+  "dataset": {
+    "effective_frame_count_per_epoch": 3354,
+    "frame_count": 5027,
+    "labels_used": false,
+    "sequence_count": 12,
+    "split": "train"
+  },
+  "experiment": "kitti_step_persistent_blur_direct_correction_training",
+  "git_revision": "a26673e",
+  "history": [
+    {
+      "epoch": 1,
+      "semantic": 0.06499364528347965,
+      "state": 0.00043682248094315587,
+      "total": 0.06936187008795644,
+      "trained_frame_count": 3354
+    },
+    {
+      "epoch": 2,
+      "semantic": 0.05873764526711518,
+      "state": 0.00038434041517235634,
+      "total": 0.06258104938889321,
+      "trained_frame_count": 3354
+    },
+    {
+      "epoch": 3,
+      "semantic": 0.05670740715848348,
+      "state": 0.00038438249580554756,
+      "total": 0.060551232126300966,
+      "trained_frame_count": 3354
+    }
+  ],
+  "mode": "observation_only",
+  "trainable_parameter_count": 393728
+}

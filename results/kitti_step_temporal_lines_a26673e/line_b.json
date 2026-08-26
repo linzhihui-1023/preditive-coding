@@ -1,0 +1,56 @@
+{
+  "CLEAN_PERFORMANCE_REGRESSION": false,
+  "PERSISTENT_TEMPORAL_ERROR": "PARTIAL-GO",
+  "finite": true,
+  "full_minus_observation_persistent_miou": 0.001390236338201456,
+  "metrics": {
+    "full_error": {
+      "overall_miou": 0.5700630457866577,
+      "overall_mvc16": 0.9057084116595467,
+      "overall_mvc8": 0.9055307092683382,
+      "overall_wiou": 0.8267960400359203,
+      "persistent_mvc16": 0.9055611045252965,
+      "persistent_mvc8": 0.9062362204962104,
+      "phase_miou": {
+        "clean": 0.5784776711687794,
+        "persistent": 0.5310166825225122,
+        "transition": 0.5623331686293808
+      }
+    },
+    "observation_only": {
+      "overall_miou": 0.5680333919574737,
+      "overall_mvc16": 0.9008116024042986,
+      "overall_mvc8": 0.9021609420720741,
+      "overall_wiou": 0.8259348605316351,
+      "persistent_mvc16": 0.9007196625541812,
+      "persistent_mvc8": 0.9025449183774773,
+      "phase_miou": {
+        "clean": 0.5442824103263645,
+        "persistent": 0.5296264461843108,
+        "transition": 0.561033648065681
+      }
+    },
+    "static": {
+      "overall_miou": 0.5716020866353005,
+      "overall_mvc16": 0.8646232488277104,
+      "overall_mvc8": 0.8818812375462383,
+      "overall_wiou": 0.8206265570317568,
+      "persistent_mvc16": 0.8499226082424878,
+      "persistent_mvc8": 0.8709027514382331,
+      "phase_miou": {
+        "clean": 0.5739135737979411,
+        "persistent": 0.5166237873289674,
+        "transition": 0.5142144932470084
+      }
+    }
+  },
+  "protocol": {
+    "evaluated_frame_count": 2963,
+    "sequence_count": 9,
+    "total_frame_count": 2981
+  },
+  "recovery": {
+    "full_error": 0.2512296882331644,
+    "observation_only": 0.22696294848969606
+  }
+}

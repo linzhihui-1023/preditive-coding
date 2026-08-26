@@ -1,0 +1,51 @@
+{
+  "PREDICTOR_TEMPORAL_SIGNAL": "GO",
+  "TEMPORAL_SEMANTIC_CAPABILITY": "NO-GO",
+  "historical_clean_static_miou": 0.6552125562,
+  "metrics": {
+    "persistence": {
+      "miou": 0.6043412403697831,
+      "mvc16": 0.9239870233182813,
+      "mvc8": 0.9209609840868613,
+      "wiou": 0.8264099566929091
+    },
+    "predictor": {
+      "miou": 0.6090962178396351,
+      "mvc16": 0.9252708024979627,
+      "mvc8": 0.9225980296168071,
+      "wiou": 0.8313474657732275
+    },
+    "static": {
+      "miou": 0.6552125561916007,
+      "mvc16": 0.9208394622427848,
+      "mvc8": 0.9224884818633494,
+      "wiou": 0.8575019577939713
+    }
+  },
+  "mvc_window_counts": {
+    "8": 2900,
+    "16": 2828
+  },
+  "parameters_updated": false,
+  "predictor_delta_cosine": {
+    "z1": 0.5368408515390576,
+    "z4": 0.2897994629171222
+  },
+  "protocol": {
+    "evaluated_frame_count": 2963,
+    "sequence_count": 9,
+    "total_frame_count": 2981
+  },
+  "state_mse": {
+    "persistence": {
+      "mean": 0.00025965723186492743,
+      "z1": 0.00043773841133096106,
+      "z4": 8.15760523988938e-05
+    },
+    "predictor": {
+      "mean": 0.00018743635100001776,
+      "z1": 0.00030051980051595085,
+      "z4": 7.435290148408466e-05
+    }
+  }
+}
