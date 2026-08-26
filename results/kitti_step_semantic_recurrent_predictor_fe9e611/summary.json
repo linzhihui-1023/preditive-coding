@@ -1,0 +1,149 @@
+{
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_semantic_recurrent_predictor_92b4e18/best_semantic_recurrent_predictor.pt",
+  "checks": {
+    "mvc_window_counts": {
+      "16": 2828,
+      "8": 2900
+    },
+    "parameters_updated": false
+  },
+  "decisions": {
+    "DYNAMICS": "NO-GO",
+    "NEW_PREDICTOR": "NO-GO",
+    "SEMANTIC_PREDICTION": "GO"
+  },
+  "git_revision": "fe9e611",
+  "improvements": {
+    "new_vs_constant_velocity_mse": -9.921240868296415,
+    "new_vs_strongest_miou": 0.16927432239940693
+  },
+  "metrics": {
+    "constant_velocity": {
+      "miou": 0.1282970488073013,
+      "mvc16": 0.4079076752610141,
+      "mvc8": 0.4589187558970311,
+      "wiou": 0.42155652793189835
+    },
+    "new_predictor": {
+      "miou": 0.29757137120670824,
+      "mvc16": 0.8986084927524678,
+      "mvc8": 0.8842785284557835,
+      "wiou": 0.720156872829621
+    },
+    "old_cnn": {
+      "miou": 0.11599068881105849,
+      "mvc16": 0.46819395449023454,
+      "mvc8": 0.5075491230064588,
+      "wiou": 0.403886249159486
+    },
+    "oracle_current": {
+      "miou": 0.12466970026442155,
+      "mvc16": 0.4792811276134984,
+      "mvc8": 0.5210581001608622,
+      "wiou": 0.42812698747581024
+    },
+    "persistence": {
+      "miou": 0.11911745205216817,
+      "mvc16": 0.47490105628904217,
+      "mvc8": 0.5150084395078883,
+      "wiou": 0.41256599270068695
+    }
+  },
+  "oracle_current_state_decode_miou": 0.12466970026442155,
+  "protocol": {
+    "evaluated_frame_count": 2963,
+    "sequence_count": 9,
+    "split": "val",
+    "total_frame_count": 2981
+  },
+  "state_mse": {
+    "constant_velocity": {
+      "mean": 0.0007083061256664599,
+      "nmse": 2.7278505612157096,
+      "z1": 0.001227735346783429,
+      "z4": 0.00018887690454949085
+    },
+    "new_predictor": {
+      "mean": 0.007735581806893239,
+      "nmse": 29.79151303175432,
+      "z1": 0.007475899036601563,
+      "z4": 0.007995264577184915
+    },
+    "old_cnn": {
+      "mean": 0.00018743635100001776,
+      "nmse": 0.7218606994066753,
+      "z1": 0.00030051980051595085,
+      "z4": 7.435290148408466e-05
+    },
+    "persistence": {
+      "mean": 0.00025965723186492743,
+      "nmse": 1.0,
+      "z1": 0.00043773841133096106,
+      "z4": 8.15760523988938e-05
+    }
+  },
+  "trainable_parameter_count": 3392512,
+  "training": {
+    "config": {
+      "batch_size": 1,
+      "clip_length": 8,
+      "epochs": 3,
+      "labels_used": false,
+      "learning_rate": 0.0001,
+      "optimizer": "AdamW",
+      "seed": 0,
+      "weight_decay": 0.01
+    },
+    "dataset": {
+      "train_clip_count": 624,
+      "val_clip_count": 369
+    },
+    "history": [
+      {
+        "epoch": 1,
+        "train": {
+          "clip_count": 624,
+          "semantic_loss": 156541.08816606572,
+          "state_loss": 0.0058323125681804065,
+          "total_loss": 156541.1464891914
+        },
+        "val": {
+          "clip_count": 369,
+          "semantic_loss": 247092.71106453252,
+          "state_loss": 0.005947167687319966,
+          "total_loss": 247092.7705362094
+        }
+      },
+      {
+        "epoch": 2,
+        "train": {
+          "clip_count": 624,
+          "semantic_loss": 135490.9654259315,
+          "state_loss": 0.004783702271360641,
+          "total_loss": 135491.01326295422
+        },
+        "val": {
+          "clip_count": 369,
+          "semantic_loss": 155848.33611746275,
+          "state_loss": 0.00496995317444286,
+          "total_loss": 155848.38581699447
+        }
+      },
+      {
+        "epoch": 3,
+        "train": {
+          "clip_count": 624,
+          "semantic_loss": 130150.29228640825,
+          "state_loss": 0.004450263109995434,
+          "total_loss": 130150.33678903934
+        },
+        "val": {
+          "clip_count": 369,
+          "semantic_loss": 155933.6541751355,
+          "state_loss": 0.004529292714153606,
+          "total_loss": 155933.69946806264
+        }
+      }
+    ]
+  }
+}
