@@ -71,7 +71,7 @@ def run_epoch(model, predictor, clip_list, optimizer):
             optimizer.step()
         semantic += semantic_loss.detach().item(); state += state_loss.detach().item()
     count = len(clip_list)
-    return {"semantic_loss": semantic / count, "state_loss": state / count, "total_loss": (semantic + 10 * state) / count, "clip_count": count}
+    return {"semantic_loss": semantic / count, "state_loss": state / count, "total_loss": (semantic + STATE_LOSS_WEIGHT * state) / count, "clip_count": count}
 
 
 def main():
