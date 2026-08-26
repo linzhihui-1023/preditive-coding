@@ -34,10 +34,11 @@ class SemanticRecurrentPredictor(nn.Module):
     def initial_state(self):
         return None, None
 
-    def step(self, observation, error, hidden4=None, hidden1=None, persist_z4=False):
+    def step(self, observation, error, hidden4=None, hidden1=None, persist_z4=False, detach_high_to_low=False):
         input4 = torch.cat((observation.z4, error.z4), dim=1)
         hidden4 = self.z4_recurrent(input4, hidden4)
-        hidden4_up = F.interpolate(hidden4, size=observation.z1.shape[-2:], mode="bilinear", align_corners=False)
+        hidden4_for_z1 = hidden4.detach() if detach_high_to_low else hidden4
+        hidden4_up = F.interpolate(hidden4_for_z1, size=observation.z1.shape[-2:], mode="bilinear", align_corners=False)
         input1 = torch.cat((observation.z1, error.z1, hidden4_up), dim=1)
         hidden1 = self.z1_recurrent(input1, hidden1)
         predicted_z4 = observation.z4 if persist_z4 else observation.z4 + self.z4_delta(hidden4)

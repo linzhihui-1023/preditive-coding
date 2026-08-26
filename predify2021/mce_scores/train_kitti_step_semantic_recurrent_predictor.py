@@ -27,12 +27,15 @@ def zero_error(state):
     return UnifiedFeatures(*(torch.zeros_like(value) for value in state.as_tuple()))
 
 
-def prediction_step(model, states, output_size):
+def prediction_step(model, states, output_size, detach_z4=False):
     decoded = model.decode_adapter_deltas(states)
+    if detach_z4:
+        decoded = HostFeature(decoded.c4.detach(), decoded.c1, output_size)
+        return decoded
     return HostFeature(decoded.c4, decoded.c1, output_size)
 
 
-def clip_loss(model, predictor, samples, training, semantic_normalized=True):
+def clip_loss(model, predictor, samples, training, semantic_normalized=True, detach_high_to_low=False):
     images = torch.cat([load_image(sample) for sample in samples], dim=0)
     with torch.no_grad():
         features = model.extract_backbone_features(images)
@@ -45,8 +48,8 @@ def clip_loss(model, predictor, samples, training, semantic_normalized=True):
     for index in range(len(samples) - 1):
         current = UnifiedFeatures(*(value[index:index + 1] for value in states.as_tuple()))
         target = UnifiedFeatures(*(value[index + 1:index + 2] for value in states.as_tuple()))
-        predicted, hidden4, hidden1 = predictor.step(current, error, hidden4, hidden1)
-        predicted_host = prediction_step(model, predicted, tuple(images.shape[-2:]))
+        predicted, hidden4, hidden1 = predictor.step(current, error, hidden4, hidden1, detach_high_to_low=detach_high_to_low)
+        predicted_host = prediction_step(model, predicted, tuple(images.shape[-2:]), detach_z4=detach_high_to_low)
         predicted_logits = model.decode_from_host_feature(predicted_host)
         target_logits = teacher[index + 1:index + 2]
         log_prediction = F.log_softmax(predicted_logits, dim=1)
@@ -64,7 +67,7 @@ def run_epoch(model, predictor, clip_list, optimizer):
     predictor.train(optimizer is not None)
     semantic = state = 0.0
     for samples in clip_list:
-        semantic_loss, state_loss = clip_loss(model, predictor, samples, optimizer is not None)
+        semantic_loss, state_loss = clip_loss(model, predictor, samples, optimizer is not None, detach_high_to_low=True)
         total = semantic_loss + STATE_LOSS_WEIGHT * state_loss
         if optimizer is not None:
             optimizer.zero_grad(set_to_none=True)
