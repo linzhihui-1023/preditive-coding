@@ -8,9 +8,6 @@ from PIL import Image, ImageFilter
 from torch.nn import functional as F
 
 from predify2021.datasets.kitti_step import KITTISTEPSegmentationDataset, pil_rgb_to_unit_tensor
-from predify2021.mce_scores.evaluate_kitti_step_closed_loop_dynamic_correction import (
-    add_frame_noise,
-)
 from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import (
     encode_image,
     load_image,
@@ -46,7 +43,6 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
 
 
 SEED = 0
-SIGMA = 0.10
 EPOCHS = 3
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.01
@@ -120,10 +116,11 @@ def run_epoch(model, predictor, corrections, groups, optimizer, training, mode):
             clean_image = load_image(sample)
             noisy_image = persistent_blur(clean_image, frame_index, len(samples))
             with torch.no_grad():
-                clean_features = model.extract_backbone_features(clean_image)
                 noisy_features = model.extract_backbone_features(noisy_image)
-                clean_state = model.encode_backbone_features(clean_features)
                 observation = model.encode_backbone_features(noisy_features)
+                if frame_index >= len(samples) // 3:
+                    clean_features = model.extract_backbone_features(clean_image)
+                    clean_state = model.encode_backbone_features(clean_features)
             if previous is None:
                 previous = observation
                 continue
@@ -203,7 +200,7 @@ def main():
     output_dir = Path(
         os.environ.get(
             "PREDIFY_KITTI_SEMANTIC_CORRECTION_OUTPUT_DIR",
-            f"/home/lin/predify/experiments/kitti_step_semantic_direct_{mode}",
+            f"/home/lin/predify/experiments/kitti_step_persistent_blur_{mode}",
         )
     )
     static_checkpoint = Path(os.environ.get("PREDIFY_KITTI_STEP_STATIC_CHECKPOINT", STATIC_CHECKPOINT_DEFAULT))
@@ -240,12 +237,12 @@ def main():
             "mode": mode,
             "corrections": {str(index): corrections[position].state_dict() for position, index in enumerate(CORRECTION_INDICES)},
             "epoch": EPOCHS,
-            "config": {"epochs": EPOCHS, "sigma": SIGMA, "seed": SEED, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY},
+            "config": {"epochs": EPOCHS, "blur": "clean_to_[0.4,0.8,1.2,1.6,2.0]_to_2.0", "seed": SEED, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY},
         },
         checkpoint_path,
     )
     summary = {
-        "experiment": "kitti_step_semantic_direct_correction_training",
+        "experiment": "kitti_step_persistent_blur_direct_correction_training",
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
         "mode": mode,
         "checkpoint": str(checkpoint_path),
