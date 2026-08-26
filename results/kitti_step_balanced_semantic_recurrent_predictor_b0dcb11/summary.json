@@ -1,0 +1,20 @@
+{
+  "experiment": "balanced_semantic_recurrent_predictor",
+  "git_revision": "b0dcb11",
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_balanced_semantic_recurrent_predictor_b0dcb11/best_semantic_recurrent_predictor.pt",
+  "trainable_parameter_count": 3392512,
+  "config": {"seed": 0, "clip_length": 8, "batch_size": 1, "epochs": 3, "optimizer": "AdamW", "learning_rate": 0.0001, "weight_decay": 0.01, "state_loss_weight": 1593.4333, "semantic_loss": "per_pixel_mean_kl", "validation_clip_limit": 64, "labels_used": false},
+  "training": {
+    "train_clip_count": 624,
+    "validation_clip_count": 64,
+    "history": [
+      {"epoch": 1, "train_semantic_loss": 0.4666728885, "train_state_mse": 0.0003642695, "train_combined_loss": 1.0471120573, "val_semantic_loss": 0.5258093588, "val_state_mse": 0.0002480633, "val_combined_loss": 0.9210816197},
+      {"epoch": 2, "train_semantic_loss": 0.4370699929, "train_state_mse": 0.0003100543, "train_combined_loss": 0.9311208403, "val_semantic_loss": 0.4867035802, "val_state_mse": 0.0002473540, "val_combined_loss": 0.8808456589},
+      {"epoch": 3, "train_semantic_loss": 0.4344069740, "train_state_mse": 0.0002960938, "train_combined_loss": 0.9062127049, "val_semantic_loss": 0.4827279393, "val_state_mse": 0.0002395499, "val_combined_loss": 0.8644347460}
+    ],
+    "best_epoch": 3
+  },
+  "quick_gate": {"sequence_count": 2, "evaluated_frame_count": 499, "old_cnn_miou": 0.1114309279, "new_predictor_miou": 0.2696656154, "new_predictor_state_mse": 0.0003159114, "new_predictor_nmse": 1.9549572143, "persistence_state_mse": 0.0001615951, "new_vs_constant_velocity_mse_improvement": 0.2771030512, "semantic_gate": true, "dynamics_gate": false, "passed": false},
+  "full_validation_run": false,
+  "decision": "STOP_AT_QUICK_GATE"
+}
