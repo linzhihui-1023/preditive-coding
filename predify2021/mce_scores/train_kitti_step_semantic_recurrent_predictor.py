@@ -18,7 +18,7 @@ WRITEBACK_CHECKPOINT = "/home/lin/predify/experiments/kitti_step_host_conditione
 
 
 def clips(groups, length=8):
-    return [samples[index:index + length] for samples in groups.values() for index in range(len(samples) - length + 1)]
+    return [samples[index:index + length] for samples in groups.values() for index in range(0, len(samples) - length + 1, length)]
 
 
 def zero_error(state):
