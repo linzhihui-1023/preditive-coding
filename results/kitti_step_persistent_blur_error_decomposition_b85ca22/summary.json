@@ -1,0 +1,92 @@
+{
+  "experiment": "persistent_blur_error_decomposition_reliability",
+  "code_commit": "b85ca22",
+  "protocol": {
+    "dataset": "KITTI-STEP",
+    "train_sequences": 12,
+    "train_frames": 5027,
+    "validation_sequences": 9,
+    "validation_frames": 2981,
+    "effective_validation_frames": 2963,
+    "seed": 0,
+    "blur_kernel": 11,
+    "blur_sigma_max": 3.0,
+    "blur_sigma_levels": [0.75, 1.5, 2.25, 3.0],
+    "alpha": 0.207,
+    "beta": 0.793,
+    "predictor_history": "corrupted_observation",
+    "correction_feedback_to_predictor": false
+  },
+  "checkpoints": {
+    "static_host": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "adapter_predictor": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "role_separated_predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt",
+    "corrected_b": "/home/lin/experiments/kitti_step_persistent_blur_corrected_b_6dd4cc6/best_corrected_b_persistent_blur.pt",
+    "error_decomposition_reliability": "/home/lin/experiments/kitti_step_error_decomposition_reliability_blur_6dd4cc6/best_error_decomposition_correction.pt"
+  },
+  "training": {
+    "corrected_b": {
+      "epochs": 3,
+      "best_epoch": 3,
+      "trainable_parameter_count": 393728,
+      "effective_train_frames_per_epoch": 3354,
+      "effective_val_frames_per_epoch": 1990,
+      "val_total_loss": [0.7766169858, 0.7621599681, 0.7545374562]
+    },
+    "error_decomposition_reliability": {
+      "epochs": 3,
+      "best_epoch": 3,
+      "trainable_parameter_count": 886272,
+      "effective_train_frames_per_epoch": 3354,
+      "effective_val_frames_per_epoch": 1990,
+      "val_total_loss": [0.9873652212, 0.9677702977, 0.9592640284],
+      "val_decomposition_loss": [0.6776523028, 0.6552570070, 0.6452478110],
+      "val_reliability_loss": [0.1444099386, 0.1449745293, 0.1455955101]
+    }
+  },
+  "metrics": {
+    "clean_host_mIoU": 0.6552125562,
+    "persistent_blur_corrupted_host_mIoU": 0.4701953800,
+    "corrected_b_persistent_blur_mIoU": 0.4929852801,
+    "error_decomposition_reliability_mIoU": 0.4963800845,
+    "new_minus_corrected_b": 0.0033948043,
+    "new_minus_corrupted_host": 0.0261847044,
+    "state_mse_z1": 0.0003486128,
+    "state_mse_z4": 0.0002393102,
+    "state_mse_mean": 0.0002939615,
+    "mean_abs_delta_z1": 0.0121219288,
+    "mean_abs_delta_z4": 0.0088480949
+  },
+  "error_decomposition": {
+    "corruption_nmse_z1": 0.9668092301,
+    "corruption_nmse_z4": 0.8562463026,
+    "mean_abs_true_corruption_z1": 0.0111315548,
+    "mean_abs_true_corruption_z4": 0.0092390636,
+    "mean_abs_estimated_corruption_z1": 0.0121595121,
+    "mean_abs_estimated_corruption_z4": 0.0083744425,
+    "mean_abs_true_predictor_mismatch_z1": 0.0154145046,
+    "mean_abs_true_predictor_mismatch_z4": 0.0112876054,
+    "mean_abs_estimated_predictor_mismatch_z1": 0.0129524407,
+    "mean_abs_estimated_predictor_mismatch_z4": 0.0093376138
+  },
+  "dynamic_corruption_error": {
+    "mean_abs_z1": 0.0095823201,
+    "mean_abs_z4": 0.0078135705
+  },
+  "reliability": {
+    "mean_z1": 0.4986863127,
+    "mean_z4": 0.4705636885,
+    "l1_z1": 0.2707448088,
+    "l1_z4": 0.2427332702,
+    "l1_mean": 0.2567390395
+  },
+  "gates": {
+    "identity_max_abs_logit_difference": 0.0,
+    "identity_passed": true,
+    "finite": true,
+    "clean_state_used_only_as_target_or_diagnostic": true,
+    "trainable_responsibility_passed": true
+  },
+  "decision": "IMPROVED_OVER_CORRECTED_B"
+}

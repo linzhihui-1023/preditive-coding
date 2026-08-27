@@ -1,0 +1,108 @@
+{
+  "base_checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "best_epoch": 3,
+  "checkpoint": "/home/lin/experiments/kitti_step_persistent_blur_corrected_b_6dd4cc6/best_corrected_b_persistent_blur.pt",
+  "config": {
+    "alpha": 0.207,
+    "beta": 0.793,
+    "blur_kernel_size": 11,
+    "blur_sigma_levels": [
+      0.75,
+      1.5,
+      2.25,
+      3.0
+    ],
+    "blur_sigma_max": 3.0,
+    "epochs": 3,
+    "learning_rate": 0.0001,
+    "optimizer": "AdamW",
+    "relative_state_loss_weight": 0.5,
+    "seed": 0,
+    "semantic_loss": "CrossEntropy(ignore_index=255)",
+    "weight_decay": 0.01
+  },
+  "dataset": {
+    "train_frame_count": 5027,
+    "train_sequence_count": 12,
+    "val_frame_count": 2981,
+    "val_sequence_count": 9
+  },
+  "experiment": "kitti_step_persistent_blur_corrected_b_training",
+  "gates": {
+    "clean_state_used_only_as_target": true,
+    "correction_feedback_to_predictor": false,
+    "correction_gradient_nonzero": true,
+    "identity_max_abs_logit_difference": 0.0,
+    "identity_passed": true,
+    "predictor_history_is_corrupted_observation": true
+  },
+  "git_revision": "6dd4cc6",
+  "history": [
+    {
+      "correction_gradient_nonzero": true,
+      "epoch": 1,
+      "train": {
+        "effective_frame_count": 3354,
+        "raw_state_mse_z1": 0.0003106753613406935,
+        "raw_state_mse_z4": 0.00028912713318945537,
+        "relative_state_loss": 0.6767328837903113,
+        "semantic_cross_entropy": 0.21592133353393775,
+        "total_loss": 0.5542877757822963
+      },
+      "val": {
+        "effective_frame_count": 1990,
+        "raw_state_mse_z1": 0.0003125826012177613,
+        "raw_state_mse_z4": 0.00028091868415361403,
+        "relative_state_loss": 0.6880947543149019,
+        "semantic_cross_entropy": 0.4325696084030609,
+        "total_loss": 0.7766169858488006
+      }
+    },
+    {
+      "correction_gradient_nonzero": true,
+      "epoch": 2,
+      "train": {
+        "effective_frame_count": 3354,
+        "raw_state_mse_z1": 0.0002875879185430991,
+        "raw_state_mse_z4": 0.00026885727887811304,
+        "relative_state_loss": 0.6333156498099056,
+        "semantic_cross_entropy": 0.19940286036525265,
+        "total_loss": 0.5160606855090061
+      },
+      "val": {
+        "effective_frame_count": 1990,
+        "raw_state_mse_z1": 0.00030230900635281764,
+        "raw_state_mse_z4": 0.0002722497514705583,
+        "relative_state_loss": 0.6692217777422325,
+        "semantic_cross_entropy": 0.4275490785813212,
+        "total_loss": 0.7621599680964072
+      }
+    },
+    {
+      "correction_gradient_nonzero": true,
+      "epoch": 3,
+      "train": {
+        "effective_frame_count": 3354,
+        "raw_state_mse_z1": 0.0002799630932134413,
+        "raw_state_mse_z4": 0.00026140301746447665,
+        "relative_state_loss": 0.6173521191432637,
+        "semantic_cross_entropy": 0.19411825723213033,
+        "total_loss": 0.5027943166793637
+      },
+      "val": {
+        "effective_frame_count": 1990,
+        "raw_state_mse_z1": 0.00029649510523351144,
+        "raw_state_mse_z4": 0.0002693420813881661,
+        "relative_state_loss": 0.6601908135054698,
+        "semantic_cross_entropy": 0.42444204879016734,
+        "total_loss": 0.7545374561793841
+      }
+    }
+  ],
+  "trainable_parameter_count": 393728
+}
