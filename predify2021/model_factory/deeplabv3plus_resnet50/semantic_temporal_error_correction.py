@@ -3,7 +3,6 @@ from torch import nn
 from torch.nn import functional as F
 
 from .adapters import UnifiedFeatures
-from .semantic_recurrent_predictor import ConvGRUCell
 
 
 class LocalFeatureCorrelation(nn.Module):
@@ -13,46 +12,58 @@ class LocalFeatureCorrelation(nn.Module):
         super().__init__()
         self.query = nn.Conv2d(channels * 2, projection_channels, 1)
         self.key = nn.Conv2d(channels, projection_channels, 1)
+        self.value = nn.Conv2d(channels, projection_channels, 1)
 
     def forward(self, observation, predicted, semantic_context):
         batch, _, height, width = predicted.shape
         query = F.normalize(self.query(torch.cat((observation, semantic_context), dim=1)), dim=1)
         key = F.normalize(self.key(predicted), dim=1)
+        value_observation = self.value(observation)
+        value_predicted = self.value(predicted)
         key = F.unfold(key, kernel_size=3, padding=1).view(batch, -1, 9, height, width)
-        value = F.unfold(predicted, kernel_size=3, padding=1).view(batch, predicted.shape[1], 9, height, width)
-        scores = (query.unsqueeze(2) * key).sum(dim=1)
+        value_predicted = F.unfold(value_predicted, kernel_size=3, padding=1).view(batch, -1, 9, height, width)
+        scores = (query.unsqueeze(2) * key).sum(dim=1) / (32 ** 0.5)
         weights = torch.softmax(scores, dim=2)
-        return (weights.unsqueeze(1) * value).sum(dim=2)
+        aligned = (weights.unsqueeze(1) * value_predicted).sum(dim=2)
+        residual = value_observation - aligned
+        return residual, weights
 
 
 class SemanticTemporalErrorEncoder(nn.Module):
     def __init__(self, channels=128):
         super().__init__()
         self.error_backbone = nn.Sequential(
-            nn.Conv2d(channels * 2, channels, 1),
+            nn.Conv2d(channels, channels, 1, bias=False),
             nn.GELU(),
-            nn.Conv2d(channels, channels, 3, padding=1),
+            nn.Conv2d(channels, channels, 3, padding=1, bias=False),
         )
-        self.context = nn.Sequential(
-            nn.Conv2d(channels * 4, channels, 1),
-            nn.GELU(),
-            nn.Conv2d(channels, channels, 3, padding=1),
-        )
+        self.alignment_modulation = nn.Conv2d(32, channels, 1)
+        self.semantic_modulation = nn.Conv2d(channels * 3, channels, 1)
 
     def forward(self, error, aligned_error, observation, predicted, semantic_context):
-        error_backbone = self.error_backbone(torch.cat((error, aligned_error), dim=1))
-        return self.context(
-            torch.cat((error_backbone, observation, predicted, semantic_context), dim=1)
+        error_backbone = self.error_backbone(error)
+        alignment_gain = torch.tanh(self.alignment_modulation(aligned_error))
+        base_error = error_backbone * (1.0 + alignment_gain)
+        semantic_gain = torch.tanh(
+            self.semantic_modulation(torch.cat((observation, predicted, semantic_context), dim=1))
         )
+        return base_error * (1.0 + semantic_gain), error_backbone, base_error
 
 
 class ErrorStateConvGRU(nn.Module):
     def __init__(self, channels=128):
         super().__init__()
-        self.cell = ConvGRUCell(channels, channels)
+        self.hidden_channels = channels
+        self.gates = nn.Conv2d(channels * 2, channels * 2, 3, padding=1, bias=False)
+        self.candidate = nn.Conv2d(channels * 2, channels, 3, padding=1, bias=False)
 
     def forward(self, task_error, hidden):
-        return self.cell(task_error, hidden)
+        if hidden is None:
+            hidden = torch.zeros_like(task_error)
+        gates = torch.sigmoid(self.gates(torch.cat((task_error, hidden), dim=1)))
+        update, reset = gates.chunk(2, dim=1)
+        candidate = torch.tanh(self.candidate(torch.cat((task_error, reset * hidden), dim=1)))
+        return (1.0 - update) * hidden + update * candidate
 
 
 class SemanticTemporalDirectCorrection(nn.Module):
@@ -81,14 +92,14 @@ class SemanticTemporalErrorCorrection(nn.Module):
 
     def forward(self, observation, predicted, semantic_context, hidden):
         error = observation - predicted
-        aligned_predicted = self.correlation(observation, predicted, semantic_context)
-        aligned_error = observation - aligned_predicted
-        task_error = self.encoder(
+        aligned_error, attention_weights = self.correlation(observation, predicted, semantic_context)
+        task_error, error_backbone, base_error = self.encoder(
             error, aligned_error, observation, predicted, semantic_context
         )
         hidden = self.error_state(task_error, hidden)
         delta = self.direct(observation, hidden)
-        return error, aligned_error, task_error, hidden, delta
+        entropy = -(attention_weights * (attention_weights.clamp_min(1e-12).log())).sum(dim=2)
+        return error, aligned_error, task_error, hidden, delta, attention_weights.max(dim=2).values.mean(), entropy.mean(), error_backbone, base_error
 
 
 def build_semantic_temporal_corrections():
@@ -98,10 +109,10 @@ def build_semantic_temporal_corrections():
 
 
 def apply_semantic_temporal_corrections(corrections, observation, dynamics, semantic, hidden):
-    error1, aligned_error1, task1, hidden1, delta1 = corrections[0](
+    error1, aligned_error1, task1, hidden1, delta1, max_weight1, entropy1, backbone1, base1 = corrections[0](
         observation.z1, dynamics.z1, semantic.z1, hidden[0]
     )
-    error4, aligned_error4, task4, hidden4, delta4 = corrections[1](
+    error4, aligned_error4, task4, hidden4, delta4, max_weight4, entropy4, backbone4, base4 = corrections[1](
         observation.z4, dynamics.z4, semantic.z4, hidden[1]
     )
     posterior = UnifiedFeatures(
@@ -119,4 +130,12 @@ def apply_semantic_temporal_corrections(corrections, observation, dynamics, sema
         "task_error_z4": task4,
         "delta_z1": delta1,
         "delta_z4": delta4,
+        "max_attention_weight_z1": max_weight1,
+        "max_attention_weight_z4": max_weight4,
+        "attention_entropy_z1": entropy1,
+        "attention_entropy_z4": entropy4,
+        "error_backbone_z1": backbone1,
+        "error_backbone_z4": backbone4,
+        "base_error_z1": base1,
+        "base_error_z4": base4,
     }

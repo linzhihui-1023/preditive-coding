@@ -184,18 +184,37 @@ def gates(model, predictor, corrections, sample):
             (model.decode_from_host_feature(clean_host) - model.decode_from_host_feature(identity_host)).abs().max().item()
         )
         hidden = zero_error_state(observation)
+        zero_dynamics = observation
+        zero_result1 = corrections[0](observation.z1, zero_dynamics.z1, observation.z1, hidden[0])
+        zero_result4 = corrections[1](observation.z4, zero_dynamics.z4, observation.z4, hidden[1])
+        zero_values = (zero_result1, zero_result4)
         zero_delta = max(
-            float(corrections[0].direct(observation.z1, hidden[0]).abs().max().item()),
-            float(corrections[1].direct(observation.z4, hidden[1]).abs().max().item()),
+            float(zero_result1[4].abs().max().item()),
+            float(zero_result4[4].abs().max().item()),
         )
-        error_identity = 0.0
+        error_identity = max(
+            float(zero_result1[0].sub(observation.z1 - zero_dynamics.z1).abs().max().item()),
+            float(zero_result4[0].sub(observation.z4 - zero_dynamics.z4).abs().max().item()),
+        )
+        zero_error_driven = max(
+            float(value[index].abs().max().item())
+            for value in zero_values
+            for index in (2, 3, 7, 8)
+        )
+        local_correlation_finite = all(
+            torch.isfinite(value[index]).all().item()
+            for value in zero_values
+            for index in (1, 5, 6)
+        )
     only_new_parameters = all(parameter.requires_grad for parameter in corrections.parameters())
     frozen_base = not any(parameter.requires_grad for parameter in model.parameters()) and not any(parameter.requires_grad for parameter in predictor.parameters())
     return {
         "prediction_error_identity_max_abs": error_identity,
         "prediction_error_identity_passed": error_identity == 0.0,
         "zero_hidden_delta_max_abs": zero_delta,
-        "error_driven_correction_passed": zero_delta <= 1e-6,
+        "full_zero_error_gate_max_abs": zero_error_driven,
+        "error_driven_correction_passed": zero_error_driven <= 1e-7,
+        "local_correlation_finite": local_correlation_finite,
         "residual_writeback_identity_max_abs_logit": identity_difference,
         "residual_writeback_identity_passed": identity_difference <= 1e-6,
         "only_new_parameters_trainable": only_new_parameters and frozen_base,
