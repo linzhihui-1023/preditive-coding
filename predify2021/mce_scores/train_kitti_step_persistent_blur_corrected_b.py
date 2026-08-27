@@ -98,6 +98,14 @@ def run_epoch(model, predictor, corrections, groups, optimizer, training):
                     )
                     continue
                 dynamic_error = update_dynamic_error(error, dynamic_error)
+                if frame_index < len(samples) // 3:
+                    pending_dynamics, _, *hidden = next_role_prediction(
+                        predictor, observation, error, hidden
+                    )
+                    dynamic_error = type(dynamic_error)(
+                        *(value.detach() for value in dynamic_error.as_tuple())
+                    )
+                    continue
             posterior, _ = direct_posterior(observation, error, dynamic_error, corrections)
             z1, z4, _ = raw_state_mse(posterior, clean_state)
             relative = relative_state_loss(posterior, clean_state, observation)

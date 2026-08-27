@@ -178,6 +178,15 @@ def run_epoch(model, predictor, corrections, groups, optimizer, training, disabl
                 dynamic_input,
                 disable_dynamic,
             )
+            if frame_index < len(samples) // 3:
+                with torch.no_grad():
+                    pending_dynamics, _, *hidden = next_role_prediction(
+                        predictor, observation, error, hidden
+                    )
+                previous_dynamic = UnifiedFeatures(
+                    *(value.detach() for value in dynamic_error.as_tuple())
+                )
+                continue
             posterior, values = decomposition_losses(
                 corrections, observation, error, dynamic_error, clean_state
             )
