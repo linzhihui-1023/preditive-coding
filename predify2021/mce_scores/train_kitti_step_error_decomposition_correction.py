@@ -12,7 +12,6 @@ from predify2021.datasets.kitti_step import (
 )
 from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import sequence_groups
 from predify2021.mce_scores.role_separated_direct_state_correction import (
-    add_frame_noise,
     error_state,
     load_image,
     load_role_components,
@@ -20,6 +19,12 @@ from predify2021.mce_scores.role_separated_direct_state_correction import (
     next_role_prediction,
     relative_state_loss,
     zero_state,
+)
+from predify2021.mce_scores.kitti_step_persistent_blur import (
+    BLUR_KERNEL_SIZE,
+    BLUR_SIGMA_LEVELS,
+    BLUR_SIGMA_MAX,
+    persistent_gaussian_blur,
 )
 from predify2021.mce_scores.role_separated_dynamic_error_correction import (
     residual_writeback_host_feature,
@@ -31,7 +36,6 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
 
 
 SEED = 0
-SIGMA = 0.10
 ALPHA = 0.207
 BETA = 0.793
 EPOCHS = 3
@@ -144,7 +148,7 @@ def run_epoch(model, predictor, corrections, groups, optimizer, training, disabl
         pending_dynamics = None
         for frame_index, sample in enumerate(samples):
             clean_image = load_image(sample)
-            noisy_image = add_frame_noise(clean_image, SIGMA)
+            noisy_image = persistent_gaussian_blur(clean_image, frame_index, len(samples))
             with torch.no_grad():
                 clean_raw = model.extract_backbone_features(clean_image)
                 noisy_raw = model.extract_backbone_features(noisy_image)
@@ -312,7 +316,9 @@ def main():
             "learning_rate": LEARNING_RATE,
             "weight_decay": WEIGHT_DECAY,
             "seed": SEED,
-            "gaussian_noise_sigma": SIGMA,
+            "blur_kernel_size": BLUR_KERNEL_SIZE,
+            "blur_sigma_max": BLUR_SIGMA_MAX,
+            "blur_sigma_levels": BLUR_SIGMA_LEVELS,
             "alpha": ALPHA,
             "beta": BETA,
             "loss": "semantic + 0.5 relative_state + 0.25 decomposition + 0.10 reliability",
