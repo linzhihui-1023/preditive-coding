@@ -105,9 +105,84 @@ class SemanticTemporalErrorCorrection(nn.Module):
         return error, aligned_error, task_error, hidden, delta, attention_weights.max(dim=1).values.mean(), entropy.mean(), error_backbone, base_error, raw_aligned_error
 
 
+class SemanticPrototypeTargetCorrection(nn.Module):
+    """Move the observation toward a frozen semantic prototype mixture."""
+
+    def __init__(self, prototypes, channels=128, classes=19):
+        super().__init__()
+        self.error_correction = SemanticTemporalErrorCorrection(channels)
+        self.register_buffer("prototypes", prototypes.float())
+        self.target_transform = nn.Sequential(
+            nn.Conv2d(channels * 3, channels, 1),
+            nn.GELU(),
+            nn.Conv2d(channels, classes, 1),
+        )
+        self.gate = nn.Conv2d(channels, 1, 1, bias=False)
+
+    def forward(self, observation, predicted, semantic_context, hidden):
+        error = observation - predicted
+        aligned_error, raw_aligned_error, attention_weights = self.error_correction.correlation(
+            observation, predicted, semantic_context
+        )
+        task_error, error_backbone, base_error = self.error_correction.encoder(
+            error, aligned_error, observation, predicted, semantic_context
+        )
+        hidden = self.error_correction.error_state(task_error, hidden)
+        zero_hidden = torch.zeros_like(hidden)
+
+        prototypes = F.normalize(self.prototypes, dim=1)
+        observation_normalized = F.normalize(observation, dim=1)
+        semantic_normalized = F.normalize(semantic_context, dim=1)
+        observation_scores = torch.einsum("bchw,nc->bnhw", observation_normalized, prototypes)
+        semantic_scores = torch.einsum("bchw,nc->bnhw", semantic_normalized, prototypes)
+        prior_logits = 0.5 * (observation_scores + semantic_scores)
+        target_delta = self.target_transform(
+            torch.cat((observation, semantic_context, hidden), dim=1)
+        ) - self.target_transform(
+            torch.cat((observation, semantic_context, zero_hidden), dim=1)
+        )
+        target_logits = prior_logits + target_delta
+        target_probability = torch.softmax(target_logits, dim=1)
+        target_state = torch.einsum("bnhw,nc->bchw", target_probability, self.prototypes)
+        direction = target_state - observation
+        gain = torch.tanh(self.gate(hidden)).square()
+        delta = gain * direction
+        posterior = observation + delta
+        entropy = -(attention_weights * attention_weights.clamp_min(1e-12).log()).sum(dim=1)
+        return {
+            "error": error,
+            "aligned_error": aligned_error,
+            "raw_aligned_error": raw_aligned_error,
+            "task_error": task_error,
+            "hidden": hidden,
+            "delta": delta,
+            "posterior": posterior,
+            "target_logits": target_logits,
+            "target_state": target_state,
+            "gain": gain,
+            "max_attention_weight": attention_weights.max(dim=1).values.mean(),
+            "attention_entropy": entropy.mean(),
+            "error_backbone": error_backbone,
+            "base_error": base_error,
+        }
+
+
 def build_semantic_temporal_corrections():
     return nn.ModuleList(
         [SemanticTemporalErrorCorrection(), SemanticTemporalErrorCorrection()]
+    ).cuda()
+
+
+def build_semantic_prototype_corrections(prototypes_z1=None, prototypes_z4=None):
+    if prototypes_z1 is None:
+        prototypes_z1 = torch.zeros(19, 128)
+    if prototypes_z4 is None:
+        prototypes_z4 = torch.zeros(19, 128)
+    return nn.ModuleList(
+        [
+            SemanticPrototypeTargetCorrection(prototypes_z1),
+            SemanticPrototypeTargetCorrection(prototypes_z4),
+        ]
     ).cuda()
 
 
@@ -143,4 +218,37 @@ def apply_semantic_temporal_corrections(corrections, observation, dynamics, sema
         "base_error_z4": base4,
         "raw_aligned_error_z1": raw_aligned_error1,
         "raw_aligned_error_z4": raw_aligned_error4,
+    }
+
+
+def apply_semantic_prototype_corrections(corrections, observation, dynamics, semantic, hidden):
+    values1 = corrections[0](observation.z1, dynamics.z1, semantic.z1, hidden[0])
+    values4 = corrections[1](observation.z4, dynamics.z4, semantic.z4, hidden[1])
+    posterior = UnifiedFeatures(
+        values1["posterior"],
+        observation.z2,
+        observation.z3,
+        values4["posterior"],
+    )
+    return posterior, (values1["hidden"], values4["hidden"]), {
+        "error_z1": values1["error"],
+        "error_z4": values4["error"],
+        "aligned_error_z1": values1["aligned_error"],
+        "aligned_error_z4": values4["aligned_error"],
+        "raw_aligned_error_z1": values1["raw_aligned_error"],
+        "raw_aligned_error_z4": values4["raw_aligned_error"],
+        "task_error_z1": values1["task_error"],
+        "task_error_z4": values4["task_error"],
+        "delta_z1": values1["delta"],
+        "delta_z4": values4["delta"],
+        "target_logits_z1": values1["target_logits"],
+        "target_logits_z4": values4["target_logits"],
+        "target_state_z1": values1["target_state"],
+        "target_state_z4": values4["target_state"],
+        "gain_z1": values1["gain"],
+        "gain_z4": values4["gain"],
+        "max_attention_weight_z1": values1["max_attention_weight"],
+        "max_attention_weight_z4": values4["max_attention_weight"],
+        "attention_entropy_z1": values1["attention_entropy"],
+        "attention_entropy_z4": values4["attention_entropy"],
     }
