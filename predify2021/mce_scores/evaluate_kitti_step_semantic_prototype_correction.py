@@ -127,7 +127,7 @@ def main():
                     update_confusion_matrix(confusion[name], logits[name].argmax(1).squeeze(0).cpu().to(torch.int64), mask)
                 clean_targets = (clean_state.z1, clean_state.z4)
                 observations = (observation.z1, observation.z4)
-                for index, (target_logits, target_state, clean_target, observed) in enumerate(zip((values["target_logits_z1"], values["target_logits_z4"]), (values["target_state_z1"], values["target_state_z4"]), clean_targets, observations)):
+                for index, (layer, target_logits, target_state, clean_target, observed) in enumerate(zip(("z1", "z4"), (values["target_logits_z1"], values["target_logits_z4"]), (values["target_state_z1"], values["target_state_z4"]), clean_targets, observations)):
                     target_mask = resized_mask(mask.cuda(), target_logits.shape[-2:])
                     valid = target_mask != 255
                     prediction = target_logits.argmax(1).squeeze(0)
@@ -135,8 +135,8 @@ def main():
                     target_count[index] += int(valid.sum().item())
                     target_clean_numerator[index] += float((target_state - clean_target).abs().sum().item())
                     target_clean_denominator[index] += float((observed - clean_target).abs().sum().item())
-                    totals[f"target_accuracy_z{index + 1}"] += float((prediction[valid] == target_mask[valid]).float().mean().item()) if valid.any() else 0.0
-                    totals[f"direction_cosine_z{index + 1}"] += float(layer_cosine(target_state - observed, clean_target - observed).item())
+                    totals[f"target_accuracy_{layer}"] += float((prediction[valid] == target_mask[valid]).float().mean().item()) if valid.any() else 0.0
+                    totals[f"direction_cosine_{layer}"] += float(layer_cosine(target_state - observed, clean_target - observed).item())
                 values_for_total = {
                     "state_mse_z1": F.mse_loss(posterior.z1, clean_state.z1), "state_mse_z4": F.mse_loss(posterior.z4, clean_state.z4),
                     "mean_abs_delta_z1": values["delta_z1"].abs().mean(), "mean_abs_delta_z4": values["delta_z4"].abs().mean(),
@@ -156,9 +156,9 @@ def main():
                 decomposition_dynamic = UnifiedFeatures(*(value.detach() for value in decomposition_dynamic.as_tuple()))
     for key in totals:
         totals[key] /= frame_count
-    for index in (0, 1):
-        totals[f"target_accuracy_z{index + 1}"] = target_correct[index] / target_count[index]
-        totals[f"r_target_clean_z{index + 1}"] = target_clean_numerator[index] / target_clean_denominator[index]
+    for index, layer in enumerate(("z1", "z4")):
+        totals[f"target_accuracy_{layer}"] = target_correct[index] / target_count[index]
+        totals[f"r_target_clean_{layer}"] = target_clean_numerator[index] / target_clean_denominator[index]
     metrics = {name: float(torch.nanmean(compute_iou(value)).item()) for name, value in confusion.items()}
     prototype_gate = all(not buffer.requires_grad for correction in corrections for buffer in correction.buffers())
     zero_hidden = (torch.zeros_like(observation.z1), torch.zeros_like(observation.z4))
