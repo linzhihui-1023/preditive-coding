@@ -1,6 +1,14 @@
 {
   "checkpoint": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
-  "decision": "DYNAMICS_SEMANTIC_ROLE_SEPARATION: NO-GO",
+  "decision": "DYNAMICS_SEMANTIC_ROLE_SEPARATION: GO",
+  "gate": {
+    "dynamics_go": true,
+    "mean_mse_ratio_lt": 1.0,
+    "semantic_go": true,
+    "semantic_miou_gte": 0.24,
+    "z1_mse_ratio_lt": 1.0,
+    "z4_mse_ratio_lte": 1.1
+  },
   "mvc_window_counts": {
     "8": 485,
     "16": 469

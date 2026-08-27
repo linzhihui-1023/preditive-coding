@@ -1,0 +1,57 @@
+{
+  "adapter_checkpoint": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+  "best": {
+    "epoch": 3,
+    "train_correction_state_mse": 0.017387110987157315,
+    "train_frame_count": 5003,
+    "val_correction_state_mse": 0.01734550207679814,
+    "val_frame_count": 2963
+  },
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_role_separated_dynamic_error_correction_76236e2/best_role_separated_dynamic_correction.pt",
+  "config": {
+    "alpha": 0.207,
+    "beta": 0.793,
+    "epochs": 3,
+    "gaussian_noise_sigma": 0.1,
+    "labels_used": false,
+    "learning_rate": 0.0001,
+    "optimizer": "AdamW",
+    "seed": 0,
+    "weight_decay": 0.01
+  },
+  "dataset": {
+    "train_frame_count": 5027,
+    "train_sequence_count": 12,
+    "val_frame_count": 2981,
+    "val_sequence_count": 9
+  },
+  "experiment": "kitti_step_role_separated_dynamic_error_correction_training",
+  "git_revision": "76236e2",
+  "history": [
+    {
+      "epoch": 1,
+      "train_correction_state_mse": 0.017573129894093122,
+      "train_frame_count": 5003,
+      "val_correction_state_mse": 0.017417364278849098,
+      "val_frame_count": 2963
+    },
+    {
+      "epoch": 2,
+      "train_correction_state_mse": 0.017421738840282176,
+      "train_frame_count": 5003,
+      "val_correction_state_mse": 0.017381177320598632,
+      "val_frame_count": 2963
+    },
+    {
+      "epoch": 3,
+      "train_correction_state_mse": 0.017387110987157315,
+      "train_frame_count": 5003,
+      "val_correction_state_mse": 0.01734550207679814,
+      "val_frame_count": 2963
+    }
+  ],
+  "predictor_checkpoint": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+  "static_host_checkpoint": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+  "trainable_parameter_count": 328192,
+  "writeback_checkpoint": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+}

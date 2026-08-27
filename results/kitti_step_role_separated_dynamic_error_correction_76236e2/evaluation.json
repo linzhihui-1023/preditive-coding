@@ -1,0 +1,53 @@
+{
+  "adapter_checkpoint": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+  "config": {
+    "alpha": 0.207,
+    "beta": 0.793,
+    "corrected_layers": [
+      1,
+      4
+    ],
+    "gaussian_noise_sigma": 0.1,
+    "labels_used_for_training": false,
+    "seed": 0
+  },
+  "correction_checkpoint": "/home/lin/predify/experiments/kitti_step_role_separated_dynamic_error_correction_76236e2/best_role_separated_dynamic_correction.pt",
+  "correction_epoch": 3,
+  "dataset": {
+    "effective_frame_count": 2963,
+    "sequence_count": 9,
+    "split": "val",
+    "total_frame_count": 2981
+  },
+  "decision": "PREDICTION_ERROR_DRIVEN_CORRECTION: GO",
+  "diagnostics": {
+    "mean_abs_dynamic_error": {
+      "z1": 0.004291417676429923,
+      "z4": 0.0018893113471430902
+    },
+    "mean_abs_prediction_error": {
+      "z1": 0.014326555827281139,
+      "z4": 0.006032310149635851
+    },
+    "mean_gain": {
+      "z1": 0.17979968760893067,
+      "z4": 0.2290197202644757
+    }
+  },
+  "experiment": "kitti_step_role_separated_dynamic_error_correction",
+  "finite": true,
+  "git_revision": "76236e2",
+  "metrics": {
+    "delta_correction_minus_no_correction": 0.0005648957461055377,
+    "delta_correction_minus_noisy_host": -0.279725403208099,
+    "mIoU_clean_host": 0.6552125561916007,
+    "mIoU_correction": 0.014351087294074959,
+    "mIoU_no_correction": 0.013786191547969421,
+    "mIoU_noisy_host": 0.294076490502174
+  },
+  "predictor_checkpoint": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+  "static_host_checkpoint": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+  "trainable_parameter_count": 328192,
+  "validation_state_mse": 0.01734550207679814,
+  "writeback_checkpoint": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+}

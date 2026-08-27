@@ -1,0 +1,53 @@
+{
+  "experiment": "kitti_step_role_separated_dynamic_error_correction",
+  "code_commit": "76236e2",
+  "role_separation_code_commit": "04bdc57",
+  "role_separation_result_commit": "02d23f9",
+  "role_separation_quick_gate_rerun": {
+    "decision": "DYNAMICS_SEMANTIC_ROLE_SEPARATION: GO",
+    "sequences": ["0002", "0006"],
+    "effective_frames": 499,
+    "gate": {"mean_mse_ratio_lt": 1.0, "z1_mse_ratio_lt": 1.0, "z4_mse_ratio_lte": 1.1, "semantic_miou_gte": 0.24}
+  },
+  "correction_checkpoint": "/home/lin/predify/experiments/kitti_step_role_separated_dynamic_error_correction_76236e2/best_role_separated_dynamic_correction.pt",
+  "correction_trainable_parameter_count": 328192,
+  "best_epoch": 3,
+  "training": {
+    "train_sequences": 12,
+    "train_frames_per_epoch": 5003,
+    "val_sequences": 9,
+    "val_frames_per_epoch": 2963,
+    "epochs": 3,
+    "seed": 0,
+    "sigma": 0.1,
+    "alpha": 0.207,
+    "beta": 0.793,
+    "optimizer": "AdamW",
+    "learning_rate": 0.0001,
+    "weight_decay": 0.01,
+    "labels_used": false,
+    "state_mse": [
+      {"epoch": 1, "train": 0.0175731299, "val": 0.0174173643},
+      {"epoch": 2, "train": 0.0174217388, "val": 0.0173811773},
+      {"epoch": 3, "train": 0.0173871110, "val": 0.0173455021}
+    ]
+  },
+  "validation": {
+    "sequence_count": 9,
+    "total_frame_count": 2981,
+    "effective_frame_count": 2963,
+    "mIoU_clean_host": 0.6552125562,
+    "mIoU_noisy_host": 0.2940764905,
+    "mIoU_no_correction": 0.0137861915,
+    "mIoU_correction": 0.0143510873,
+    "delta_correction_minus_no_correction": 0.0005648957,
+    "delta_correction_minus_noisy_host": -0.2797254032,
+    "validation_state_mse": 0.0173455021,
+    "mean_abs_prediction_error": {"z1": 0.0143265558, "z4": 0.0060323101},
+    "mean_abs_dynamic_error": {"z1": 0.0042914177, "z4": 0.0018893113},
+    "mean_gain": {"z1": 0.1797996876, "z4": 0.2290197203},
+    "finite": true
+  },
+  "decision": "PREDICTION_ERROR_DRIVEN_CORRECTION: GO",
+  "canonical_role_separation_results_consistent": true
+}

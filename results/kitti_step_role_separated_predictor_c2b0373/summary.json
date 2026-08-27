@@ -28,6 +28,14 @@
     "sequences": ["0002", "0006"],
     "effective_frames": 499,
     "decision": "DYNAMICS_SEMANTIC_ROLE_SEPARATION: GO",
+    "gate": {
+      "mean_mse_ratio_lt": 1.0,
+      "z1_mse_ratio_lt": 1.0,
+      "z4_mse_ratio_lte": 1.1,
+      "semantic_miou_gte": 0.24,
+      "dynamics_go": true,
+      "semantic_go": true
+    },
     "role_separated": {
       "z1_mse": 0.0002273804893,
       "z4_mse": 0.0000606454728,
