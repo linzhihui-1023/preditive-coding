@@ -76,7 +76,8 @@ def main():
     names = ("clean_host", "corrupted_host", "corrected_b", "error_decomposition_reliability")
     confusion = {name: torch.zeros((19, 19), dtype=torch.int64) for name in names}
     totals = {key: 0.0 for key in (
-        "state_mse_z1", "state_mse_z4", "corruption_nmse_z1", "corruption_nmse_z4",
+        "state_mse_z1", "state_mse_z4", "corruption_mse_z1", "corruption_mse_z4",
+        "corruption_energy_z1", "corruption_energy_z4",
         "reliability_l1_z1", "reliability_l1_z4", "mean_reliability_z1", "mean_reliability_z4",
         "mean_abs_true_corruption_z1", "mean_abs_true_corruption_z4",
         "mean_abs_estimated_corruption_z1", "mean_abs_estimated_corruption_z4",
@@ -145,8 +146,10 @@ def main():
                 values = {
                     "state_mse_z1": F.mse_loss(posterior.z1, clean_state.z1),
                     "state_mse_z4": F.mse_loss(posterior.z4, clean_state.z4),
-                    "corruption_nmse_z1": F.mse_loss(estimated_corruption_1, c1) / (F.mse_loss(c1, torch.zeros_like(c1)) + 1e-12),
-                    "corruption_nmse_z4": F.mse_loss(estimated_corruption_4, c4) / (F.mse_loss(c4, torch.zeros_like(c4)) + 1e-12),
+                    "corruption_mse_z1": F.mse_loss(estimated_corruption_1, c1),
+                    "corruption_mse_z4": F.mse_loss(estimated_corruption_4, c4),
+                    "corruption_energy_z1": c1.square().mean(),
+                    "corruption_energy_z4": c4.square().mean(),
                     "reliability_l1_z1": F.l1_loss(reliability_1, target_rel_1),
                     "reliability_l1_z4": F.l1_loss(reliability_4, target_rel_4),
                     "mean_reliability_z1": reliability_1.mean(), "mean_reliability_z4": reliability_4.mean(),
@@ -167,6 +170,9 @@ def main():
     metrics = {name: miou(value) for name, value in confusion.items()}
     for key in totals:
         totals[key] /= frame_count
+    for layer in ("z1", "z4"):
+        totals[f"corruption_nmse_{layer}"] = totals[f"corruption_mse_{layer}"] / (totals[f"corruption_energy_{layer}"] + 1e-12)
+        del totals[f"corruption_mse_{layer}"], totals[f"corruption_energy_{layer}"]
     totals["state_mse_mean"] = (totals["state_mse_z1"] + totals["state_mse_z4"]) / 2
     totals["reliability_l1_mean"] = (totals["reliability_l1_z1"] + totals["reliability_l1_z4"]) / 2
     result = {
