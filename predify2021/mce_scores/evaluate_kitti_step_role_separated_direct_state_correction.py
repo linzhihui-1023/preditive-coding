@@ -83,7 +83,10 @@ def main():
     diagnostics = {
         "mean_abs_prediction_error": {"z1": 0.0, "z4": 0.0},
         "mean_abs_dynamic_error": {"z1": 0.0, "z4": 0.0},
-        "mean_abs_delta_z": {"z1": 0.0, "z4": 0.0},
+        "mean_abs_delta_z": {
+            "experiment_a": {"z1": 0.0, "z4": 0.0},
+            "experiment_b": {"z1": 0.0, "z4": 0.0},
+        },
     }
     frame_count = 0
     finite = True
@@ -135,8 +138,8 @@ def main():
                 for name, posterior in posteriors.items():
                     state_mse[name]["z1"] += F.mse_loss(posterior.z1, clean_state.z1).item()
                     state_mse[name]["z4"] += F.mse_loss(posterior.z4, clean_state.z4).item()
-                    diagnostics["mean_abs_delta_z"]["z1"] += (posterior.z1 - observation.z1).abs().mean().item()
-                    diagnostics["mean_abs_delta_z"]["z4"] += (posterior.z4 - observation.z4).abs().mean().item()
+                    diagnostics["mean_abs_delta_z"][name]["z1"] += (posterior.z1 - observation.z1).abs().mean().item()
+                    diagnostics["mean_abs_delta_z"][name]["z4"] += (posterior.z4 - observation.z4).abs().mean().item()
                 diagnostics["mean_abs_prediction_error"]["z1"] += error.z1.abs().mean().item()
                 diagnostics["mean_abs_prediction_error"]["z4"] += error.z4.abs().mean().item()
                 diagnostics["mean_abs_dynamic_error"]["z1"] += dynamic_error.z1.abs().mean().item()
@@ -150,9 +153,12 @@ def main():
         state_mse[name]["z1"] /= frame_count
         state_mse[name]["z4"] /= frame_count
         state_mse[name]["mean"] = (state_mse[name]["z1"] + state_mse[name]["z4"]) / 2
-    for name in diagnostics:
+    for name in ("mean_abs_prediction_error", "mean_abs_dynamic_error"):
         for layer in diagnostics[name]:
             diagnostics[name][layer] /= frame_count
+    for name in diagnostics["mean_abs_delta_z"]:
+        for layer in diagnostics["mean_abs_delta_z"][name]:
+            diagnostics["mean_abs_delta_z"][name][layer] /= frame_count
     identity_pass = identity_max <= 1e-6 and metrics["noisy_host"] == metrics["no_correction"]
     summary = {
         "experiment": "kitti_step_role_separated_direct_state_correction_evaluation",
