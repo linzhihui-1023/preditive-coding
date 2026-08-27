@@ -1,0 +1,99 @@
+{
+  "base_checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "checkpoint": "/home/lin/experiments/kitti_step_semantic_prototype_correction_5bb8461/best_semantic_prototype_correction.pt",
+  "config": {
+    "blur_kernel_size": 11,
+    "blur_sigma_levels": [
+      0.75,
+      1.5,
+      2.25,
+      3.0
+    ],
+    "blur_sigma_max": 3.0,
+    "distillation_weight": 0.5,
+    "seed": 0,
+    "target_weight": 0.25
+  },
+  "dataset": {
+    "effective_frame_count": 2963,
+    "sequence_count": 9,
+    "split": "val",
+    "total_frame_count": 2981
+  },
+  "decision": "NO-GO",
+  "diagnostics": {
+    "direction_cosine_z1": 0.08248165509859343,
+    "direction_cosine_z4": 0.2292584792217048,
+    "mean_abs_aligned_error_z1": 0.05556002780644225,
+    "mean_abs_aligned_error_z4": 0.010435169872614407,
+    "mean_abs_delta_z1": 0.0005482049771247062,
+    "mean_abs_delta_z4": 1.2182595728799555e-09,
+    "mean_abs_dynamic_error_z1": 0.0037172511681632073,
+    "mean_abs_dynamic_error_z4": 0.0020034066609657328,
+    "mean_abs_error_z1": 0.010424480260856805,
+    "mean_abs_error_z4": 0.005500545432439707,
+    "mean_gate_z1": 0.0073966371612384455,
+    "mean_gate_z4": 5.969011615516753e-08,
+    "r_align_z1": 2.646021796125759,
+    "r_align_z4": 2.2697990530856025,
+    "r_target_clean_z1": 4.7352753422052825,
+    "r_target_clean_z4": 1.9489219370611803,
+    "state_mse_z1": 0.0003517819076778058,
+    "state_mse_z4": 0.00025783213864477935,
+    "target_accuracy_z1": 0.44825781554469746,
+    "target_accuracy_z4": 0.41783937357539963
+  },
+  "experiment": "kitti_step_semantic_prototype_correction",
+  "gates": {
+    "finite": {
+      "passed": true
+    },
+    "no_clean_leakage": {
+      "passed": true
+    },
+    "prediction_error_identity": {
+      "max_abs": 0.0,
+      "passed": true
+    },
+    "predictor_isolation": {
+      "passed": true
+    },
+    "prototype_freeze": {
+      "passed": true
+    },
+    "zero_error": {
+      "max_abs": 0.0,
+      "passed": true
+    }
+  },
+  "git_revision": "f390ec9",
+  "metrics": {
+    "mIoU_clean_host": 0.6552125561916007,
+    "mIoU_corrected_b": 0.4929852801324859,
+    "mIoU_corrupted_host": 0.4701953800350464,
+    "mIoU_current_reference": 0.5083952797,
+    "mIoU_error_decomposition_reliability": 0.49638008445998427,
+    "mIoU_new": 0.4701567177238738,
+    "new_minus_corrupted_host": -3.866231117261032e-05,
+    "new_minus_current_reference": -0.038238561976126184,
+    "recovery_ratio": -0.0002089660645338992
+  },
+  "prototype_target_mechanism": "FAIL"
+  ,"code_revision": "f390ec9"
+  ,"training_revision": "5bb8461"
+  ,"prototype_source": "KITTI-STEP train clean images, train labels, and frozen Host features; saved in checkpoint buffers"
+  ,"trainable_parameter_count": 103718
+  ,"prototype_shape": [19, 128]
+  ,"best_epoch": 3
+  ,"checkpoint_selection": "lowest validation total loss"
+  ,"training_history": [
+    {"epoch": 1, "train_total_loss": 1.1631134418804552, "train_segmentation_cross_entropy": 0.36288677047630585, "train_distillation_kl": 0.2552763606639349, "train_target_cross_entropy": 2.6903539669411245, "val_total_loss": 1.172258405942109, "val_segmentation_cross_entropy": 0.45803431222366797, "val_distillation_kl": 0.2603123974885935, "val_target_cross_entropy": 2.336271579507795},
+    {"epoch": 2, "train_total_loss": 1.0715069609142984, "train_segmentation_cross_entropy": 0.36283531951134074, "train_distillation_kl": 0.2552565806706699, "train_target_cross_entropy": 2.3241734031722614, "val_total_loss": 1.131005553751832, "val_segmentation_cross_entropy": 0.45803383925387153, "val_distillation_kl": 0.26033460960439975, "val_target_cross_entropy": 2.1712176416357183},
+    {"epoch": 3, "train_total_loss": 1.0424691611901298, "train_segmentation_cross_entropy": 0.3627908269173142, "train_distillation_kl": 0.25525193163393933, "train_target_cross_entropy": 2.2082094724431363, "val_total_loss": 1.114368370003367, "val_segmentation_cross_entropy": 0.4580475835206941, "val_distillation_kl": 0.2603524485842938, "val_target_cross_entropy": 2.1045782484398314}
+  ]
+}
