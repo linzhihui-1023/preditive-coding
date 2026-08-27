@@ -1,0 +1,88 @@
+{
+  "experiment": "kitti_step_role_separated_direct_state_correction",
+  "code_commit": "703568d",
+  "checkpoints": {
+    "experiment_a": "/home/lin/experiments/kitti_step_role_separated_direct_state_e7b8e0e/best_role_separated_direct_state.pt",
+    "experiment_b": "/home/lin/experiments/kitti_step_role_separated_direct_semantic_state_e7b8e0e/best_role_separated_direct_semantic_state.pt"
+  },
+  "config": {
+    "dataset": "KITTI-STEP",
+    "seed": 0,
+    "gaussian_noise_sigma": 0.1,
+    "alpha": 0.207,
+    "beta": 0.793,
+    "epochs": 3,
+    "optimizer": "AdamW",
+    "learning_rate": 0.0001,
+    "weight_decay": 0.01,
+    "correction_layers": [1, 4],
+    "correction_feedback_to_predictor": false
+  },
+  "protocol": {
+    "train_sequences": 12,
+    "train_frames": 5027,
+    "train_effective_frames_per_epoch": 5003,
+    "val_sequences": 9,
+    "val_frames": 2981,
+    "val_effective_frames": 2963
+  },
+  "gates": {
+    "identity": {
+      "max_abs_logit_difference": 0.0,
+      "noisy_host_equals_no_correction": true,
+      "passed": true
+    },
+    "trainable_responsibility": {
+      "only_correction_parameters_trainable": true,
+      "trainable_parameter_count": 393728,
+      "host_predictor_adapter_writeback_decoder_frozen": true
+    },
+    "temporal_causality": {
+      "history_source": "noisy_observation",
+      "correction_feedback_to_predictor": false,
+      "clean_state_in_predictor_history": false,
+      "labels_used_for_experiment_a": false,
+      "labels_used_for_experiment_b": true
+    },
+    "finite": true
+  },
+  "references": {
+    "mIoU_noisy_host": 0.2940764905,
+    "mIoU_current_observation_centered_gain": 0.2973953001,
+    "mIoU_historical_direct_open_loop": 0.3347162547
+  },
+  "metrics": {
+    "noisy_host_mIoU": 0.294076490502174,
+    "no_correction_mIoU": 0.294076490502174,
+    "experiment_a_mIoU": 0.3171036753009435,
+    "experiment_b_mIoU": 0.3636786247006098,
+    "a_minus_noisy": 0.0230271847987695,
+    "a_minus_historical_direct": -0.0176125793990565,
+    "b_minus_noisy": 0.0696021341984358,
+    "b_minus_historical_direct": 0.0289623700006098,
+    "b_minus_a": 0.0465749493996663
+  },
+  "state_mse": {
+    "experiment_a": {
+      "z1": 0.00021851779131115538,
+      "z4": 0.00035155318100593946,
+      "mean": 0.00028503548615854744
+    },
+    "experiment_b": {
+      "z1": 0.0002599699162314918,
+      "z4": 0.00038385069497564407,
+      "mean": 0.00032191030560356796
+    }
+  },
+  "diagnostics": {
+    "experiment_a": {"mean_abs_delta_z1": 0.013879194863547939, "mean_abs_delta_z4": 0.010788657663530226},
+    "experiment_b": {"mean_abs_delta_z1": 0.014176984507762778, "mean_abs_delta_z4": 0.009605201980563643},
+    "shared_mean_abs_prediction_error": {"z1": 0.014326555827281139, "z4": 0.006032310149635851},
+    "shared_mean_abs_dynamic_error": {"z1": 0.004291417676429923, "z4": 0.0018893113471430902}
+  },
+  "best_epoch": {"experiment_a": 3, "experiment_b": 3},
+  "decision": {
+    "experiment_a": "WEAK / INCOMPLETE",
+    "experiment_b": "SEMANTIC_STATE_DIRECT_CORRECTION: STRONG GO"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "experiment_a": "/home/lin/experiments/kitti_step_role_separated_direct_state_e7b8e0e/best_role_separated_direct_state.pt",
+    "experiment_b": "/home/lin/experiments/kitti_step_role_separated_direct_semantic_state_e7b8e0e/best_role_separated_direct_semantic_state.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "config": {
+    "alpha": 0.207,
+    "beta": 0.793,
+    "corrected_layers": [
+      1,
+      4
+    ],
+    "correction_feedback_to_predictor": false,
+    "gaussian_noise_sigma": 0.1,
+    "seed": 0
+  },
+  "dataset": {
+    "effective_frame_count": 2963,
+    "sequence_count": 9,
+    "split": "val",
+    "total_frame_count": 2981
+  },
+  "decision": "ROLE_SEPARATED_DIRECT_STATE_CORRECTION: GO",
+  "diagnostics": {
+    "mean_abs_delta_z": {
+      "experiment_a": {
+        "z1": 0.013879194863547939,
+        "z4": 0.010788657663530226
+      },
+      "experiment_b": {
+        "z1": 0.014176984507762778,
+        "z4": 0.009605201980563643
+      }
+    },
+    "mean_abs_dynamic_error": {
+      "z1": 0.004291417676429923,
+      "z4": 0.0018893113471430902
+    },
+    "mean_abs_prediction_error": {
+      "z1": 0.014326555827281139,
+      "z4": 0.006032310149635851
+    }
+  },
+  "experiment": "kitti_step_role_separated_direct_state_correction_evaluation",
+  "finite": true,
+  "git_revision": "703568d",
+  "identity_gate": {
+    "max_abs_logit_difference": 0.0,
+    "noisy_host_equals_no_correction": true,
+    "passed": true
+  },
+  "metrics": {
+    "mIoU": {
+      "clean_host": 0.6552125561916007,
+      "experiment_a": 0.3171036753009435,
+      "experiment_b": 0.3636786247006098,
+      "no_correction": 0.294076490502174,
+      "noisy_host": 0.294076490502174
+    },
+    "references": {
+      "current_gain_correction": 0.2973953001,
+      "historical_direct_open_loop": 0.3347162547
+    }
+  },
+  "state_mse": {
+    "experiment_a": {
+      "mean": 0.00028503548615854744,
+      "z1": 0.00021851779131115538,
+      "z4": 0.00035155318100593946
+    },
+    "experiment_b": {
+      "mean": 0.00032191030560356796,
+      "z1": 0.0002599699162314918,
+      "z4": 0.00038385069497564407
+    }
+  },
+  "trainable_parameter_count": 0
+}

@@ -1,0 +1,90 @@
+{
+  "base_checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "best_epoch": 3,
+  "checkpoint": "/home/lin/experiments/kitti_step_role_separated_direct_semantic_state_e7b8e0e/best_role_separated_direct_semantic_state.pt",
+  "config": {
+    "alpha": 0.207,
+    "beta": 0.793,
+    "epochs": 3,
+    "gaussian_noise_sigma": 0.1,
+    "labels_used_for_training": true,
+    "learning_rate": 0.0001,
+    "optimizer": "AdamW",
+    "seed": 0,
+    "weight_decay": 0.01
+  },
+  "dataset": {
+    "train_frame_count": 5027,
+    "train_sequence_count": 12,
+    "val_frame_count": 2981,
+    "val_sequence_count": 9
+  },
+  "experiment": "kitti_step_role_separated_direct_state_correction_training",
+  "git_revision": "e7b8e0e",
+  "history": [
+    {
+      "epoch": 1,
+      "train": {
+        "effective_frame_count": 5003,
+        "raw_state_mse_z1": 0.00029176254835049206,
+        "raw_state_mse_z4": 0.00044819810326911924,
+        "relative_state_loss": 0.740243049423718,
+        "semantic_cross_entropy": 0.39214503735470674,
+        "total_loss": 0.7622665627203344
+      },
+      "val": {
+        "effective_frame_count": 2963,
+        "raw_state_mse_z1": 0.00028049625550667683,
+        "raw_state_mse_z4": 0.00040062642187639033,
+        "relative_state_loss": 0.7790061031448411,
+        "semantic_cross_entropy": 1.1556534182973057,
+        "total_loss": 1.5451564705134484
+      }
+    },
+    {
+      "epoch": 2,
+      "train": {
+        "effective_frame_count": 5003,
+        "raw_state_mse_z1": 0.0002562767080531016,
+        "raw_state_mse_z4": 0.0004169945475083089,
+        "relative_state_loss": 0.674788838299708,
+        "semantic_cross_entropy": 0.3207403537874076,
+        "total_loss": 0.6581347730072551
+      },
+      "val": {
+        "effective_frame_count": 2963,
+        "raw_state_mse_z1": 0.0002678575029537673,
+        "raw_state_mse_z4": 0.000389791633783696,
+        "relative_state_loss": 0.7549703170872604,
+        "semantic_cross_entropy": 1.113263090840474,
+        "total_loss": 1.4907482486196841
+      }
+    },
+    {
+      "epoch": 3,
+      "train": {
+        "effective_frame_count": 5003,
+        "raw_state_mse_z1": 0.000247220517038054,
+        "raw_state_mse_z4": 0.0004050237389507847,
+        "relative_state_loss": 0.654583110431421,
+        "semantic_cross_entropy": 0.30492659743600503,
+        "total_loss": 0.6322181527969147
+      },
+      "val": {
+        "effective_frame_count": 2963,
+        "raw_state_mse_z1": 0.00025999693020949105,
+        "raw_state_mse_z4": 0.0003841484955841942,
+        "relative_state_loss": 0.740839282725254,
+        "semantic_cross_entropy": 1.0917577471155353,
+        "total_loss": 1.4621773878746729
+      }
+    }
+  ],
+  "mode": "semantic_state",
+  "trainable_parameter_count": 393728
+}
