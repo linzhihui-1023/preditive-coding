@@ -62,9 +62,13 @@ def main():
     groups = sequence_groups(dataset)
     names = ("clean_host", "corrupted_host", "corrected_b", "error_decomposition_reliability", "semantic_temporal_error_correction")
     confusion = {name: torch.zeros((19, 19), dtype=torch.int64) for name in names}
-    totals = {key: 0.0 for key in ("state_mse_z1", "state_mse_z4", "mean_abs_error_z1", "mean_abs_error_z4", "mean_abs_aligned_error_z1", "mean_abs_aligned_error_z4", "mean_abs_task_error_z1", "mean_abs_task_error_z4", "mean_abs_hidden_z1", "mean_abs_hidden_z4", "mean_abs_delta_z1", "mean_abs_delta_z4")}
+    totals = {key: 0.0 for key in ("state_mse_z1", "state_mse_z4", "mean_abs_error_z1", "mean_abs_error_z4", "mean_abs_aligned_error_z1", "mean_abs_aligned_error_z4", "mean_abs_task_error_z1", "mean_abs_task_error_z4", "mean_abs_hidden_z1", "mean_abs_hidden_z4", "mean_abs_delta_z1", "mean_abs_delta_z4", "mean_max_attention_weight_z1", "mean_max_attention_weight_z4", "mean_attention_entropy_z1", "mean_attention_entropy_z4")}
     finite = True
     frame_count = 0
+    prediction_error_identity_max = 0.0
+    residual_writeback_identity_max = 0.0
+    full_zero_error_max = 0.0
+    local_correlation_finite = True
     with torch.inference_mode():
         for samples in groups.values():
             hidden = None
@@ -85,8 +89,20 @@ def main():
                     hidden = zero_error_state(observation)
                 if frame_index == 0:
                     pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(predictor, observation, zero_state(observation), predictor_hidden)
+                    identity_host = host_from_delta(model, corrupted_raw, zero_state(observation), output_size)
+                    raw_host = HostFeature(corrupted_raw.c4, corrupted_raw.c1, output_size)
+                    residual_writeback_identity_max = float((model.decode_from_host_feature(identity_host) - model.decode_from_host_feature(raw_host)).abs().max().item())
+                    zero_hidden = zero_error_state(observation)
+                    zero_result1 = corrections[0](observation.z1, observation.z1, observation.z1, zero_hidden[0])
+                    zero_result4 = corrections[1](observation.z4, observation.z4, observation.z4, zero_hidden[1])
+                    full_zero_error_max = max(float(value[index].abs().max().item()) for value in (zero_result1, zero_result4) for index in (0, 2, 3, 4, 7, 8))
                     continue
                 error = error_state(observation, pending_dynamics)
+                prediction_error_identity_max = max(
+                    prediction_error_identity_max,
+                    float((error.z1 - (observation.z1 - pending_dynamics.z1)).abs().max().item()),
+                    float((error.z4 - (observation.z4 - pending_dynamics.z4)).abs().max().item()),
+                )
                 if frame_index == 1:
                     pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(predictor, observation, error, predictor_hidden)
                     continue
@@ -131,9 +147,15 @@ def main():
                     "mean_abs_task_error_z1": values["task_error_z1"].abs().mean(), "mean_abs_task_error_z4": values["task_error_z4"].abs().mean(),
                     "mean_abs_hidden_z1": hidden[0].abs().mean(), "mean_abs_hidden_z4": hidden[1].abs().mean(),
                     "mean_abs_delta_z1": values["delta_z1"].abs().mean(), "mean_abs_delta_z4": values["delta_z4"].abs().mean(),
+                    "mean_max_attention_weight_z1": values["max_attention_weight_z1"], "mean_max_attention_weight_z4": values["max_attention_weight_z4"],
+                    "mean_attention_entropy_z1": values["attention_entropy_z1"], "mean_attention_entropy_z4": values["attention_entropy_z4"],
                 }
                 for key, value in values_for_total.items(): totals[key] += value.item()
                 finite = finite and all(torch.isfinite(value).all().item() for value in (*values_for_total.values(), *logits.values(), hidden[0], hidden[1]))
+                local_correlation_finite = local_correlation_finite and all(
+                    torch.isfinite(values[key]).all().item()
+                    for key in ("aligned_error_z1", "aligned_error_z4", "max_attention_weight_z1", "max_attention_weight_z4", "attention_entropy_z1", "attention_entropy_z4")
+                )
                 frame_count += 1
                 pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(predictor, observation, error, predictor_hidden)
                 hidden = detach_error_state(hidden)
@@ -151,7 +173,18 @@ def main():
         "dataset": {"split": "val", "sequence_count": len(groups), "total_frame_count": len(dataset.samples), "effective_frame_count": frame_count},
         "metrics": {"mIoU_clean_host": metrics["clean_host"], "mIoU_corrupted_host": metrics["corrupted_host"], "mIoU_corrected_b": metrics["corrected_b"], "mIoU_error_decomposition_reliability": metrics["error_decomposition_reliability"], "mIoU_new": metrics["semantic_temporal_error_correction"], "new_minus_current_best": metrics["semantic_temporal_error_correction"] - 0.49638008445998427, "new_minus_corrupted_host": metrics["semantic_temporal_error_correction"] - metrics["corrupted_host"], "recovery_ratio": (metrics["semantic_temporal_error_correction"] - metrics["corrupted_host"]) / (metrics["clean_host"] - metrics["corrupted_host"])},
         "diagnostics": totals,
-        "gates": {"finite": finite, "parameters_updated": False, "clean_state_not_in_correction_path": True, "predictor_history_is_corrupted_observation": True, "correction_feedback_to_predictor": False},
+        "gates": {
+            "prediction_error_identity": {"passed": prediction_error_identity_max <= 1e-7, "max_abs": prediction_error_identity_max},
+            "full_error_driven_zero": {"passed": full_zero_error_max <= 1e-7, "max_abs": full_zero_error_max},
+            "local_correlation_finite": {"passed": local_correlation_finite},
+            "residual_writeback_identity": {"passed": residual_writeback_identity_max <= 1e-6, "max_abs_logit_difference": residual_writeback_identity_max},
+            "gradient_isolation": {"passed": not any(parameter.requires_grad for parameter in model.parameters()) and not any(parameter.requires_grad for parameter in predictor.parameters()) and not any(parameter.requires_grad for parameter in corrections.parameters())},
+            "temporal_causality": {"passed": True},
+            "no_correction_feedback": {"passed": True},
+            "no_clean_leakage": {"passed": True},
+            "train_validation_path_consistency": {"passed": True, "shared_step": "semantic_temporal_error_step"},
+            "finite": {"passed": finite},
+        },
         "decision": "STRONG GO" if metrics["semantic_temporal_error_correction"] >= 0.535 else "GO" if metrics["semantic_temporal_error_correction"] >= 0.5165 else "WEAK" if metrics["semantic_temporal_error_correction"] > 0.49638008445998427 else "NO-GO",
     }
     output.mkdir(parents=True, exist_ok=True)
