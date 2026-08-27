@@ -10,6 +10,7 @@ from predify2021.datasets.kitti_step import KITTISTEPSegmentationDataset, semant
 from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import sequence_groups
 from predify2021.mce_scores.evaluate_kitti_step_static_baseline import compute_iou, update_confusion_matrix
 from predify2021.mce_scores.role_separated_direct_state_correction import (
+    add_frame_noise,
     direct_posterior,
     error_state,
     load_direct_corrections,
