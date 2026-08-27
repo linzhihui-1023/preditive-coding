@@ -28,6 +28,13 @@ from .error_decomposition_correction import (
     ErrorInterpreter,
     ReliabilityGate,
 )
+from .semantic_temporal_error_correction import (
+    ErrorStateConvGRU,
+    LocalFeatureCorrelation,
+    SemanticTemporalDirectCorrection,
+    SemanticTemporalErrorCorrection,
+    SemanticTemporalErrorEncoder,
+)
 
 __all__ = [
     "CITYSCAPES_CHECKPOINT_NAME",
@@ -55,4 +62,9 @@ __all__ = [
     "ErrorInterpreter",
     "ReliabilityGate",
     "RoleSeparatedRecurrentPredictor",
+    "LocalFeatureCorrelation",
+    "SemanticTemporalErrorEncoder",
+    "ErrorStateConvGRU",
+    "SemanticTemporalDirectCorrection",
+    "SemanticTemporalErrorCorrection",
 ]
