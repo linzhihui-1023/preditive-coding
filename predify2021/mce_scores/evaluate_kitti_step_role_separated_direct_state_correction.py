@@ -148,7 +148,7 @@ def main():
     for name in state_mse:
         state_mse[name]["z1"] /= frame_count
         state_mse[name]["z4"] /= frame_count
-        state_mse[name]["mean"] = (state_mse[name]["z1"] + state_mse[name]["z4"])
+        state_mse[name]["mean"] = (state_mse[name]["z1"] + state_mse[name]["z4"]) / 2
     for name in diagnostics:
         for layer in diagnostics[name]:
             diagnostics[name][layer] /= frame_count
