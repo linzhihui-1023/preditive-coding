@@ -1,0 +1,61 @@
+{
+  "adapter_checkpoint": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+  "best": {
+    "epoch": 3,
+    "train_correction_state_mse": 0.0008846922562260858,
+    "train_frame_count": 5003,
+    "val_correction_state_mse": 0.0008052565333470539,
+    "val_frame_count": 2963
+  },
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_observation_centered_prediction_error_correction_ffd8615/best_observation_centered_correction.pt",
+  "config": {
+    "alpha": 0.207,
+    "beta": 0.793,
+    "epochs": 3,
+    "gaussian_noise_sigma": 0.1,
+    "labels_used": false,
+    "learning_rate": 0.0001,
+    "optimizer": "AdamW",
+    "seed": 0,
+    "weight_decay": 0.01
+  },
+  "dataset": {
+    "train_frame_count": 5027,
+    "train_sequence_count": 12,
+    "val_frame_count": 2981,
+    "val_sequence_count": 9
+  },
+  "experiment": "kitti_step_observation_centered_prediction_error_correction_training",
+  "git_revision": "ffd8615",
+  "history": [
+    {
+      "epoch": 1,
+      "train_correction_state_mse": 0.0009053840974803553,
+      "train_frame_count": 5003,
+      "val_correction_state_mse": 0.0008212479682994578,
+      "val_frame_count": 2963
+    },
+    {
+      "epoch": 2,
+      "train_correction_state_mse": 0.0008921366115933716,
+      "train_frame_count": 5003,
+      "val_correction_state_mse": 0.000811501643698225,
+      "val_frame_count": 2963
+    },
+    {
+      "epoch": 3,
+      "train_correction_state_mse": 0.0008846922562260858,
+      "train_frame_count": 5003,
+      "val_correction_state_mse": 0.0008052565333470539,
+      "val_frame_count": 2963
+    }
+  ],
+  "identity_gate": {
+    "max_abs_logit_difference": 0.0,
+    "passed": true
+  },
+  "predictor_checkpoint": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+  "static_host_checkpoint": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+  "trainable_parameter_count": 328192,
+  "writeback_checkpoint": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+}
