@@ -61,7 +61,13 @@ def build_prototypes(model, dataset):
 def load_error_encoders(corrections, checkpoint):
     payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
     for index, correction in enumerate(corrections):
-        correction.error_correction.load_state_dict(payload["corrections"][str(index)], strict=True)
+        prefix = f"{index}."
+        state = {
+            key[len(prefix):]: value
+            for key, value in payload["corrections"].items()
+            if key.startswith(prefix)
+        }
+        correction.error_correction.load_state_dict(state, strict=True)
         correction.error_correction.requires_grad_(False)
         correction.error_correction.eval()
 
