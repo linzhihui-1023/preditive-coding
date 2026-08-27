@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .adapters import UnifiedFeatures
+from .space_time_memory_reader import SpaceTimeMemoryReader
 
 
 class LocalFeatureCorrelation(nn.Module):
@@ -167,6 +168,29 @@ class SemanticPrototypeTargetCorrection(nn.Module):
         }
 
 
+class STCNMemoryCorrection(nn.Module):
+    """Keep the existing error path and use STCN readout only for Z4."""
+
+    def __init__(self, use_memory=False, channels=128):
+        super().__init__()
+        self.base = SemanticTemporalErrorCorrection(channels)
+        self.use_memory = use_memory
+        if use_memory:
+            self.memory_reader = SpaceTimeMemoryReader(channels, 64, 4)
+            self.gate = nn.Conv2d(channels, 1, 1, bias=True)
+
+    def forward(self, observation, predicted, semantic_context, hidden, memory=()):
+        base = self.base(observation, predicted, semantic_context, hidden)
+        base_hidden = base[3]
+        if not self.use_memory:
+            return base[4], base[4], base_hidden, memory, {"delta": base[4], "gain": base_hidden.new_zeros((base_hidden.shape[0], 1, base_hidden.shape[2], base_hidden.shape[3])), "reference": observation, "time_ratios": base_hidden.new_zeros(4), "memory_entropy": base_hidden.new_zeros(()), "memory_normalized_entropy": base_hidden.new_zeros(())}
+        reference, weights, memory_stats = self.memory_reader.read(observation, memory)
+        zero_hidden = torch.zeros_like(base_hidden)
+        gain = (torch.sigmoid(self.gate(base_hidden)) - torch.sigmoid(self.gate(zero_hidden))).abs()
+        delta = gain * (reference - observation)
+        return base[4], observation + delta, base_hidden, self.memory_reader.push(observation, memory), {"delta": delta, "gain": gain, "reference": reference, "weights": weights, "time_ratios": memory_stats["time_ratios"], "memory_entropy": memory_stats["entropy"], "memory_normalized_entropy": memory_stats["normalized_entropy"]}
+
+
 def build_semantic_temporal_corrections():
     return nn.ModuleList(
         [SemanticTemporalErrorCorrection(), SemanticTemporalErrorCorrection()]
@@ -184,6 +208,10 @@ def build_semantic_prototype_corrections(prototypes_z1=None, prototypes_z4=None)
             SemanticPrototypeTargetCorrection(prototypes_z4),
         ]
     ).cuda()
+
+
+def build_stcn_memory_corrections():
+    return nn.ModuleList([STCNMemoryCorrection(False), STCNMemoryCorrection(True)]).cuda()
 
 
 def apply_semantic_temporal_corrections(corrections, observation, dynamics, semantic, hidden):
