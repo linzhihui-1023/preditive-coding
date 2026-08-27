@@ -68,7 +68,7 @@ def main():
     corrections, payload = load_corrections(checkpoint)
     dataset = KITTISTEPSegmentationDataset.from_kitti_step_root(root, "val")
     groups = sequence_groups(dataset)
-    names = ("clean_host", "corrupted_host", "corrected_b", "error_decomposition_reliability", "semantic_temporal_error_correction", "stcn_memory")
+    names = ("clean_host", "corrupted_host", "current_d7", "stcn_memory")
     confusion = {name: torch.zeros((19, 19), dtype=torch.int64) for name in names}
     totals = {key: 0.0 for key in ("memory_reference_ratio_z4", "memory_direction_cosine_z4", "memory_entropy_z4", "memory_normalized_entropy_z4", "mean_gate_z4", "mean_abs_delta_z4", "mean_abs_error_z4", "mean_abs_dynamic_error_z4")}
     time_ratios = torch.zeros(4)
@@ -110,8 +110,7 @@ def main():
                 hosts = {
                     "clean_host": HostFeature(clean_raw.c4, clean_raw.c1, output_size),
                     "corrupted_host": HostFeature(corrupted_raw.c4, corrupted_raw.c1, output_size),
-                    "corrected_b": host_for_state(model, corrupted_raw, observation, legacy_post, output_size),
-                    "semantic_temporal_error_correction": host_for_state(model, corrupted_raw, observation, legacy_post, output_size),
+                    "current_d7": host_for_state(model, corrupted_raw, observation, legacy_post, output_size),
                     "stcn_memory": host_for_state(model, corrupted_raw, observation, stcn_post, output_size),
                 }
                 logits = {name: model.decode_from_host_feature(host) for name, host in hosts.items()}
@@ -155,7 +154,7 @@ def main():
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "config": {"seed": 0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "memory_size": 4, "key_channels": 64, "dynamic_error_alpha": 0.207, "dynamic_error_beta": 0.793},
         "dataset": {"split": "val", "sequence_count": len(groups), "total_frame_count": len(dataset.samples), "effective_frame_count": frame_count},
-        "metrics": {"mIoU_clean_host": metrics["clean_host"], "mIoU_corrupted_host": metrics["corrupted_host"], "mIoU_current_d7": metrics["corrected_b"], "mIoU_stcn_memory": metrics["stcn_memory"], "stcn_minus_current_d7": metrics["stcn_memory"] - OLD_D7_MIOU, "stcn_minus_corrupted_host": metrics["stcn_memory"] - metrics["corrupted_host"], "recovery_ratio": (metrics["stcn_memory"] - metrics["corrupted_host"]) / (metrics["clean_host"] - metrics["corrupted_host"])},
+        "metrics": {"mIoU_clean_host": metrics["clean_host"], "mIoU_corrupted_host": metrics["corrupted_host"], "mIoU_current_d7": metrics["current_d7"], "mIoU_stcn_memory": metrics["stcn_memory"], "stcn_minus_current_d7": metrics["stcn_memory"] - metrics["current_d7"], "stcn_minus_historical_d7": metrics["stcn_memory"] - OLD_D7_MIOU, "stcn_minus_corrupted_host": metrics["stcn_memory"] - metrics["corrupted_host"], "recovery_ratio": (metrics["stcn_memory"] - metrics["corrupted_host"]) / (metrics["clean_host"] - metrics["corrupted_host"])},
         "diagnostics": {**totals, "mean_time_ratios_t_minus_1_to_t_minus_4": time_ratios.tolist()},
         "gates": gate,
         "finite": finite and gate["finite"],
