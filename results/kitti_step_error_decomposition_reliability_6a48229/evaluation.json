@@ -1,0 +1,79 @@
+{
+  "base_checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "checkpoint": "/home/lin/experiments/kitti_step_error_decomposition_reliability_be7753a/best_error_decomposition_correction.pt",
+  "config": {
+    "alpha": 0.207,
+    "beta": 0.793,
+    "clean_state_in_inference_forward": false,
+    "corrected_layers": [
+      1,
+      4
+    ],
+    "correction_feedback_to_predictor": false,
+    "gaussian_noise_sigma": 0.1,
+    "seed": 0
+  },
+  "corruption_gate_passed": true,
+  "dataset": {
+    "effective_frame_count": 2963,
+    "sequence_count": 9,
+    "split": "val",
+    "total_frame_count": 2981
+  },
+  "decision": "ERROR_DECOMPOSITION_RELIABILITY: NO-GO",
+  "experiment": "kitti_step_error_decomposition_reliability_correction_evaluation",
+  "finite": true,
+  "gates": {
+    "corruption_nmse_z1_below_one": true,
+    "corruption_nmse_z4_below_one": true,
+    "finite": true,
+    "identity": true,
+    "no_clean_leakage": true,
+    "noisy_history": true,
+    "train_validation_writeback_consistent": true,
+    "trainable_responsibility": true
+  },
+  "git_revision": "6a48229",
+  "identity_gate": {
+    "max_abs_logit_difference": 0.0,
+    "passed": true
+  },
+  "metrics": {
+    "clean_gap": 0.31412480734777537,
+    "corrected_b_reference_mIoU": 0.3505486298,
+    "mIoU_clean_host": 0.6552125561916007,
+    "mIoU_new": 0.3410877488438253,
+    "mIoU_noisy_host": 0.294076490502174,
+    "new_minus_corrected_b": -0.0094608809561747,
+    "new_minus_noisy_host": 0.04701125834165132
+  },
+  "state_metrics": {
+    "corruption_nmse_z1": 0.5202394462480684,
+    "corruption_nmse_z4": 0.8753486269638018,
+    "mean_abs_delta_z1": 0.01351049279814842,
+    "mean_abs_delta_z4": 0.009407673019461944,
+    "mean_abs_dynamic_corruption_z1": 0.010381612518658956,
+    "mean_abs_dynamic_corruption_z4": 0.008220091766551755,
+    "mean_abs_estimated_corruption_z1": 0.014101903343719685,
+    "mean_abs_estimated_corruption_z4": 0.009028064279395545,
+    "mean_abs_estimated_mismatch_z1": 0.01324878222115119,
+    "mean_abs_estimated_mismatch_z4": 0.009799993833652067,
+    "mean_abs_true_corruption_z1": 0.016374982562176368,
+    "mean_abs_true_corruption_z4": 0.012543623818922567,
+    "mean_abs_true_mismatch_z1": 0.01703452372309317,
+    "mean_abs_true_mismatch_z4": 0.012986806994212908,
+    "mean_reliability_z1": 0.48736834760417097,
+    "mean_reliability_z4": 0.4130734290237407,
+    "reliability_l1_mean": 0.18713381723791533,
+    "reliability_l1_z1": 0.1966160699207156,
+    "reliability_l1_z4": 0.17765156455511505,
+    "state_mse_mean": 0.0003061931479733341,
+    "state_mse_z1": 0.00023572858293594053,
+    "state_mse_z4": 0.0003766577130107277
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "experiment": "kitti_step_error_decomposition_reliability_correction",
+  "code_commit": "6a48229",
+  "checkpoint": "/home/lin/experiments/kitti_step_error_decomposition_reliability_be7753a/best_error_decomposition_correction.pt",
+  "trainable_parameter_count": 886272,
+  "checkpoints": {
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "config": {
+    "seed": 0,
+    "gaussian_noise_sigma": 0.1,
+    "alpha": 0.207,
+    "beta": 0.793,
+    "epochs": 3,
+    "optimizer": "AdamW",
+    "learning_rate": 0.0001,
+    "weight_decay": 0.01,
+    "loss": "semantic + 0.5 relative_state + 0.25 decomposition + 0.10 reliability",
+    "corrected_layers": [1, 4],
+    "labels_used_for_training": true
+  },
+  "dataset": {
+    "split": "val",
+    "train_sequences": 12,
+    "train_frames": 5027,
+    "val_sequences": 9,
+    "val_frames": 2981,
+    "effective_val_frames": 2963
+  },
+  "training": {
+    "best_epoch": 2,
+    "epochs": [
+      {"epoch": 1, "train_total_loss": 0.8120494248, "val_total_loss": 1.3592274551, "train_decomposition_loss": 0.6323374442, "val_decomposition_loss": 0.7102410180, "train_reliability_loss": 0.1738475293, "val_reliability_loss": 0.1791702073, "train_semantic_cross_entropy": 0.2974235031, "val_semantic_cross_entropy": 0.8012938888, "train_effective_frame_count": 5003, "val_effective_frame_count": 2963},
+      {"epoch": 2, "train_total_loss": 0.7401368614, "val_total_loss": 1.3314641226, "train_decomposition_loss": 0.5898483913, "val_decomposition_loss": 0.6972499015, "train_reliability_loss": 0.1822368962, "val_reliability_loss": 0.1871604540, "train_semantic_cross_entropy": 0.2681627564, "val_semantic_cross_entropy": 0.7829751895, "train_effective_frame_count": 5003, "val_effective_frame_count": 2963},
+      {"epoch": 3, "train_total_loss": 0.7184110236, "val_total_loss": 1.3421281912, "train_decomposition_loss": 0.5818261138, "val_decomposition_loss": 0.6882333533, "train_reliability_loss": 0.1940266851, "val_reliability_loss": 0.1966904551, "train_semantic_cross_entropy": 0.2575690291, "val_semantic_cross_entropy": 0.8041750871, "train_effective_frame_count": 5003, "val_effective_frame_count": 2963}
+    ]
+  },
+  "metrics": {
+    "clean_host_mIoU": 0.6552125561916007,
+    "noisy_host_mIoU": 0.294076490502174,
+    "corrected_b_reference_mIoU": 0.3505486298,
+    "new_mIoU": 0.3410877488438253,
+    "new_minus_corrected_b": -0.0094608809561747,
+    "new_minus_noisy_host": 0.04701125834165132,
+    "clean_gap": 0.31412480734777537
+  },
+  "state_metrics": {
+    "z1_state_mse": 0.00023572858293594053,
+    "z4_state_mse": 0.0003766577130107277,
+    "mean_state_mse": 0.0003061931479733341,
+    "mean_abs_delta_z1": 0.01351049279814842,
+    "mean_abs_delta_z4": 0.009407673019461944
+  },
+  "error_decomposition": {
+    "z1_corruption_nmse": 0.5202394462480684,
+    "z4_corruption_nmse": 0.8753486269638018,
+    "z1_mean_abs_true_corruption": 0.016374982562176368,
+    "z4_mean_abs_true_corruption": 0.012543623818922567,
+    "z1_mean_abs_estimated_corruption": 0.014101903343719685,
+    "z4_mean_abs_estimated_corruption": 0.009028064279395545,
+    "z1_mean_abs_true_predictor_mismatch": 0.01703452372309317,
+    "z4_mean_abs_true_predictor_mismatch": 0.012986806994212908,
+    "z1_mean_abs_estimated_predictor_mismatch": 0.01324878222115119,
+    "z4_mean_abs_estimated_predictor_mismatch": 0.009799993833652067
+  },
+  "reliability": {
+    "z1_l1": 0.1966160699207156,
+    "z4_l1": 0.17765156455511505,
+    "mean_l1": 0.18713381723791533,
+    "mean_z1": 0.48736834760417097,
+    "mean_z4": 0.4130734290237407
+  },
+  "dynamic_corruption_error": {
+    "mean_abs_z1": 0.010381612518658956,
+    "mean_abs_z4": 0.008220091766551755
+  },
+  "gates": {
+    "identity": {"passed": true, "max_abs_logit_difference": 0.0},
+    "train_validation_writeback_consistent": true,
+    "trainable_responsibility": true,
+    "noisy_observation_history": true,
+    "correction_feedback_to_predictor": false,
+    "no_clean_state_leakage": true,
+    "z1_corruption_nmse_below_one": true,
+    "z4_corruption_nmse_below_one": true,
+    "finite": true
+  },
+  "dynamic_error_ablation": "not_run_main_model_did_not_reach_GO",
+  "decision": "ERROR_DECOMPOSITION_RELIABILITY: NO-GO"
+}
