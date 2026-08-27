@@ -23,6 +23,11 @@ from .adapters import (
 )
 from .predictors import MultiLayerPredictor, SpatialPredictor
 from .direct_state_correction import DirectStateCorrection
+from .error_decomposition_correction import (
+    ErrorDecompositionCorrection,
+    ErrorInterpreter,
+    ReliabilityGate,
+)
 
 __all__ = [
     "CITYSCAPES_CHECKPOINT_NAME",
@@ -46,5 +51,8 @@ __all__ = [
     "MultiLayerPredictor",
     "SpatialPredictor",
     "DirectStateCorrection",
+    "ErrorDecompositionCorrection",
+    "ErrorInterpreter",
+    "ReliabilityGate",
     "RoleSeparatedRecurrentPredictor",
 ]
