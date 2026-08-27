@@ -27,6 +27,7 @@ BALANCED_CHECKPOINT = "/home/lin/predify/experiments/kitti_step_balanced_semanti
 ISOLATED_CHECKPOINT = "/home/lin/predify/experiments/kitti_step_gradient_isolated_predictor_a2b428a/best_semantic_recurrent_predictor.pt"
 WRITEBACK_CHECKPOINT = "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
 NAMES = ("persistence", "old_cnn", "balanced_new", "gradient_isolated", "role_separated")
+Z4_MSE_RATIO_LIMIT = 1.10
 
 
 def load_predictor(cls, path):
@@ -140,9 +141,11 @@ def main():
     mvc = vc.means()
     metrics = {name: {"predicted_state_miou": float(torch.nanmean(compute_iou(confusion[name])).item()), "wiou": weighted_iou(confusion[name]), "mvc8": mvc[8][name], "mvc16": mvc[16][name]} for name in NAMES}
     role = state_mse["role_separated"]
-    # The task requires Z4 to avoid the Balanced predictor's clear degradation,
-    # not an exact improvement over the already strong persistence baseline.
-    dynamics_go = role["mse_ratio_vs_persistence"]["mean"] < 1.0 and role["z1"] < persistence["z1"] and role["z4"] < state_mse["balanced_new"]["z4"]
+    dynamics_go = (
+        role["mse_ratio_vs_persistence"]["mean"] < 1.0
+        and role["mse_ratio_vs_persistence"]["z1"] < 1.0
+        and role["mse_ratio_vs_persistence"]["z4"] <= Z4_MSE_RATIO_LIMIT
+    )
     semantic_go = metrics["role_separated"]["predicted_state_miou"] >= 0.24
     if dynamics_go and semantic_go:
         decision = "DYNAMICS_SEMANTIC_ROLE_SEPARATION: GO"
@@ -157,6 +160,14 @@ def main():
         "state_mse": state_mse,
         "semantic_diagnostics": metrics,
         "mvc_window_counts": vc.window_counts(),
+        "gate": {
+            "mean_mse_ratio_lt": 1.0,
+            "z1_mse_ratio_lt": 1.0,
+            "z4_mse_ratio_lte": Z4_MSE_RATIO_LIMIT,
+            "semantic_miou_gte": 0.24,
+            "dynamics_go": dynamics_go,
+            "semantic_go": semantic_go,
+        },
         "decision": decision,
     }
     output.mkdir(parents=True, exist_ok=True)
