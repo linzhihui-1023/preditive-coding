@@ -2,7 +2,7 @@
   "experiment": "gradient_isolated_semantic_recurrent_predictor",
   "code_commit": "a2b428a",
   "training_checkpoint": "/home/lin/predify/experiments/kitti_step_gradient_isolated_predictor_a2b428a/best_semantic_recurrent_predictor.pt",
-  "training": {"train_clips": 624, "validation_clips": 64, "epochs": 3, "best_epoch": 2, "lambda_state": 1593.4333, "seed": 0, "labels_used": false},
+  "training": {"train_clips": 624, "validation_clips": 64, "epochs": 3, "best_epoch": 3, "lambda_state": 1593.4333, "seed": 0, "labels_used": false},
   "gradient_gate": {"z4_semantic_grad_norm": 0.0, "z4_state_grad_norm": 0.0248287674, "z1_semantic_grad_norm": 18.1128234863, "passed": true},
   "checkpoint": "/home/lin/predify/experiments/kitti_step_gradient_isolated_predictor_a2b428a/best_semantic_recurrent_predictor.pt",
   "gradient_isolation": {

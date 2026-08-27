@@ -1,6 +1,6 @@
 # Gradient-Isolated Semantic Recurrent Predictor
 
-The fixed `lambda_state=1593.4333` objective was trained from random initialization for 3 epochs. Semantic gradient was stopped only on the `h4 -> Z1` path and on the semantic-loss decode of predicted Z4; the Z4 state-loss path remained differentiable.
+The fixed `lambda_state=1593.4333` objective was trained from random initialization for 3 epochs; epoch 3 was selected as best by validation combined loss (`1.4784920`). Semantic gradient was stopped only on the `h4 -> Z1` path and on the semantic-loss decode of predicted Z4; the Z4 state-loss path remained differentiable.
 
 The one-clip gradient Gate passed: Z4 semantic gradient `0`, Z4 state gradient `0.0248288`, and Z1 semantic gradient `18.1128`.
 
