@@ -179,7 +179,7 @@ def gates(model, predictor, corrections, sample):
         observation = model.encode_backbone_features(raw)
         zero = zero_state(observation)
         clean_host = HostFeature(raw.c4, raw.c1, tuple(image.shape[-2:]))
-        identity_host = corrected_host_feature(model, raw, observation, zero, tuple(image.shape[-2:]))
+        identity_host = corrected_host_feature(model, raw, observation, observation, tuple(image.shape[-2:]))
         identity_difference = float(
             (model.decode_from_host_feature(clean_host) - model.decode_from_host_feature(identity_host)).abs().max().item()
         )
