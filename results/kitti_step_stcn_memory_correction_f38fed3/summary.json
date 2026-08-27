@@ -1,0 +1,85 @@
+{
+  "base_checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "checkpoint": "/home/lin/experiments/kitti_step_stcn_memory_correction_d5436f9/best_stcn_memory_correction.pt",
+  "config": {
+    "blur_kernel_size": 11,
+    "blur_sigma_levels": [
+      0.75,
+      1.5,
+      2.25,
+      3.0
+    ],
+    "blur_sigma_max": 3.0,
+    "dynamic_error_alpha": 0.207,
+    "dynamic_error_beta": 0.793,
+    "key_channels": 64,
+    "memory_size": 4,
+    "seed": 0
+  },
+  "dataset": {
+    "effective_frame_count": 2963,
+    "sequence_count": 9,
+    "split": "val",
+    "total_frame_count": 2981
+  },
+  "decision": "MEMORY REFERENCE NO-GO",
+  "diagnostics": {
+    "mean_abs_delta_z4": 0.023571309849882007,
+    "mean_abs_dynamic_error_z4": 0.0020034066609657328,
+    "mean_abs_error_z4": 0.005500545432439707,
+    "mean_gate_z4": 0.014503626225558947,
+    "mean_time_ratios_t_minus_1_to_t_minus_4": [
+      0.25081607699394226,
+      0.24866455793380737,
+      0.2484518587589264,
+      0.24902796745300293
+    ],
+    "memory_direction_cosine_z4": 0.06627305966939927,
+    "memory_entropy_z4": 10.174054269085774,
+    "memory_normalized_entropy_z4": 0.9900464152428816,
+    "memory_reference_ratio_z4": 4.81228129987808e+17
+  },
+  "experiment": "kitti_step_stcn_memory_correction",
+  "training": {
+    "best_epoch": 3,
+    "trainable_parameter_count": 24705,
+    "epochs": [
+      {"epoch": 1, "train_total_loss": 1.4157742010, "val_total_loss": 1.3050093659, "train_cross_entropy": 0.9768082256, "val_cross_entropy": 0.9257607656, "train_distillation_kl": 0.8779319502, "val_distillation_kl": 0.7584972003, "train_effective_frame_count": 5003, "val_effective_frame_count": 2963},
+      {"epoch": 2, "train_total_loss": 0.9466383441, "val_total_loss": 1.1193906535, "train_cross_entropy": 0.6616598819, "val_cross_entropy": 0.8025955449, "train_distillation_kl": 0.5699569222, "val_distillation_kl": 0.6335902170, "train_effective_frame_count": 5003, "val_effective_frame_count": 2963},
+      {"epoch": 3, "train_total_loss": 0.8178338158, "val_total_loss": 0.9921311349, "train_cross_entropy": 0.5758919020, "val_cross_entropy": 0.7192022018, "train_distillation_kl": 0.4838838268, "val_distillation_kl": 0.5458578673, "train_effective_frame_count": 5003, "val_effective_frame_count": 2963}
+    ],
+    "finite": true
+  },
+  "finite": true,
+  "gates": {
+    "finite": true,
+    "frozen_base": true,
+    "memory_causality": true,
+    "new_trainable_parameters_present": false,
+    "no_optimizer": true,
+    "observation_only_memory": true,
+    "prediction_error_identity": 0.0,
+    "prediction_error_identity_passed": true,
+    "predictor_isolation": true,
+    "residual_writeback_identity": 0.0,
+    "residual_writeback_identity_passed": true,
+    "zero_error_identity": 0.0,
+    "zero_error_passed": true
+  },
+  "git_revision": "f38fed3",
+  "metrics": {
+    "mIoU_clean_host": 0.6552125561916007,
+    "mIoU_corrupted_host": 0.4701953800350464,
+    "mIoU_current_d7": 0.5083952796901833,
+    "mIoU_stcn_memory": 0.34836621233780124,
+    "recovery_ratio": -0.6584749061036264,
+    "stcn_minus_corrupted_host": -0.12182916769724517,
+    "stcn_minus_current_d7": -0.16002906735238204,
+    "stcn_minus_historical_d7": -0.16002906736219874
+  }
+}
