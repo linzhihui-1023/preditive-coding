@@ -109,6 +109,11 @@
     "go": 0.5165,
     "weak_lower": 0.4963800845
   },
+  "local_correlation_sanity": {
+    "uniform_max_weight_reference": 0.1111111111111111,
+    "uniform_entropy_reference": 2.1972245773362196,
+    "status": "NEAR_UNIFORM_CORRELATION"
+  },
   "training": {
     "best_epoch": 3,
     "checkpoint": "/home/lin/experiments/kitti_step_semantic_temporal_error_correction_a4682e4/best_semantic_temporal_error_correction.pt",
