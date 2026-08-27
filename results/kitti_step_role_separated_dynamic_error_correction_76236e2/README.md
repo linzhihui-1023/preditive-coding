@@ -13,4 +13,4 @@ Correction training updated only the two Z1/Z4 `ErrorGainCorrection` modules (`3
 | No Correction (Semantic Prior) | 0.0137861915 |
 | Dynamic Error Correction | 0.0143510873 |
 
-The primary paired difference is `+0.0005648957`, so the result is `PREDICTION_ERROR_DRIVEN_CORRECTION: GO`. This is a positive but small contribution; correction remains far below the noisy static reference under the fixed host-conditioned writeback path.
+This historical result is invalid as a mechanism conclusion: the Semantic Diagnostic State used as the no-correction prior collapsed from the noisy host mIoU `0.2940765` to `0.0137862` after writeback. Its former `PREDICTION_ERROR_DRIVEN_CORRECTION: GO` label is retained as `historical_decision` only and superseded by `INVALID_BASELINE_COLLAPSE: NO-GO`. The checkpoint and raw metrics remain preserved for reproducibility.

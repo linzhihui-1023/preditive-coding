@@ -48,6 +48,9 @@
     "mean_gain": {"z1": 0.1797996876, "z4": 0.2290197203},
     "finite": true
   },
-  "decision": "PREDICTION_ERROR_DRIVEN_CORRECTION: GO",
+  "historical_decision": "PREDICTION_ERROR_DRIVEN_CORRECTION: GO",
+  "decision": "INVALID_BASELINE_COLLAPSE: NO-GO",
+  "baseline_collapse": true,
+  "formal_conclusion": "The previous Semantic Diagnostic State baseline collapsed under writeback and cannot support a Correction mechanism conclusion.",
   "canonical_role_separation_results_consistent": true
 }
