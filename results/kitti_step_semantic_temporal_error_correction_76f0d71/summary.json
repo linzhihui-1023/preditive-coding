@@ -1,0 +1,71 @@
+{
+  "experiment": "semantic_temporal_error_correction",
+  "code_commit": "76f0d71",
+  "checkpoint": "/home/lin/experiments/kitti_step_semantic_temporal_error_correction_76f0d71/best_semantic_temporal_error_correction.pt",
+  "trainable_parameter_count": 2943360,
+  "protocol": {
+    "dataset": "KITTI-STEP",
+    "validation_sequences": 9,
+    "validation_total_frames": 2981,
+    "validation_effective_frames": 2963,
+    "blur_kernel_size": 11,
+    "blur_sigma_levels": [0.75, 1.5, 2.25, 3.0],
+    "seed": 0,
+    "truncated_bptt": 4,
+    "epochs": 3,
+    "optimizer": "AdamW",
+    "learning_rate": 0.0001,
+    "weight_decay": 0.01
+  },
+  "training": {
+    "best_epoch": 3,
+    "train_effective_frames_per_epoch": 5003,
+    "val_effective_frames_per_epoch": 2963,
+    "history": [
+      {"epoch": 1, "train_segmentation_cross_entropy": 0.2257476383, "train_distillation_kl": 0.1303550718, "train_total_loss": 0.2909251741, "val_segmentation_cross_entropy": 0.4163216634, "val_distillation_kl": 0.2157721070, "val_total_loss": 0.5242077169},
+      {"epoch": 2, "train_segmentation_cross_entropy": 0.2195663463, "train_distillation_kl": 0.1243596797, "train_total_loss": 0.2817461861, "val_segmentation_cross_entropy": 0.4233644090, "val_distillation_kl": 0.2198894813, "val_total_loss": 0.5333091497},
+      {"epoch": 3, "train_segmentation_cross_entropy": 0.2150924053, "train_distillation_kl": 0.1228075523, "train_total_loss": 0.2764961816, "val_segmentation_cross_entropy": 0.4144761493, "val_distillation_kl": 0.2185128369, "val_total_loss": 0.5237325679}
+    ]
+  },
+  "metrics": {
+    "mIoU_clean_host": 0.6552125562,
+    "mIoU_persistent_blur_corrupted_host": 0.4701953800,
+    "mIoU_corrected_b": 0.4929852801,
+    "mIoU_error_decomposition_reliability": 0.4963800845,
+    "mIoU_new": 0.4862367775,
+    "new_minus_current_best": -0.0101433069,
+    "new_minus_corrupted_host": 0.0160413975,
+    "recovery_ratio": 0.0867022069
+  },
+  "diagnostics": {
+    "state_mse_z1": 0.0004438675,
+    "state_mse_z4": 0.0003781619,
+    "mean_abs_error_z1": 0.0104244803,
+    "mean_abs_error_z4": 0.0055005454,
+    "mean_abs_aligned_error_z1": 0.3085240269,
+    "mean_abs_aligned_error_z4": 0.1755748507,
+    "mean_abs_task_error_z1": 0.0315450521,
+    "mean_abs_task_error_z4": 0.0191797525,
+    "mean_abs_hidden_z1": 0.0326104596,
+    "mean_abs_hidden_z4": 0.0248869560,
+    "mean_abs_delta_z1": 0.0094573552,
+    "mean_abs_delta_z4": 0.0089056887
+  },
+  "gates": {
+    "prediction_error_identity": {"passed": true, "max_abs": 0.0},
+    "error_driven_correction": {"passed": true, "zero_hidden_delta_max_abs": 0.0},
+    "residual_writeback_identity": {"passed": true, "max_abs_logit_difference": 0.0},
+    "gradient_isolation": {"passed": true, "only_new_correction_parameters_trainable": true},
+    "temporal_causality": {"passed": true},
+    "no_correction_feedback": {"passed": true, "predictor_history": "corrupted_observation"},
+    "no_clean_leakage": {"passed": true},
+    "train_validation_path_consistency": {"passed": true, "shared_step": "semantic_temporal_error_step"},
+    "finite": {"passed": true}
+  },
+  "decision": "NO-GO",
+  "conclusions": {
+    "task_relevant_error_path": "did not exceed the current Error Decomposition + Reliability mIoU",
+    "current_best_comparison": "new model is 0.0101433069 below the current best",
+    "next_step": "stop this structure; do not add a parameter sweep"
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "base_checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "best_epoch": 3,
+  "checkpoint": "/home/lin/experiments/kitti_step_semantic_temporal_error_correction_76f0d71/best_semantic_temporal_error_correction.pt",
+  "config": {
+    "blur_kernel_size": 11,
+    "blur_sigma_levels": [
+      0.75,
+      1.5,
+      2.25,
+      3.0
+    ],
+    "blur_sigma_max": 3.0,
+    "distillation_weight": 0.5,
+    "epochs": 3,
+    "labels_used_for_training": true,
+    "learning_rate": 0.0001,
+    "optimizer": "AdamW",
+    "seed": 0,
+    "temperature": 1.0,
+    "truncated_bptt": 4,
+    "weight_decay": 0.01
+  },
+  "dataset": {
+    "train_frame_count": 5027,
+    "train_sequence_count": 12,
+    "val_frame_count": 2981,
+    "val_sequence_count": 9
+  },
+  "experiment": "kitti_step_semantic_temporal_error_correction_training",
+  "gates": {
+    "error_driven_correction_passed": true,
+    "only_new_parameters_trainable": true,
+    "prediction_error_identity_max_abs": 0.0,
+    "prediction_error_identity_passed": true,
+    "residual_writeback_identity_max_abs_logit": 0.0,
+    "residual_writeback_identity_passed": true,
+    "zero_hidden_delta_max_abs": 0.0
+  },
+  "git_revision": "76f0d71",
+  "history": [
+    {
+      "epoch": 1,
+      "train": {
+        "distillation_kl": 0.1303550717912203,
+        "effective_frame_count": 5003,
+        "finite": true,
+        "segmentation_cross_entropy": 0.2257476382593429,
+        "total_loss": 0.29092517411758867
+      },
+      "val": {
+        "distillation_kl": 0.21577210698909793,
+        "effective_frame_count": 2963,
+        "finite": true,
+        "segmentation_cross_entropy": 0.4163216634418085,
+        "total_loss": 0.524207716973054
+      }
+    },
+    {
+      "epoch": 2,
+      "train": {
+        "distillation_kl": 0.12435967971665216,
+        "effective_frame_count": 5003,
+        "finite": true,
+        "segmentation_cross_entropy": 0.2195663463258038,
+        "total_loss": 0.2817461861090114
+      },
+      "val": {
+        "distillation_kl": 0.21988948127377428,
+        "effective_frame_count": 2963,
+        "finite": true,
+        "segmentation_cross_entropy": 0.4233644090120128,
+        "total_loss": 0.533309149711449
+      }
+    },
+    {
+      "epoch": 3,
+      "train": {
+        "distillation_kl": 0.12280755234423275,
+        "effective_frame_count": 5003,
+        "finite": true,
+        "segmentation_cross_entropy": 0.21509240530379148,
+        "total_loss": 0.27649618159773326
+      },
+      "val": {
+        "distillation_kl": 0.21851283685378717,
+        "effective_frame_count": 2963,
+        "finite": true,
+        "segmentation_cross_entropy": 0.4144761493449029,
+        "total_loss": 0.5237325678931231
+      }
+    }
+  ],
+  "trainable_parameter_count": 2943360
+}
