@@ -10,12 +10,11 @@ from predify2021.datasets.kitti_step import KITTISTEPSegmentationDataset, semant
 from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import sequence_groups
 from predify2021.mce_scores.evaluate_kitti_step_static_baseline import compute_iou, update_confusion_matrix
 from predify2021.mce_scores.kitti_step_persistent_blur import BLUR_KERNEL_SIZE, BLUR_SIGMA_LEVELS, BLUR_SIGMA_MAX, persistent_gaussian_blur
-from predify2021.mce_scores.role_separated_direct_state_correction import error_state, load_direct_corrections, load_image, load_role_components, make_paths, next_role_prediction, zero_state
+from predify2021.mce_scores.role_separated_direct_state_correction import direct_posterior, error_state, load_direct_corrections, load_image, load_role_components, make_paths, next_role_prediction, zero_state
 from predify2021.mce_scores.role_separated_dynamic_error_correction import residual_writeback_host_feature, update_dynamic_error
 from predify2021.model_factory.deeplabv3plus_resnet50 import HostFeature, UnifiedFeatures
 from predify2021.model_factory.deeplabv3plus_resnet50.semantic_temporal_error_correction import build_semantic_prototype_corrections
 from predify2021.mce_scores.train_kitti_step_error_decomposition_correction import build_corrections, corruption_dynamic_error
-from predify2021.mce_scores.role_separated_dynamic_error_correction import correction_posterior
 
 
 CORRECTED_B_CHECKPOINT = "/home/lin/experiments/kitti_step_persistent_blur_corrected_b_6dd4cc6/best_corrected_b_persistent_blur.pt"
@@ -108,7 +107,7 @@ def main():
                     continue
                 posterior, next_hidden, values = corrections_forward(corrections, observation, pending_dynamics, pending_semantic, hidden)
                 legacy_dynamic = update_dynamic_error(error, legacy_dynamic)
-                corrected_b_posterior, _ = correction_posterior(pending_semantic, error, legacy_dynamic, corrected_b)
+                corrected_b_posterior, _ = direct_posterior(observation, error, legacy_dynamic, corrected_b)
                 estimated_corruption = UnifiedFeatures(decomposition[0].interpreter(observation.z1, error.z1), torch.zeros_like(error.z2), torch.zeros_like(error.z3), decomposition[1].interpreter(observation.z4, error.z4))
                 decomposition_dynamic = corruption_dynamic_error(estimated_corruption, decomposition_dynamic, decomposition_payload.get("disable_dynamic", False))
                 _, _, _, decomposition_delta1 = decomposition[0](observation.z1, error.z1, decomposition_dynamic.z1)
