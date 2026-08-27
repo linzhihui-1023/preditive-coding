@@ -23,7 +23,7 @@ class LocalFeatureCorrelation(nn.Module):
         key = F.unfold(key, kernel_size=3, padding=1).view(batch, -1, 9, height, width)
         value_predicted = F.unfold(value_predicted, kernel_size=3, padding=1).view(batch, -1, 9, height, width)
         scores = (query.unsqueeze(2) * key).sum(dim=1) / (32 ** 0.5)
-        weights = torch.softmax(scores, dim=2)
+        weights = torch.softmax(scores, dim=1)
         aligned = (weights.unsqueeze(1) * value_predicted).sum(dim=2)
         residual = value_observation - aligned
         return residual, weights
@@ -98,8 +98,8 @@ class SemanticTemporalErrorCorrection(nn.Module):
         )
         hidden = self.error_state(task_error, hidden)
         delta = self.direct(observation, hidden)
-        entropy = -(attention_weights * (attention_weights.clamp_min(1e-12).log())).sum(dim=2)
-        return error, aligned_error, task_error, hidden, delta, attention_weights.max(dim=2).values.mean(), entropy.mean(), error_backbone, base_error
+        entropy = -(attention_weights * (attention_weights.clamp_min(1e-12).log())).sum(dim=1)
+        return error, aligned_error, task_error, hidden, delta, attention_weights.max(dim=1).values.mean(), entropy.mean(), error_backbone, base_error
 
 
 def build_semantic_temporal_corrections():
