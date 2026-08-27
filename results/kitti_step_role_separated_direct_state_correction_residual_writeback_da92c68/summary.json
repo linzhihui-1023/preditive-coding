@@ -1,0 +1,68 @@
+{
+  "experiment": "kitti_step_role_separated_direct_state_correction_residual_writeback",
+  "code_commit": "da92c68",
+  "checkpoint": "/home/lin/experiments/kitti_step_role_separated_direct_semantic_state_residual_writeback_da92c68/best_role_separated_direct_semantic_state.pt",
+  "config": {
+    "epochs": 3,
+    "optimizer": "AdamW",
+    "learning_rate": 0.0001,
+    "weight_decay": 0.01,
+    "seed": 0,
+    "gaussian_noise_sigma": 0.1,
+    "alpha": 0.207,
+    "beta": 0.793,
+    "semantic_loss": "CrossEntropy(ignore_index=255)",
+    "relative_state_loss_weight": 0.5,
+    "labels_used_for_training": true
+  },
+  "dataset": {
+    "train_sequences": 12,
+    "train_frames": 5027,
+    "train_effective_frames_per_epoch": 5003,
+    "val_sequences": 9,
+    "val_frames": 2981,
+    "val_effective_frames": 2963
+  },
+  "trainable_parameter_count": 393728,
+  "training": {
+    "best_epoch": 3,
+    "epochs": [
+      {"epoch": 1, "train_semantic_ce": 0.2886078811, "train_relative_state_loss": 0.6771590953, "train_total_loss": 0.6271874284, "train_z1_mse": 0.0002656013, "train_z4_mse": 0.0004101937, "val_semantic_ce": 0.7380475499, "val_relative_state_loss": 0.7430833556, "val_total_loss": 1.1095892261, "val_z1_mse": 0.0002601083, "val_z4_mse": 0.0003840474},
+      {"epoch": 2, "train_semantic_ce": 0.2573831241, "train_relative_state_loss": 0.6217286091, "train_total_loss": 0.5682474286, "train_z1_mse": 0.0002372528, "train_z4_mse": 0.0003823486, "val_semantic_ce": 0.7435697864, "val_relative_state_loss": 0.7181105470, "val_total_loss": 1.1026250594, "val_z1_mse": 0.0002515780, "val_z4_mse": 0.0003698443},
+      {"epoch": 3, "train_semantic_ce": 0.2481881036, "train_relative_state_loss": 0.6045770622, "train_total_loss": 0.5504766346, "train_z1_mse": 0.0002296706, "train_z4_mse": 0.0003727943, "val_semantic_ce": 0.7358753492, "val_relative_state_loss": 0.7038428146, "val_total_loss": 1.0877967570, "val_z1_mse": 0.0002469430, "val_z4_mse": 0.0003618898}
+    ],
+    "correction_gradient_nonzero": true
+  },
+  "gates": {
+    "training_validation_path_max_abs_logit_difference": 0.0,
+    "training_validation_path_consistent": true,
+    "identity_max_abs_logit_difference": 0.0,
+    "identity_passed": true,
+    "trainable_responsibility_passed": true,
+    "temporal_causality_passed": true,
+    "finite": true
+  },
+  "references": {
+    "old_experiment_b_mIoU": 0.3636786247,
+    "noisy_host_mIoU": 0.2940764905,
+    "historical_direct_mIoU": 0.3347162547
+  },
+  "validation": {
+    "clean_host_mIoU": 0.6552125562,
+    "noisy_host_mIoU": 0.2940764905,
+    "no_correction_mIoU": 0.2940764905,
+    "corrected_experiment_b_mIoU": 0.3505486298,
+    "corrected_b_minus_old_b": -0.0131299949,
+    "corrected_b_minus_historical_direct": 0.0158323751,
+    "z1_mse": 0.0002469045,
+    "z4_mse": 0.0003617827,
+    "mean_mse": 0.0003043436,
+    "mean_abs_delta_z1": 0.0141398226,
+    "mean_abs_delta_z4": 0.0098229117,
+    "mean_abs_prediction_error_z1": 0.0143265558,
+    "mean_abs_prediction_error_z4": 0.0060323101,
+    "mean_abs_dynamic_error_z1": 0.0042914177,
+    "mean_abs_dynamic_error_z4": 0.0018893113
+  },
+  "decision": "SEMANTIC_STATE_RESIDUAL_WRITEBACK: GO"
+}
