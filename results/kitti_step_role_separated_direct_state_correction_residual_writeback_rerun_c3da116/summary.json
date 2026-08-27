@@ -1,0 +1,131 @@
+{
+  "experiment": "kitti_step_role_separated_direct_state_correction_residual_writeback_rerun",
+  "code_commit": "c3da116",
+  "training_code_commit": "da92c68",
+  "checkpoint": "/home/lin/experiments/kitti_step_role_separated_direct_semantic_state_residual_writeback_rerun_da92c68/best_role_separated_direct_semantic_state.pt",
+  "config": {
+    "epochs": 3,
+    "optimizer": "AdamW",
+    "learning_rate": 0.0001,
+    "weight_decay": 0.01,
+    "seed": 0,
+    "gaussian_noise_sigma": 0.1,
+    "alpha": 0.207,
+    "beta": 0.793,
+    "semantic_loss": "CrossEntropy(ignore_index=255)",
+    "relative_state_loss_weight": 0.5,
+    "labels_used_for_training": true
+  },
+  "dataset": {
+    "split": "KITTI-STEP",
+    "train_sequences": 12,
+    "train_frames": 5027,
+    "train_effective_frames_per_epoch": 5003,
+    "val_sequences": 9,
+    "val_frames": 2981,
+    "val_effective_frames": 2963
+  },
+  "trainable_parameter_count": 393728,
+  "gates": {
+    "training_validation_path_consistent": true,
+    "training_validation_path_max_abs_logit_difference": 0.0,
+    "identity_passed": true,
+    "identity_max_abs_logit_difference": 0.0,
+    "correction_gradient_nonzero": true,
+    "finite": true,
+    "host_adapter_predictor_writeback_frozen": true,
+    "correction_feedback_to_predictor": false
+  },
+  "training": {
+    "best_epoch": 3,
+    "history": [
+      {
+        "epoch": 1,
+        "train": {
+          "effective_frame_count": 5003,
+          "semantic_cross_entropy": 0.2882670451,
+          "relative_state_loss": 0.6769160333,
+          "total_loss": 0.6267250618,
+          "raw_state_mse_z1": 0.0002654390,
+          "raw_state_mse_z4": 0.0004099945315
+        },
+        "val": {
+          "effective_frame_count": 2963,
+          "semantic_cross_entropy": 0.7377901871,
+          "relative_state_loss": 0.7437535659,
+          "total_loss": 1.1096669707,
+          "raw_state_mse_z1": 0.0002601308,
+          "raw_state_mse_z4": 0.0003845481
+        }
+      },
+      {
+        "epoch": 2,
+        "train": {
+          "effective_frame_count": 5003,
+          "semantic_cross_entropy": 0.2579579478,
+          "relative_state_loss": 0.6221433059,
+          "total_loss": 0.5690296009,
+          "raw_state_mse_z1": 0.0002374596,
+          "raw_state_mse_z4": 0.0003827059
+        },
+        "val": {
+          "effective_frame_count": 2963,
+          "semantic_cross_entropy": 0.7416840326,
+          "relative_state_loss": 0.7159073627,
+          "total_loss": 1.0996377136,
+          "raw_state_mse_z1": 0.0002512567,
+          "raw_state_mse_z4": 0.0003686109
+        }
+      },
+      {
+        "epoch": 3,
+        "train": {
+          "effective_frame_count": 5003,
+          "semantic_cross_entropy": 0.2486494228,
+          "relative_state_loss": 0.6047446283,
+          "total_loss": 0.5510217370,
+          "raw_state_mse_z1": 0.0002300882,
+          "raw_state_mse_z4": 0.0003725716
+        },
+        "val": {
+          "effective_frame_count": 2963,
+          "semantic_cross_entropy": 0.7406059795,
+          "relative_state_loss": 0.7036857340,
+          "total_loss": 1.0924488466,
+          "raw_state_mse_z1": 0.0002468421,
+          "raw_state_mse_z4": 0.0003619787
+        }
+      }
+    ]
+  },
+  "validation": {
+    "clean_host_mIoU": 0.6552125562,
+    "noisy_host_mIoU": 0.2940764905,
+    "no_correction_mIoU": 0.2940764905,
+    "corrected_b_mIoU": 0.3503165758,
+    "corrected_b_minus_current_reference": -0.0002320539772,
+    "corrected_b_minus_historical_direct": 0.0156003211,
+    "state_mse": {
+      "z1": 0.0002468032,
+      "z4": 0.0003618692,
+      "mean": 0.0003043362
+    },
+    "diagnostics": {
+      "mean_abs_prediction_error_z1": 0.0143265558,
+      "mean_abs_prediction_error_z4": 0.0060323101,
+      "mean_abs_dynamic_error_z1": 0.0042914177,
+      "mean_abs_dynamic_error_z4": 0.0018893113,
+      "mean_abs_delta_z1": 0.0141403064,
+      "mean_abs_delta_z4": 0.0098124453
+    },
+    "finite": true,
+    "effective_frame_count": 2963
+  },
+  "references": {
+    "current_corrected_b_mIoU": 0.3505486298,
+    "historical_old_corrected_b_mIoU": 0.3636786247,
+    "historical_direct_open_loop_mIoU": 0.3347162547
+  },
+  "decision": "SEMANTIC_STATE_RESIDUAL_WRITEBACK: GO",
+  "improved_over_historical_old_b": false
+}
