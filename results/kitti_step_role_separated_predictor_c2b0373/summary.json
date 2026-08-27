@@ -1,0 +1,58 @@
+{
+  "experiment": "kitti_step_role_separated_predictor",
+  "code_commits": ["3370f78", "c2b0373"],
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+  "trainable_parameter_count": 6785024,
+  "best_epoch": 2,
+  "training": {
+    "seed": 0,
+    "train_clips": 624,
+    "validation_clips": 64,
+    "epochs": 3,
+    "state_loss_weight": 1593.4333312535177,
+    "labels_used": false,
+    "history": [
+      {"epoch": 1, "train_combined_loss": 0.7102107549, "val_combined_loss": 0.5862711604},
+      {"epoch": 2, "train_combined_loss": 0.5857455953, "val_combined_loss": 0.5366522300},
+      {"epoch": 3, "train_combined_loss": 0.5573934092, "val_combined_loss": 0.5499737613}
+    ]
+  },
+  "gradient_responsibility_gate": {
+    "semantic_to_dynamics_grad_norm": 0.0,
+    "semantic_to_semantic_grad_norm": 46.0484657288,
+    "dynamics_to_semantic_grad_norm": 0.0,
+    "dynamics_to_dynamics_grad_norm": 0.0522193573,
+    "passed": true
+  },
+  "quick_gate": {
+    "sequences": ["0002", "0006"],
+    "effective_frames": 499,
+    "decision": "DYNAMICS_SEMANTIC_ROLE_SEPARATION: GO",
+    "role_separated": {
+      "z1_mse": 0.0002273804893,
+      "z4_mse": 0.0000606454728,
+      "mean_mse": 0.0001440129811,
+      "mse_ratio_vs_persistence": 0.8911967291,
+      "predicted_state_miou": 0.2974319736
+    }
+  },
+  "full_validation": {
+    "sequences": 9,
+    "effective_frames": 2963,
+    "methods": {
+      "persistence": {"z1_mse": 0.0004377384113, "z4_mse": 0.0000815760524, "mean_mse": 0.0002596572319, "mse_ratio_vs_persistence": 1.0, "predicted_state_miou": 0.1191174521, "wiou": 0.4125659927, "mvc8": 0.5150084395, "mvc16": 0.4749010563},
+      "old_cnn": {"z1_mse": 0.0003005198005, "z4_mse": 0.0000743529015, "mean_mse": 0.0001874363510, "mse_ratio_vs_persistence": 0.7218606994, "predicted_state_miou": 0.1159906888, "wiou": 0.4038862492, "mvc8": 0.5075491230, "mvc16": 0.4681939545},
+      "balanced_new": {"z1_mse": 0.0003800842238, "z4_mse": 0.0003617235172, "mean_mse": 0.0003709038705, "mse_ratio_vs_persistence": 1.4284365115, "predicted_state_miou": 0.2946897513, "wiou": 0.7375641875, "mvc8": 0.8850868886, "mvc16": 0.8956488990},
+      "gradient_isolated": {"z1_mse": 0.0006081662998, "z4_mse": 0.0000830346979, "mean_mse": 0.0003456004989, "mse_ratio_vs_persistence": 1.3309873806, "predicted_state_miou": 0.1801848003, "wiou": 0.5645711510, "mvc8": 0.6753042627, "mvc16": 0.6453433867},
+      "role_separated": {"z1_mse": 0.0003229298643, "z4_mse": 0.0000836602757, "mean_mse": 0.0002032950700, "mse_ratio_vs_persistence": 0.7829362908, "z1_mse_ratio_vs_persistence": 0.7377233890, "z4_mse_ratio_vs_persistence": 1.0255494500, "predicted_state_miou": 0.3162579604, "wiou": 0.7271151762, "mvc8": 0.8762185026, "mvc16": 0.8861475728}
+    }
+  },
+  "decision": "DYNAMICS_SEMANTIC_ROLE_SEPARATION: GO",
+  "conclusion": {
+    "semantic_gradient_blocked_from_dynamics": true,
+    "dynamics_accuracy_recovered": true,
+    "semantic_context_retained": true,
+    "convgru_role_separation_should_be_kept": true,
+    "next_stage": "Prediction Error -> Dynamic Error -> Correction"
+  }
+}

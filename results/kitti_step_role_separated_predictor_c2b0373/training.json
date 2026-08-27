@@ -1,0 +1,84 @@
+{
+  "best": {
+    "epoch": 2,
+    "train": {
+      "clip_count": 624,
+      "combined_loss": 0.5857455953458446,
+      "dynamics_loss": 0.0001900705161775617,
+      "semantic_loss": 0.28288089957995677
+    },
+    "val": {
+      "clip_count": 64,
+      "combined_loss": 0.5366522299842726,
+      "dynamics_loss": 0.0001414794382412765,
+      "semantic_loss": 0.311214177403599
+    }
+  },
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+  "config": {
+    "batch_size": 1,
+    "clip_length": 8,
+    "epochs": 3,
+    "labels_used": false,
+    "learning_rate": 0.0001,
+    "optimizer": "AdamW",
+    "seed": 0,
+    "state_loss_weight": 1593.4333312535177,
+    "validation_clip_limit": 64,
+    "weight_decay": 0.01
+  },
+  "dataset": {
+    "train_clip_count": 624,
+    "validation_clip_count": 64
+  },
+  "experiment": "kitti_step_role_separated_predictor",
+  "git_revision": "3370f78",
+  "history": [
+    {
+      "epoch": 1,
+      "train": {
+        "clip_count": 624,
+        "combined_loss": 0.710210754870939,
+        "dynamics_loss": 0.00023312991905372773,
+        "semantic_loss": 0.3387337713382947
+      },
+      "val": {
+        "clip_count": 64,
+        "combined_loss": 0.586271160418957,
+        "dynamics_loss": 0.00014442745680298685,
+        "semantic_loss": 0.3561356368009001
+      }
+    },
+    {
+      "epoch": 2,
+      "train": {
+        "clip_count": 624,
+        "combined_loss": 0.5857455953458446,
+        "dynamics_loss": 0.0001900705161775617,
+        "semantic_loss": 0.28288089957995677
+      },
+      "val": {
+        "clip_count": 64,
+        "combined_loss": 0.5366522299842726,
+        "dynamics_loss": 0.0001414794382412765,
+        "semantic_loss": 0.311214177403599
+      }
+    },
+    {
+      "epoch": 3,
+      "train": {
+        "clip_count": 624,
+        "combined_loss": 0.5573934091782904,
+        "dynamics_loss": 0.00018165891930703554,
+        "semantic_loss": 0.26793203223496675
+      },
+      "val": {
+        "clip_count": 64,
+        "combined_loss": 0.5499737612722326,
+        "dynamics_loss": 0.00014052919715368262,
+        "semantic_loss": 0.32604985451325774
+      }
+    }
+  ],
+  "trainable_parameter_count": 6785024
+}

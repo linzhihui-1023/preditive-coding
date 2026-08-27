@@ -1,0 +1,7 @@
+{
+  "dynamics_to_dynamics_grad_norm": 0.05221935734152794,
+  "dynamics_to_semantic_grad_norm": 0.0,
+  "passed": true,
+  "semantic_to_dynamics_grad_norm": 0.0,
+  "semantic_to_semantic_grad_norm": 46.048465728759766
+}
