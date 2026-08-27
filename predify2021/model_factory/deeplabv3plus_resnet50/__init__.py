@@ -10,7 +10,7 @@ from .host import (
     HostFeature,
     build_deeplabv3plus_resnet50_host,
 )
-from .semantic_recurrent_predictor import SemanticRecurrentPredictor
+from .semantic_recurrent_predictor import RoleSeparatedRecurrentPredictor, SemanticRecurrentPredictor
 from .adapters import (
     HOST_STAGE_CHANNELS,
     UNIFIED_STATE_CHANNELS,
@@ -46,4 +46,5 @@ __all__ = [
     "MultiLayerPredictor",
     "SpatialPredictor",
     "DirectStateCorrection",
+    "RoleSeparatedRecurrentPredictor",
 ]

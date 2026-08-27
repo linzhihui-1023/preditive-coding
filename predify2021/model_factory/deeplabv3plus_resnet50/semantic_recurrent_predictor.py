@@ -49,3 +49,46 @@ class SemanticRecurrentPredictor(nn.Module):
             predicted_z4,
         )
         return predicted, hidden4, hidden1
+
+
+class RoleSeparatedRecurrentPredictor(nn.Module):
+    """Causal dynamics predictions and semantic diagnostic context use separate states."""
+
+    def __init__(self, hidden_channels=128):
+        super().__init__()
+        self.z4_dyn_recurrent = ConvGRUCell(2 * UNIFIED_STATE_CHANNELS, hidden_channels)
+        self.z4_sem_recurrent = ConvGRUCell(2 * UNIFIED_STATE_CHANNELS, hidden_channels)
+        self.z1_dyn_recurrent = ConvGRUCell(3 * UNIFIED_STATE_CHANNELS, hidden_channels)
+        self.z1_sem_recurrent = ConvGRUCell(3 * UNIFIED_STATE_CHANNELS, hidden_channels)
+        self.z4_dyn_delta = nn.Conv2d(hidden_channels, UNIFIED_STATE_CHANNELS, 3, padding=1)
+        self.z4_sem_delta = nn.Conv2d(hidden_channels, UNIFIED_STATE_CHANNELS, 3, padding=1)
+        self.z1_dyn_delta = nn.Conv2d(hidden_channels, UNIFIED_STATE_CHANNELS, 3, padding=1)
+        self.z1_sem_delta = nn.Conv2d(hidden_channels, UNIFIED_STATE_CHANNELS, 3, padding=1)
+
+    def initial_state(self):
+        return None, None, None, None
+
+    def step(self, observation, dynamics_error, h4_dyn=None, h4_sem=None, h1_dyn=None, h1_sem=None):
+        dyn4_input = torch.cat((observation.z4, dynamics_error.z4), dim=1)
+        h4_dyn = self.z4_dyn_recurrent(dyn4_input, h4_dyn)
+        sem4_input = torch.cat((observation.z4, dynamics_error.z4.detach()), dim=1)
+        h4_sem = self.z4_sem_recurrent(sem4_input, h4_sem)
+        h4_dyn_up = F.interpolate(h4_dyn, size=observation.z1.shape[-2:], mode="bilinear", align_corners=False)
+        dyn1_input = torch.cat((observation.z1, dynamics_error.z1, h4_dyn_up), dim=1)
+        h1_dyn = self.z1_dyn_recurrent(dyn1_input, h1_dyn)
+        h4_sem_up = F.interpolate(h4_sem, size=observation.z1.shape[-2:], mode="bilinear", align_corners=False)
+        sem1_input = torch.cat((observation.z1, dynamics_error.z1.detach(), h4_sem_up), dim=1)
+        h1_sem = self.z1_sem_recurrent(sem1_input, h1_sem)
+        dynamics_prediction = UnifiedFeatures(
+            observation.z1 + self.z1_dyn_delta(h1_dyn),
+            observation.z2,
+            observation.z3,
+            observation.z4 + self.z4_dyn_delta(h4_dyn),
+        )
+        semantic_diagnostic = UnifiedFeatures(
+            dynamics_prediction.z1.detach() - self.z1_sem_delta(h1_sem),
+            dynamics_prediction.z2.detach(),
+            dynamics_prediction.z3.detach(),
+            dynamics_prediction.z4.detach() - self.z4_sem_delta(h4_sem),
+        )
+        return dynamics_prediction, semantic_diagnostic, h4_dyn, h4_sem, h1_dyn, h1_sem
