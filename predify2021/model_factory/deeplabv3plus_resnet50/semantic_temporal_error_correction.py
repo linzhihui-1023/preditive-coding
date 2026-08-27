@@ -6,27 +6,30 @@ from .adapters import UnifiedFeatures
 
 
 class LocalFeatureCorrelation(nn.Module):
-    """Use a 3x3 local correspondence to explain prediction error."""
+    """Use a 3x3 local cross-attention to explain prediction error."""
 
     def __init__(self, channels=128, projection_channels=32):
         super().__init__()
+        self.projection_channels = projection_channels
+        self.scale = projection_channels ** -0.5
         self.query = nn.Conv2d(channels * 2, projection_channels, 1)
         self.key = nn.Conv2d(channels, projection_channels, 1)
         self.value = nn.Conv2d(channels, projection_channels, 1)
 
     def forward(self, observation, predicted, semantic_context):
         batch, _, height, width = predicted.shape
-        query = F.normalize(self.query(torch.cat((observation, semantic_context), dim=1)), dim=1)
-        key = F.normalize(self.key(predicted), dim=1)
+        query = self.query(torch.cat((observation, semantic_context), dim=1))
+        key = self.key(predicted)
         value_observation = self.value(observation)
         value_predicted = self.value(predicted)
-        key = F.unfold(key, kernel_size=3, padding=1).view(batch, -1, 9, height, width)
-        value_predicted = F.unfold(value_predicted, kernel_size=3, padding=1).view(batch, -1, 9, height, width)
-        scores = (query.unsqueeze(2) * key).sum(dim=1) / (32 ** 0.5)
+        key = F.unfold(key, kernel_size=3, padding=1).view(batch, self.projection_channels, 9, height, width)
+        value_predicted = F.unfold(value_predicted, kernel_size=3, padding=1).view(batch, self.projection_channels, 9, height, width)
+        scores = (query.unsqueeze(2) * key).sum(dim=1) * self.scale
         weights = torch.softmax(scores, dim=1)
         aligned = (weights.unsqueeze(1) * value_predicted).sum(dim=2)
         residual = value_observation - aligned
-        return residual, weights
+        raw_residual = value_observation - value_predicted[:, :, 4]
+        return residual, raw_residual, weights
 
 
 class SemanticTemporalErrorEncoder(nn.Module):
@@ -92,14 +95,14 @@ class SemanticTemporalErrorCorrection(nn.Module):
 
     def forward(self, observation, predicted, semantic_context, hidden):
         error = observation - predicted
-        aligned_error, attention_weights = self.correlation(observation, predicted, semantic_context)
+        aligned_error, raw_aligned_error, attention_weights = self.correlation(observation, predicted, semantic_context)
         task_error, error_backbone, base_error = self.encoder(
             error, aligned_error, observation, predicted, semantic_context
         )
         hidden = self.error_state(task_error, hidden)
         delta = self.direct(observation, hidden)
         entropy = -(attention_weights * (attention_weights.clamp_min(1e-12).log())).sum(dim=1)
-        return error, aligned_error, task_error, hidden, delta, attention_weights.max(dim=1).values.mean(), entropy.mean(), error_backbone, base_error
+        return error, aligned_error, task_error, hidden, delta, attention_weights.max(dim=1).values.mean(), entropy.mean(), error_backbone, base_error, raw_aligned_error
 
 
 def build_semantic_temporal_corrections():
@@ -109,10 +112,10 @@ def build_semantic_temporal_corrections():
 
 
 def apply_semantic_temporal_corrections(corrections, observation, dynamics, semantic, hidden):
-    error1, aligned_error1, task1, hidden1, delta1, max_weight1, entropy1, backbone1, base1 = corrections[0](
+    error1, aligned_error1, task1, hidden1, delta1, max_weight1, entropy1, backbone1, base1, raw_aligned_error1 = corrections[0](
         observation.z1, dynamics.z1, semantic.z1, hidden[0]
     )
-    error4, aligned_error4, task4, hidden4, delta4, max_weight4, entropy4, backbone4, base4 = corrections[1](
+    error4, aligned_error4, task4, hidden4, delta4, max_weight4, entropy4, backbone4, base4, raw_aligned_error4 = corrections[1](
         observation.z4, dynamics.z4, semantic.z4, hidden[1]
     )
     posterior = UnifiedFeatures(
@@ -138,4 +141,6 @@ def apply_semantic_temporal_corrections(corrections, observation, dynamics, sema
         "error_backbone_z4": backbone4,
         "base_error_z1": base1,
         "base_error_z4": base4,
+        "raw_aligned_error_z1": raw_aligned_error1,
+        "raw_aligned_error_z4": raw_aligned_error4,
     }

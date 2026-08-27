@@ -62,7 +62,7 @@ def main():
     groups = sequence_groups(dataset)
     names = ("clean_host", "corrupted_host", "corrected_b", "error_decomposition_reliability", "semantic_temporal_error_correction")
     confusion = {name: torch.zeros((19, 19), dtype=torch.int64) for name in names}
-    totals = {key: 0.0 for key in ("state_mse_z1", "state_mse_z4", "mean_abs_error_z1", "mean_abs_error_z4", "mean_abs_aligned_error_z1", "mean_abs_aligned_error_z4", "mean_abs_task_error_z1", "mean_abs_task_error_z4", "mean_abs_hidden_z1", "mean_abs_hidden_z4", "mean_abs_delta_z1", "mean_abs_delta_z4", "mean_max_attention_weight_z1", "mean_max_attention_weight_z4", "mean_attention_entropy_z1", "mean_attention_entropy_z4")}
+    totals = {key: 0.0 for key in ("state_mse_z1", "state_mse_z4", "mean_abs_error_z1", "mean_abs_error_z4", "mean_abs_aligned_error_z1", "mean_abs_aligned_error_z4", "mean_abs_task_error_z1", "mean_abs_task_error_z4", "mean_abs_hidden_z1", "mean_abs_hidden_z4", "mean_abs_delta_z1", "mean_abs_delta_z4", "mean_max_attention_weight_z1", "mean_max_attention_weight_z4", "mean_attention_entropy_z1", "mean_attention_entropy_z4", "r_align_z1", "r_align_z4")}
     finite = True
     frame_count = 0
     prediction_error_identity_max = 0.0
@@ -149,12 +149,14 @@ def main():
                     "mean_abs_delta_z1": values["delta_z1"].abs().mean(), "mean_abs_delta_z4": values["delta_z4"].abs().mean(),
                     "mean_max_attention_weight_z1": values["max_attention_weight_z1"], "mean_max_attention_weight_z4": values["max_attention_weight_z4"],
                     "mean_attention_entropy_z1": values["attention_entropy_z1"], "mean_attention_entropy_z4": values["attention_entropy_z4"],
+                    "r_align_z1": values["aligned_error_z1"].abs().sum() / values["raw_aligned_error_z1"].abs().sum().clamp_min(1e-12),
+                    "r_align_z4": values["aligned_error_z4"].abs().sum() / values["raw_aligned_error_z4"].abs().sum().clamp_min(1e-12),
                 }
                 for key, value in values_for_total.items(): totals[key] += value.item()
                 finite = finite and all(torch.isfinite(value).all().item() for value in (*values_for_total.values(), *logits.values(), hidden[0], hidden[1]))
                 local_correlation_finite = local_correlation_finite and all(
                     torch.isfinite(values[key]).all().item()
-                    for key in ("aligned_error_z1", "aligned_error_z4", "max_attention_weight_z1", "max_attention_weight_z4", "attention_entropy_z1", "attention_entropy_z4")
+                    for key in ("aligned_error_z1", "aligned_error_z4", "raw_aligned_error_z1", "raw_aligned_error_z4", "max_attention_weight_z1", "max_attention_weight_z4", "attention_entropy_z1", "attention_entropy_z4")
                 )
                 frame_count += 1
                 pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(predictor, observation, error, predictor_hidden)
