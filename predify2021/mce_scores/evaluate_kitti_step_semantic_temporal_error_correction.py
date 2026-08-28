@@ -9,7 +9,7 @@ from torch.nn import functional as F
 from predify2021.datasets.kitti_step import KITTISTEPSegmentationDataset, semantic_mask_from_panoptic_png
 from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import sequence_groups
 from predify2021.mce_scores.evaluate_kitti_step_static_baseline import compute_iou, update_confusion_matrix
-from predify2021.mce_scores.kitti_step_persistent_blur import BLUR_KERNEL_SIZE, BLUR_SIGMA_LEVELS, BLUR_SIGMA_MAX, persistent_gaussian_blur
+from predify2021.mce_scores.kitti_step_persistent_blur import BLUR_KERNEL_SIZE, BLUR_SIGMA_LEVELS, BLUR_SIGMA_MAX, BLUR_WARMUP_FRACTION, persistent_gaussian_blur, warmup_frame_count
 from predify2021.mce_scores.role_separated_direct_state_correction import direct_posterior, error_state, load_direct_corrections, load_image, load_role_components, make_paths, next_role_prediction, update_dynamic_error, zero_state
 from predify2021.mce_scores.role_separated_dynamic_error_correction import residual_writeback_host_feature
 from predify2021.mce_scores.semantic_temporal_error_step import detach_error_state, semantic_temporal_error_step, zero_error_state
@@ -128,6 +128,14 @@ def main():
                     observation.z3,
                     observation.z4 + decomposition_delta4,
                 )
+                if frame_index < warmup_frame_count(len(samples)):
+                    pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
+                        predictor, observation, error, predictor_hidden
+                    )
+                    hidden = detach_error_state(hidden)
+                    legacy_dynamic = UnifiedFeatures(*(value.detach() for value in legacy_dynamic.as_tuple()))
+                    decomposition_dynamic = UnifiedFeatures(*(value.detach() for value in decomposition_dynamic.as_tuple()))
+                    continue
                 zero_delta = zero_state(observation)
                 hosts = {
                     "clean_host": HostFeature(clean_raw.c4, clean_raw.c1, output_size),
@@ -171,9 +179,9 @@ def main():
         "checkpoint": str(checkpoint),
         "reference_checkpoints": {"corrected_b": str(corrected_b_path), "error_decomposition_reliability": str(decomposition_path)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
-        "config": {"seed": 0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "temperature": 1.0, "distillation_weight": 0.5, "correction_feedback_to_predictor": False},
+        "config": {"seed": 0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "evaluation_excludes_warmup": True, "temperature": 1.0, "distillation_weight": 0.5, "correction_feedback_to_predictor": False},
         "dataset": {"split": "val", "sequence_count": len(groups), "total_frame_count": len(dataset.samples), "effective_frame_count": frame_count},
-        "metrics": {"mIoU_clean_host": metrics["clean_host"], "mIoU_corrupted_host": metrics["corrupted_host"], "mIoU_corrected_b": metrics["corrected_b"], "mIoU_error_decomposition_reliability": metrics["error_decomposition_reliability"], "mIoU_new": metrics["semantic_temporal_error_correction"], "new_minus_current_best": metrics["semantic_temporal_error_correction"] - 0.49638008445998427, "new_minus_corrupted_host": metrics["semantic_temporal_error_correction"] - metrics["corrupted_host"], "recovery_ratio": (metrics["semantic_temporal_error_correction"] - metrics["corrupted_host"]) / (metrics["clean_host"] - metrics["corrupted_host"])},
+        "metrics": {"mIoU_clean_host": metrics["clean_host"], "mIoU_corrupted_host": metrics["corrupted_host"], "mIoU_corrected_b": metrics["corrected_b"], "mIoU_error_decomposition_reliability": metrics["error_decomposition_reliability"], "mIoU_new": metrics["semantic_temporal_error_correction"], "new_minus_error_decomposition_same_run": metrics["semantic_temporal_error_correction"] - metrics["error_decomposition_reliability"], "new_minus_corrupted_host": metrics["semantic_temporal_error_correction"] - metrics["corrupted_host"], "recovery_ratio": (metrics["semantic_temporal_error_correction"] - metrics["corrupted_host"]) / (metrics["clean_host"] - metrics["corrupted_host"])},
         "diagnostics": totals,
         "gates": {
             "prediction_error_identity": {"passed": prediction_error_identity_max <= 1e-7, "max_abs": prediction_error_identity_max},
@@ -187,7 +195,7 @@ def main():
             "train_validation_path_consistency": {"passed": True, "shared_step": "semantic_temporal_error_step"},
             "finite": {"passed": finite},
         },
-        "decision": "STRONG GO" if metrics["semantic_temporal_error_correction"] >= 0.535 else "GO" if metrics["semantic_temporal_error_correction"] >= 0.5165 else "WEAK" if metrics["semantic_temporal_error_correction"] > 0.49638008445998427 else "NO-GO",
+        "decision": "REBASE_REQUIRED_NEW_10_PERCENT_WARMUP_PROTOCOL",
     }
     output.mkdir(parents=True, exist_ok=True)
     (output / "summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
