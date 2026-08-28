@@ -48,6 +48,8 @@ TRUNCATED_BPTT = 4
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.01
 DISTILL_WEIGHT = 0.5
+WARMUP_FRACTION = 0.0
+SKIP_WARMUP = False
 
 
 def corrected_host_feature(model, raw_features, observation, posterior, output_size):
@@ -88,12 +90,13 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None):
     chunk_losses = []
     finite = True
     for samples in groups.values():
+        warmup_frames = int(len(samples) * WARMUP_FRACTION)
         hidden = None
         pending_dynamics = None
         pending_semantic = None
         for frame_index, sample in enumerate(samples):
             clean_image = load_image(sample)
-            corrupted_image = persistent_gaussian_blur(clean_image, frame_index, len(samples))
+            corrupted_image = persistent_gaussian_blur(clean_image, frame_index, len(samples), WARMUP_FRACTION or 1 / 3)
             with torch.no_grad():
                 clean_raw = model.extract_backbone_features(clean_image)
                 corrupted_raw = model.extract_backbone_features(corrupted_image)
@@ -115,6 +118,16 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None):
                         predictor, observation, error, predictor_hidden
                     )
                     continue
+            if SKIP_WARMUP and frame_index < warmup_frames:
+                with torch.no_grad():
+                    _, hidden, _ = semantic_temporal_error_step(
+                        corrections, observation, pending_dynamics, pending_semantic, hidden
+                    )
+                    hidden = detach_error_state(hidden)
+                    pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
+                        predictor, observation, error, predictor_hidden
+                    )
+                continue
             posterior, hidden, values = semantic_temporal_error_step(
                 corrections, observation, pending_dynamics, pending_semantic, hidden
             )
@@ -264,6 +277,7 @@ def main():
         "checkpoint": str(output / "best_semantic_temporal_error_correction.pt"),
         "trainable_parameter_count": sum(parameter.numel() for parameter in corrections.parameters()),
         "config": {"epochs": EPOCHS, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT},
+        "protocol": {"warmup_fraction": WARMUP_FRACTION, "warmup_skipped_for_loss": SKIP_WARMUP},
         "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": len(train.samples), "val_sequence_count": len(val_groups), "val_frame_count": len(val.samples)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "gates": gate,

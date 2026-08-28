@@ -20,6 +20,8 @@ from predify2021.mce_scores.train_kitti_step_error_decomposition_correction impo
 
 CORRECTED_B_CHECKPOINT = "/home/lin/experiments/kitti_step_persistent_blur_corrected_b_6dd4cc6/best_corrected_b_persistent_blur.pt"
 DECOMPOSITION_CHECKPOINT = "/home/lin/experiments/kitti_step_error_decomposition_reliability_blur_6dd4cc6/best_error_decomposition_correction.pt"
+WARMUP_FRACTION = 0.0
+SKIP_WARMUP = False
 
 
 def load_new(path):
@@ -71,6 +73,7 @@ def main():
     local_correlation_finite = True
     with torch.inference_mode():
         for samples in groups.values():
+            warmup_frames = int(len(samples) * WARMUP_FRACTION)
             hidden = None
             predictor_hidden = predictor.initial_state()
             pending_dynamics = None
@@ -79,7 +82,7 @@ def main():
             decomposition_dynamic = None
             for frame_index, sample in enumerate(samples):
                 clean_image = load_image(sample)
-                corrupted_image = persistent_gaussian_blur(clean_image, frame_index, len(samples))
+                corrupted_image = persistent_gaussian_blur(clean_image, frame_index, len(samples), WARMUP_FRACTION or 1 / 3)
                 clean_raw = model.extract_backbone_features(clean_image)
                 corrupted_raw = model.extract_backbone_features(corrupted_image)
                 clean_state = model.encode_backbone_features(clean_raw)
@@ -105,6 +108,15 @@ def main():
                 )
                 if frame_index == 1:
                     pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(predictor, observation, error, predictor_hidden)
+                    continue
+                if SKIP_WARMUP and frame_index < warmup_frames:
+                    posterior, hidden, _ = semantic_temporal_error_step(
+                        corrections, observation, pending_dynamics, pending_semantic, hidden
+                    )
+                    hidden = detach_error_state(hidden)
+                    pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
+                        predictor, observation, error, predictor_hidden
+                    )
                     continue
                 posterior, hidden, values = semantic_temporal_error_step(corrections, observation, pending_dynamics, pending_semantic, hidden)
                 legacy_dynamic = update_dynamic_error(error, legacy_dynamic)
@@ -172,6 +184,7 @@ def main():
         "reference_checkpoints": {"corrected_b": str(corrected_b_path), "error_decomposition_reliability": str(decomposition_path)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "config": {"seed": 0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "temperature": 1.0, "distillation_weight": 0.5, "correction_feedback_to_predictor": False},
+        "protocol": {"warmup_fraction": WARMUP_FRACTION, "warmup_excluded_from_metrics": SKIP_WARMUP},
         "dataset": {"split": "val", "sequence_count": len(groups), "total_frame_count": len(dataset.samples), "effective_frame_count": frame_count},
         "metrics": {"mIoU_clean_host": metrics["clean_host"], "mIoU_corrupted_host": metrics["corrupted_host"], "mIoU_corrected_b": metrics["corrected_b"], "mIoU_error_decomposition_reliability": metrics["error_decomposition_reliability"], "mIoU_new": metrics["semantic_temporal_error_correction"], "new_minus_current_best": metrics["semantic_temporal_error_correction"] - 0.49638008445998427, "new_minus_corrupted_host": metrics["semantic_temporal_error_correction"] - metrics["corrupted_host"], "recovery_ratio": (metrics["semantic_temporal_error_correction"] - metrics["corrupted_host"]) / (metrics["clean_host"] - metrics["corrupted_host"])},
         "diagnostics": totals,
