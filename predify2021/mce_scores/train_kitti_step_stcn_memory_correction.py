@@ -231,7 +231,7 @@ def main():
     if len(train_groups) != 12 or len(train.samples) != 5027 or len(val_groups) != 9 or len(val.samples) != 2981:
         raise RuntimeError("KITTI-STEP protocol mismatch")
     trainable_count = sum(parameter.numel() for parameter in corrections.parameters() if parameter.requires_grad)
-    if trainable_count != 24705:
+    if trainable_count != 8321:
         raise RuntimeError(f"unexpected trainable parameter count: {trainable_count}")
     history = []
     best = None

@@ -70,8 +70,13 @@ def main():
     groups = sequence_groups(dataset)
     names = ("clean_host", "corrupted_host", "current_d7", "stcn_memory")
     confusion = {name: torch.zeros((19, 19), dtype=torch.int64) for name in names}
-    totals = {key: 0.0 for key in ("memory_reference_ratio_z4", "memory_direction_cosine_z4", "memory_entropy_z4", "memory_normalized_entropy_z4", "mean_gate_z4", "mean_abs_delta_z4", "mean_abs_error_z4", "mean_abs_dynamic_error_z4")}
+    totals = {key: 0.0 for key in ("memory_direction_cosine_z4", "memory_entropy_z4", "memory_normalized_entropy_z4", "mean_gate_z4", "mean_abs_delta_z4", "mean_abs_error_z4", "mean_abs_dynamic_error_z4")}
     time_ratios = torch.zeros(4)
+    corrupted_reference_distance = 0.0
+    corrupted_observation_distance = 0.0
+    corrupted_entropy = 0.0
+    corrupted_normalized_entropy = 0.0
+    corrupted_memory_frame_count = 0
     finite = True
     frame_count = 0
     max_prediction_error_identity = 0.0
@@ -120,11 +125,9 @@ def main():
                 ref = stats4["reference"]
                 clean_delta = clean_state.z4 - observation.z4
                 ref_delta = ref - observation.z4
-                ratio = ref_delta.abs().sum() / clean_delta.abs().sum().clamp_min(1e-12)
                 cosine = F.cosine_similarity(ref_delta.flatten(1), clean_delta.flatten(1), dim=1).mean()
                 values = (error.z4, legacy_dynamic.z4, ref, stcn_post.z4, stats4["gain"], stats4["delta"], logits["stcn_memory"])
                 finite = finite and all(torch.isfinite(value).all().item() for value in values)
-                totals["memory_reference_ratio_z4"] += ratio.item()
                 totals["memory_direction_cosine_z4"] += cosine.item()
                 totals["memory_entropy_z4"] += stats4["memory_entropy"].item()
                 totals["memory_normalized_entropy_z4"] += stats4["memory_normalized_entropy"].item()
@@ -133,6 +136,12 @@ def main():
                 totals["mean_abs_error_z4"] += error.z4.abs().mean().item()
                 totals["mean_abs_dynamic_error_z4"] += legacy_dynamic.z4.abs().mean().item()
                 time_ratios += stats4["time_ratios"].detach().cpu()
+                if frame_index >= len(samples) // 3:
+                    corrupted_reference_distance += (ref - clean_state.z4).abs().sum().item()
+                    corrupted_observation_distance += (observation.z4 - clean_state.z4).abs().sum().item()
+                    corrupted_entropy += stats4["memory_entropy"].item()
+                    corrupted_normalized_entropy += stats4["memory_normalized_entropy"].item()
+                    corrupted_memory_frame_count += 1
                 frame_count += 1
                 correction_hidden = (hidden1, hidden4)
                 pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(predictor, observation, error, predictor_hidden)
@@ -144,6 +153,9 @@ def main():
     for key in totals:
         totals[key] /= frame_count
     time_ratios /= frame_count
+    memory_reference_ratio = corrupted_reference_distance / max(corrupted_observation_distance, 1e-12)
+    corrupted_entropy /= corrupted_memory_frame_count
+    corrupted_normalized_entropy /= corrupted_memory_frame_count
     metrics = {name: float(torch.nanmean(compute_iou(value)).item()) for name, value in confusion.items()}
     gate = run_gate(model, predictor, corrections, dataset.samples[0])
     gate.update({"prediction_error_identity_passed": max_prediction_error_identity <= 1e-7, "zero_error_passed": max_zero_error_identity <= 1e-7, "residual_writeback_identity_passed": max_writeback_identity <= 1e-6})
@@ -155,10 +167,10 @@ def main():
         "config": {"seed": 0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "memory_size": 4, "key_channels": 64, "dynamic_error_alpha": 0.207, "dynamic_error_beta": 0.793},
         "dataset": {"split": "val", "sequence_count": len(groups), "total_frame_count": len(dataset.samples), "effective_frame_count": frame_count},
         "metrics": {"mIoU_clean_host": metrics["clean_host"], "mIoU_corrupted_host": metrics["corrupted_host"], "mIoU_current_d7": metrics["current_d7"], "mIoU_stcn_memory": metrics["stcn_memory"], "stcn_minus_current_d7": metrics["stcn_memory"] - metrics["current_d7"], "stcn_minus_historical_d7": metrics["stcn_memory"] - OLD_D7_MIOU, "stcn_minus_corrupted_host": metrics["stcn_memory"] - metrics["corrupted_host"], "recovery_ratio": (metrics["stcn_memory"] - metrics["corrupted_host"]) / (metrics["clean_host"] - metrics["corrupted_host"])},
-        "diagnostics": {**totals, "mean_time_ratios_t_minus_1_to_t_minus_4": time_ratios.tolist()},
+        "diagnostics": {**totals, "memory_reference_ratio_z4_corrupted": memory_reference_ratio, "memory_entropy_z4_corrupted": corrupted_entropy, "memory_normalized_entropy_z4_corrupted": corrupted_normalized_entropy, "corrupted_memory_frame_count": corrupted_memory_frame_count, "mean_time_ratios_t_minus_1_to_t_minus_4": time_ratios.tolist()},
         "gates": gate,
         "finite": finite and gate["finite"],
-        "decision": "MEMORY REFERENCE NO-GO" if totals["memory_reference_ratio_z4"] >= 1.0 else "STRONG GO" if metrics["stcn_memory"] >= 0.535 else "GO" if metrics["stcn_memory"] >= 0.5165 else "WEAK" if metrics["stcn_memory"] > OLD_D7_MIOU else "NO-GO",
+        "decision": "STCN MEMORYREADER TERMINATED" if corrupted_normalized_entropy > 0.9 or memory_reference_ratio >= 1.0 else "STRONG GO" if metrics["stcn_memory"] >= 0.535 else "GO" if metrics["stcn_memory"] >= 0.5165 else "WEAK" if metrics["stcn_memory"] > OLD_D7_MIOU else "NO-GO",
     }
     output.mkdir(parents=True, exist_ok=True)
     (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
