@@ -1,3 +1,5 @@
+import math
+
 import torch
 
 from predify2021.mce_scores.train_kitti_step_persistent_blur_direct_correction import persistent_blur
@@ -20,11 +22,16 @@ def test_persistent_blur_schedule_and_clean_identity(monkeypatch):
 def test_video_consistency_and_sequence_reset():
     gt = [torch.zeros(2, 3, dtype=torch.uint8) for _ in range(16)]
     assert video_consistency(gt[:8], gt[:8]) == 1.0
+    stable_wrong = [torch.ones(2, 3, dtype=torch.uint8) for _ in range(8)]
+    assert video_consistency(gt[:8], stable_wrong) == 1.0
     wrong = list(gt[:8]); wrong[-1] = torch.ones(2, 3, dtype=torch.uint8)
     assert video_consistency(gt[:8], wrong) < 1.0
+    changing_gt = list(gt[:8]); changing_gt[-1] = torch.ones(2, 3, dtype=torch.uint8)
+    assert math.isnan(video_consistency(changing_gt, stable_wrong))
     metric = VideoConsistency(("static",))
-    for mask in gt[:8]: metric.append(mask, {"static": mask})
-    assert metric.window_counts()[8] == 1
+    for mask in gt: metric.append(mask, {"static": mask})
+    assert metric.window_counts()[8] == 9
+    assert metric.window_counts()[16] == 1
     metric.reset_sequence()
     for mask in gt[:7]: metric.append(mask, {"static": mask})
-    assert metric.window_counts()[8] == 1
+    assert metric.window_counts()[8] == 9

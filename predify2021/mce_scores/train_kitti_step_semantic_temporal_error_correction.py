@@ -45,7 +45,7 @@ from predify2021.model_factory.deeplabv3plus_resnet50.semantic_temporal_error_co
 
 
 SEED = 0
-EPOCHS = 7
+EPOCHS = 10
 TRUNCATED_BPTT = 4
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.01

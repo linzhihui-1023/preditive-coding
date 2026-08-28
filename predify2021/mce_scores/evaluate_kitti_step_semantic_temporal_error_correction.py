@@ -13,6 +13,7 @@ from predify2021.mce_scores.kitti_step_persistent_blur import BLUR_KERNEL_SIZE, 
 from predify2021.mce_scores.role_separated_direct_state_correction import direct_posterior, error_state, load_direct_corrections, load_image, load_role_components, make_paths, next_role_prediction, update_dynamic_error, zero_state
 from predify2021.mce_scores.role_separated_dynamic_error_correction import residual_writeback_host_feature
 from predify2021.mce_scores.semantic_temporal_error_step import detach_error_state, semantic_temporal_error_step, zero_error_state
+from predify2021.mce_scores.video_metrics import VideoConsistency, weighted_iou
 from predify2021.model_factory.deeplabv3plus_resnet50 import HostFeature, UnifiedFeatures
 from predify2021.model_factory.deeplabv3plus_resnet50.semantic_temporal_error_correction import build_semantic_temporal_corrections
 from predify2021.mce_scores.train_kitti_step_error_decomposition_correction import build_corrections, corruption_dynamic_error
@@ -60,6 +61,7 @@ def main():
     groups = sequence_groups(dataset)
     names = ("clean_host", "corrupted_host", "corrected_b", "error_decomposition_reliability", "semantic_temporal_error_correction")
     confusion = {name: torch.zeros((19, 19), dtype=torch.int64) for name in names}
+    video_consistency = VideoConsistency(names)
     totals = {key: 0.0 for key in ("state_mse_z1", "state_mse_z4", "mean_abs_error_z1", "mean_abs_error_z4", "mean_abs_aligned_error_z1", "mean_abs_aligned_error_z4", "mean_abs_task_error_z1", "mean_abs_task_error_z4", "mean_abs_hidden_z1", "mean_abs_hidden_z4", "mean_abs_delta_z1", "mean_abs_delta_z4", "mean_max_attention_weight_z1", "mean_max_attention_weight_z4", "mean_attention_entropy_z1", "mean_attention_entropy_z4", "r_align_z1", "r_align_z4")}
     finite = True
     frame_count = 0
@@ -69,6 +71,7 @@ def main():
     local_correlation_finite = True
     with torch.inference_mode():
         for samples in groups.values():
+            video_consistency.reset_sequence()
             hidden = None
             predictor_hidden = predictor.initial_state()
             pending_dynamics = None
@@ -76,6 +79,8 @@ def main():
             legacy_dynamic = None
             decomposition_dynamic = None
             for frame_index, sample in enumerate(samples):
+                if frame_index == warmup_frame_count(len(samples)):
+                    video_consistency.reset_sequence()
                 clean_image = load_image(sample)
                 corrupted_image = persistent_gaussian_blur(clean_image, frame_index, len(samples))
                 clean_raw = model.extract_backbone_features(clean_image)
@@ -146,6 +151,10 @@ def main():
                 mask = semantic_mask_from_panoptic_png(sample["mask_path"])
                 for name in names:
                     update_confusion_matrix(confusion[name], logits[name].argmax(1).squeeze(0).cpu().to(torch.int64), mask)
+                video_consistency.append(
+                    mask,
+                    {name: logits[name].argmax(1).squeeze(0).cpu() for name in names},
+                )
                 values_for_total = {
                     "state_mse_z1": F.mse_loss(posterior.z1, clean_state.z1), "state_mse_z4": F.mse_loss(posterior.z4, clean_state.z4),
                     "mean_abs_error_z1": error.z1.abs().mean(), "mean_abs_error_z4": error.z4.abs().mean(),
@@ -170,7 +179,16 @@ def main():
                 legacy_dynamic = UnifiedFeatures(*(value.detach() for value in legacy_dynamic.as_tuple()))
                 decomposition_dynamic = UnifiedFeatures(*(value.detach() for value in decomposition_dynamic.as_tuple()))
     for key in totals: totals[key] /= frame_count
-    metrics = {name: float(torch.nanmean(compute_iou(value)).item()) for name, value in confusion.items()}
+    mvc = video_consistency.means()
+    metrics = {
+        name: {
+            "miou": float(torch.nanmean(compute_iou(value)).item()),
+            "wiou": weighted_iou(value),
+            "mvc8": mvc[8][name],
+            "mvc16": mvc[16][name],
+        }
+        for name, value in confusion.items()
+    }
     result = {
         "experiment": "kitti_step_semantic_temporal_error_correction",
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
@@ -179,7 +197,13 @@ def main():
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "config": {"seed": 0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "evaluation_excludes_warmup": True, "temperature": 1.0, "distillation_weight": 0.5, "correction_feedback_to_predictor": False},
         "dataset": {"split": "val", "sequence_count": len(groups), "total_frame_count": len(dataset.samples), "effective_frame_count": frame_count},
-        "metrics": {"mIoU_clean_host": metrics["clean_host"], "mIoU_corrupted_host": metrics["corrupted_host"], "mIoU_corrected_b": metrics["corrected_b"], "mIoU_error_decomposition_reliability": metrics["error_decomposition_reliability"], "mIoU_new": metrics["semantic_temporal_error_correction"], "new_minus_error_decomposition_same_run": metrics["semantic_temporal_error_correction"] - metrics["error_decomposition_reliability"], "new_minus_corrupted_host": metrics["semantic_temporal_error_correction"] - metrics["corrupted_host"], "recovery_ratio": (metrics["semantic_temporal_error_correction"] - metrics["corrupted_host"]) / (metrics["clean_host"] - metrics["corrupted_host"])},
+        "metrics": metrics,
+        "mIoU": {name: value["miou"] for name, value in metrics.items()},
+        "mIoU_new_minus_corrupted_host": metrics["semantic_temporal_error_correction"]["miou"] - metrics["corrupted_host"]["miou"],
+        "mVC8_new_minus_corrupted_host": metrics["semantic_temporal_error_correction"]["mvc8"] - metrics["corrupted_host"]["mvc8"],
+        "mVC16_new_minus_corrupted_host": metrics["semantic_temporal_error_correction"]["mvc16"] - metrics["corrupted_host"]["mvc16"],
+        "recovery_ratio": (metrics["semantic_temporal_error_correction"]["miou"] - metrics["corrupted_host"]["miou"]) / (metrics["clean_host"]["miou"] - metrics["corrupted_host"]["miou"]),
+        "mvc_window_counts": video_consistency.window_counts(),
         "diagnostics": totals,
         "gates": {
             "prediction_error_identity": {"passed": prediction_error_identity_max <= 1e-7, "max_abs": prediction_error_identity_max},

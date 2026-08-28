@@ -14,9 +14,10 @@ def weighted_iou(confusion):
 def video_consistency(gt_window, prediction_window):
     gt = torch.stack(tuple(gt_window)).to(torch.int64)
     prediction = torch.stack(tuple(prediction_window)).to(torch.int64)
-    common = (gt == gt[0]).all(dim=0) & (gt[0] != 255)
-    correct = common & (prediction == gt[0]).all(dim=0)
-    return float(correct.sum().item() / common.sum().item()) if common.any() else float("nan")
+    gt_common = (gt == gt[0]).all(dim=0) & (gt[0] != 255)
+    prediction_common = (prediction == prediction[0]).all(dim=0)
+    consistent = gt_common & prediction_common
+    return float(consistent.sum().item() / gt_common.sum().item()) if gt_common.any() else float("nan")
 
 
 class VideoConsistency:
