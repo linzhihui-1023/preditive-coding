@@ -168,6 +168,7 @@ def main():
                     video_consistency.reset_sequence()
                 clean_image = load_image(sample)
                 clean_raw = model.extract_backbone_features(clean_image)
+                clean_state = model.encode_backbone_features(clean_raw)
                 timed = frame_index >= warmup_frame_count(len(samples))
                 corrupted_image = persistent_gaussian_blur(clean_image, frame_index, len(samples))
                 if timed:
