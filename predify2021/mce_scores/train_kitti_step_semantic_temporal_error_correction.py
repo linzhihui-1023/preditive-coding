@@ -23,7 +23,9 @@ from predify2021.mce_scores.kitti_step_persistent_blur import (
     BLUR_KERNEL_SIZE,
     BLUR_SIGMA_LEVELS,
     BLUR_SIGMA_MAX,
+    BLUR_WARMUP_FRACTION,
     persistent_gaussian_blur,
+    warmup_frame_count,
 )
 from predify2021.mce_scores.role_separated_dynamic_error_correction import (
     residual_writeback_host_feature,
@@ -43,7 +45,7 @@ from predify2021.model_factory.deeplabv3plus_resnet50.semantic_temporal_error_co
 
 
 SEED = 0
-EPOCHS = 3
+EPOCHS = 7
 TRUNCATED_BPTT = 4
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.01
@@ -115,6 +117,16 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None):
                         predictor, observation, error, predictor_hidden
                     )
                     continue
+            if frame_index < warmup_frame_count(len(samples)):
+                with torch.no_grad():
+                    _, hidden, _ = semantic_temporal_error_step(
+                        corrections, observation, pending_dynamics, pending_semantic, hidden
+                    )
+                    pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
+                        predictor, observation, error, predictor_hidden
+                    )
+                hidden = detach_error_state(hidden)
+                continue
             posterior, hidden, values = semantic_temporal_error_step(
                 corrections, observation, pending_dynamics, pending_semantic, hidden
             )
@@ -263,7 +275,7 @@ def main():
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
         "checkpoint": str(output / "best_semantic_temporal_error_correction.pt"),
         "trainable_parameter_count": sum(parameter.numel() for parameter in corrections.parameters()),
-        "config": {"epochs": EPOCHS, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT},
+        "config": {"epochs": EPOCHS, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT},
         "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": len(train.samples), "val_sequence_count": len(val_groups), "val_frame_count": len(val.samples)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "gates": gate,
