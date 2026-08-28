@@ -1,0 +1,88 @@
+{
+  "base_checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "checkpoint": "/home/lin/experiments/kitti_step_stcn_memory_correction_5a0e7ba/best_stcn_memory_correction.pt",
+  "config": {
+    "blur_kernel_size": 11,
+    "blur_sigma_levels": [
+      0.75,
+      1.5,
+      2.25,
+      3.0
+    ],
+    "blur_sigma_max": 3.0,
+    "dynamic_error_alpha": 0.207,
+    "dynamic_error_beta": 0.793,
+    "key_channels": 64,
+    "memory_size": 4,
+    "seed": 0
+  },
+  "dataset": {
+    "effective_frame_count": 2963,
+    "sequence_count": 9,
+    "split": "val",
+    "total_frame_count": 2981
+  },
+  "decision": "STCN MEMORYREADER TERMINATED",
+  "diagnostics": {
+    "corrupted_memory_frame_count": 1990,
+    "mean_abs_delta_z4": 3.4188225867804794e-07,
+    "mean_abs_dynamic_error_z4": 0.0020034066609657328,
+    "mean_abs_error_z4": 0.005500545432439707,
+    "mean_gate_z4": 2.2612335504859188e-05,
+    "mean_time_ratios_t_minus_1_to_t_minus_4": [
+      0.2525228261947632,
+      0.24948912858963013,
+      0.24797458946704865,
+      0.24696575105190277
+    ],
+    "memory_direction_cosine_z4": 0.049434202955721415,
+    "memory_entropy_z4": 10.244831166635926,
+    "memory_entropy_z4_corrupted": 10.283248011430903,
+    "memory_normalized_entropy_z4": 0.9969354507048469,
+    "memory_normalized_entropy_z4_corrupted": 0.9999746293877837,
+    "memory_reference_ratio_z4_corrupted": 1.3752157462558474
+  },
+  "experiment": "kitti_step_stcn_memory_correction",
+  "training": {
+    "best_epoch": 3,
+    "trainable_parameter_count": 8321,
+    "epochs": [
+      {"epoch": 1, "train_total_loss": 2.0714013392, "val_total_loss": 2.3632894541, "train_cross_entropy": 1.4165425476, "val_cross_entropy": 1.6277514138, "train_distillation_kl": 1.3097175833, "val_distillation_kl": 1.4710760800, "train_effective_frame_count": 5003, "val_effective_frame_count": 2963},
+      {"epoch": 2, "train_total_loss": 2.0713379087, "val_total_loss": 2.3632764581, "train_cross_entropy": 1.4165001020, "val_cross_entropy": 1.6277428164, "train_distillation_kl": 1.3096756119, "val_distillation_kl": 1.4710672853, "train_effective_frame_count": 5003, "val_effective_frame_count": 2963},
+      {"epoch": 3, "train_total_loss": 2.0713300682, "val_total_loss": 2.3632711024, "train_cross_entropy": 1.4164948617, "val_cross_entropy": 1.6277392707, "train_distillation_kl": 1.3096704151, "val_distillation_kl": 1.4710636601, "train_effective_frame_count": 5003, "val_effective_frame_count": 2963}
+    ],
+    "finite": true
+  },
+  "finite": true,
+  "gates": {
+    "finite": true,
+    "frozen_base": true,
+    "memory_causality": true,
+    "new_trainable_parameters_present": false,
+    "no_optimizer": true,
+    "observation_only_memory": true,
+    "prediction_error_identity": 0.0,
+    "prediction_error_identity_passed": true,
+    "predictor_isolation": true,
+    "residual_writeback_identity": 0.0,
+    "residual_writeback_identity_passed": true,
+    "zero_error_identity": 0.0,
+    "zero_error_passed": true
+  },
+  "git_revision": "5a0e7ba",
+  "metrics": {
+    "mIoU_clean_host": 0.6552125561916007,
+    "mIoU_corrupted_host": 0.4701953800350464,
+    "mIoU_current_d7": 0.5083952796901833,
+    "mIoU_stcn_memory": 0.47974058720740803,
+    "recovery_ratio": 0.05159092453278416,
+    "stcn_minus_corrupted_host": 0.009545207172361625,
+    "stcn_minus_current_d7": -0.028654692482775246,
+    "stcn_minus_historical_d7": -0.02865469249259195
+  }
+}
