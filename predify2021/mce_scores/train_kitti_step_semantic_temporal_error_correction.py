@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import time
 from pathlib import Path
 
 import torch
@@ -54,6 +55,27 @@ TRUNCATED_BPTT = 4
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.01
 DISTILL_WEIGHT = 0.5
+
+
+def parameter_efficiency_metrics(model, predictor, corrections):
+    modules = (model, predictor, corrections)
+    total_params = sum(
+        parameter.numel()
+        for module in modules
+        for parameter in module.parameters()
+    )
+    trainable_params = sum(
+        parameter.numel()
+        for module in modules
+        for parameter in module.parameters()
+        if parameter.requires_grad
+    )
+    return {
+        "trainable_params": trainable_params,
+        "total_params": total_params,
+        "trainable_ratio": trainable_params / total_params,
+        "trainable_ratio_percent": 100.0 * trainable_params / total_params,
+    }
 
 
 def corrected_host_feature(model, raw_features, observation, posterior, output_size):
@@ -271,6 +293,7 @@ def main():
     predictor.requires_grad_(False)
     corrections.requires_grad_(True)
     optimizer = torch.optim.AdamW(corrections.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    parameter_efficiency = parameter_efficiency_metrics(model, predictor, corrections)
     train = KITTISTEPSegmentationDataset.from_kitti_step_root(root, "train")
     val = KITTISTEPSegmentationDataset.from_kitti_step_root(root, "val")
     train_groups = sequence_groups(train)
@@ -286,9 +309,14 @@ def main():
     stopped_early = False
     stop_epoch = None
     for epoch in range(1, EPOCHS + 1):
+        torch.cuda.synchronize()
+        train_start = time.perf_counter()
         train_metrics, train_frames, train_finite = run_epoch(
             model, predictor, corrections, train_groups, optimizer
         )
+        torch.cuda.synchronize()
+        train_seconds = time.perf_counter() - train_start
+        train_throughput = train_frames / train_seconds
         with torch.no_grad():
             val_metrics, val_frames, val_finite = run_epoch(
                 model,
@@ -299,7 +327,13 @@ def main():
             )
         row = {
             "epoch": epoch,
-            "train": {**train_metrics, "effective_frame_count": train_frames, "finite": train_finite},
+            "train": {
+                **train_metrics,
+                "effective_frame_count": train_frames,
+                "finite": train_finite,
+                "epoch_seconds": train_seconds,
+                "throughput_frames_per_second": train_throughput,
+            },
             "val": {**val_metrics, "effective_frame_count": val_frames, "finite": val_finite},
         }
         history.append(row)
@@ -337,12 +371,23 @@ def main():
         "experiment": "kitti_step_semantic_temporal_error_correction_training",
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
         "checkpoint": str(output / "best_semantic_temporal_error_correction.pt"),
-        "trainable_parameter_count": sum(parameter.numel() for parameter in corrections.parameters()),
+        "parameter_efficiency": parameter_efficiency,
         "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT},
         "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": len(train.samples), "val_sequence_count": len(val_groups), "val_frame_count": len(val.samples)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "gates": gate,
         "history": history,
+        "training_throughput": {
+            "unit": "frames_per_second",
+            "per_epoch": [
+                row["train"]["throughput_frames_per_second"]
+                for row in history
+            ],
+            "mean": sum(
+                row["train"]["throughput_frames_per_second"]
+                for row in history
+            ) / len(history),
+        },
         "best_epoch": best["epoch"],
         "best_val_miou": best["val"]["miou"],
         "best_val_total_loss": best["val"]["total_loss"],
