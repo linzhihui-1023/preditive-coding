@@ -98,5 +98,5 @@ def correction_loss(posterior, clean_state):
     return F.mse_loss(posterior.z1, clean_state.z1) + F.mse_loss(posterior.z4, clean_state.z4)
 
 
-def next_role_prediction(predictor, observation, error, hidden):
-    return predictor.step(observation, error, *hidden)
+def next_role_prediction(predictor, observation, prediction_error, hidden):
+    return predictor.step(observation, prediction_error, *hidden)
