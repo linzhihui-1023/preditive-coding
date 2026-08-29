@@ -427,13 +427,6 @@ def main():
             ),
             "gflops": flops,
         },
-        "host_only": host,
-        "full_current_model": current,
-        "fps_retention": current["fps"] / host["fps"],
-        "fps_drop_percentage": 100.0 * (1.0 - current["fps"] / host["fps"]),
-        "latency_overhead_ms": (
-            current["latency_ms_per_frame"] - host["latency_ms_per_frame"]
-        ),
     }
 
     output.parent.mkdir(parents=True, exist_ok=True)
