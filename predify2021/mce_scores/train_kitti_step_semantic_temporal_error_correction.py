@@ -11,6 +11,7 @@ from predify2021.datasets.kitti_step import (
     semantic_mask_from_panoptic_png,
 )
 from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import sequence_groups
+from predify2021.mce_scores.evaluate_kitti_step_static_baseline import compute_iou, update_confusion_matrix
 from predify2021.mce_scores.role_separated_direct_state_correction import (
     error_state,
     load_image,
@@ -35,6 +36,7 @@ from predify2021.mce_scores.semantic_temporal_error_step import (
     semantic_temporal_error_step,
     zero_error_state,
 )
+from predify2021.mce_scores.video_metrics import VideoConsistency, weighted_iou
 from predify2021.model_factory.deeplabv3plus_resnet50 import (
     HostFeature,
     UnifiedFeatures,
@@ -45,7 +47,9 @@ from predify2021.model_factory.deeplabv3plus_resnet50.semantic_temporal_error_co
 
 
 SEED = 0
-EPOCHS = 10
+EPOCHS = 15
+EARLY_STOPPING_PATIENCE = 3
+MIOU_TIE_TOLERANCE = 1e-6
 TRUNCATED_BPTT = 4
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.01
@@ -82,17 +86,21 @@ def flush_chunk(optimizer, losses):
     losses.clear()
 
 
-def run_epoch(model, predictor, corrections, groups, optimizer=None):
+def run_epoch(model, predictor, corrections, groups, optimizer=None, collect_validation_metrics=False):
     training = optimizer is not None
     corrections.train(training)
     totals = {"segmentation_cross_entropy": 0.0, "distillation_kl": 0.0, "total_loss": 0.0}
     frame_count = 0
     chunk_losses = []
     finite = True
+    confusion = torch.zeros((19, 19), dtype=torch.int64) if collect_validation_metrics else None
+    video_consistency = VideoConsistency(("current_model",)) if collect_validation_metrics else None
     for samples in groups.values():
         hidden = None
         pending_dynamics = None
         pending_semantic = None
+        if video_consistency is not None:
+            video_consistency.reset_sequence()
         for frame_index, sample in enumerate(samples):
             clean_image = load_image(sample)
             corrupted_image = persistent_gaussian_blur(clean_image, frame_index, len(samples))
@@ -111,10 +119,10 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None):
                         predictor, observation, zero_state(observation), predictor.initial_state()
                     )
                     continue
-                error = error_state(observation, pending_dynamics)
+                prediction_error = error_state(observation, pending_dynamics)
                 if frame_index == 1:
                     pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
-                        predictor, observation, error, predictor_hidden
+                        predictor, observation, prediction_error, predictor_hidden
                     )
                     continue
             if frame_index < warmup_frame_count(len(samples)):
@@ -123,7 +131,7 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None):
                         corrections, observation, pending_dynamics, pending_semantic, hidden
                     )
                     pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
-                        predictor, observation, error, predictor_hidden
+                        predictor, observation, prediction_error, predictor_hidden
                     )
                 hidden = detach_error_state(hidden)
                 continue
@@ -156,8 +164,8 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None):
             finite = finite and all(
                 torch.isfinite(value).all().item()
                 for value in (
-                    error.z1,
-                    error.z4,
+                    prediction_error.z1,
+                    prediction_error.z4,
                     values["aligned_error_z1"],
                     values["aligned_error_z4"],
                     values["task_error_z1"],
@@ -170,10 +178,14 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None):
                     total,
                 )
             )
+            if collect_validation_metrics:
+                prediction = logits.argmax(dim=1).squeeze(0).cpu().to(torch.int64)
+                update_confusion_matrix(confusion, prediction, mask)
+                video_consistency.append(mask, {"current_model": prediction})
             frame_count += 1
             with torch.no_grad():
                 pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
-                    predictor, observation, error, predictor_hidden
+                    predictor, observation, prediction_error, predictor_hidden
                 )
             if not training:
                 hidden = detach_error_state(hidden)
@@ -181,7 +193,18 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None):
             flush_chunk(optimizer, chunk_losses)
             if hidden is not None:
                 hidden = detach_error_state(hidden)
-    return {key: value / frame_count for key, value in totals.items()}, frame_count, finite
+    metrics = {key: value / frame_count for key, value in totals.items()}
+    if collect_validation_metrics:
+        mvc = video_consistency.means()
+        metrics.update(
+            {
+                "miou": float(torch.nanmean(compute_iou(confusion)).item()),
+                "wiou": weighted_iou(confusion),
+                "mvc8": mvc[8]["current_model"],
+                "mvc16": mvc[16]["current_model"],
+            }
+        )
+    return metrics, frame_count, finite
 
 
 def gates(model, predictor, corrections, sample):
@@ -259,28 +282,72 @@ def main():
         raise RuntimeError("semantic temporal error correction gate failed")
     history = []
     best = None
+    epochs_without_improvement = 0
+    stopped_early = False
+    stop_epoch = None
     for epoch in range(1, EPOCHS + 1):
-        train_metrics, train_frames, train_finite = run_epoch(model, predictor, corrections, train_groups, optimizer)
+        train_metrics, train_frames, train_finite = run_epoch(
+            model, predictor, corrections, train_groups, optimizer
+        )
         with torch.no_grad():
-            val_metrics, val_frames, val_finite = run_epoch(model, predictor, corrections, val_groups)
-        row = {"epoch": epoch, "train": {**train_metrics, "effective_frame_count": train_frames, "finite": train_finite}, "val": {**val_metrics, "effective_frame_count": val_frames, "finite": val_finite}}
+            val_metrics, val_frames, val_finite = run_epoch(
+                model,
+                predictor,
+                corrections,
+                val_groups,
+                collect_validation_metrics=True,
+            )
+        row = {
+            "epoch": epoch,
+            "train": {**train_metrics, "effective_frame_count": train_frames, "finite": train_finite},
+            "val": {**val_metrics, "effective_frame_count": val_frames, "finite": val_finite},
+        }
         history.append(row)
         print(json.dumps(row, sort_keys=True), flush=True)
-        if best is None or val_metrics["total_loss"] < best["val"]["total_loss"]:
+
+        if best is None:
+            improved = True
+        else:
+            miou_delta = val_metrics["miou"] - best["val"]["miou"]
+            improved = miou_delta > MIOU_TIE_TOLERANCE or (
+                abs(miou_delta) <= MIOU_TIE_TOLERANCE
+                and val_metrics["total_loss"] < best["val"]["total_loss"]
+            )
+
+        if improved:
             best = row
+            epochs_without_improvement = 0
             output.mkdir(parents=True, exist_ok=True)
-            torch.save({"corrections": corrections.state_dict(), "epoch": epoch, "val_metrics": val_metrics}, output / "best_semantic_temporal_error_correction.pt")
+            torch.save(
+                {
+                    "corrections": corrections.state_dict(),
+                    "epoch": epoch,
+                    "selection_metric": "val_miou",
+                    "val_metrics": val_metrics,
+                },
+                output / "best_semantic_temporal_error_correction.pt",
+            )
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= EARLY_STOPPING_PATIENCE:
+                stopped_early = True
+                stop_epoch = epoch
+                break
     summary = {
         "experiment": "kitti_step_semantic_temporal_error_correction_training",
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
         "checkpoint": str(output / "best_semantic_temporal_error_correction.pt"),
         "trainable_parameter_count": sum(parameter.numel() for parameter in corrections.parameters()),
-        "config": {"epochs": EPOCHS, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT},
+        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT},
         "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": len(train.samples), "val_sequence_count": len(val_groups), "val_frame_count": len(val.samples)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "gates": gate,
         "history": history,
         "best_epoch": best["epoch"],
+        "best_val_miou": best["val"]["miou"],
+        "best_val_total_loss": best["val"]["total_loss"],
+        "stopped_early": stopped_early,
+        "stop_epoch": stop_epoch,
     }
     output.mkdir(parents=True, exist_ok=True)
     (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
