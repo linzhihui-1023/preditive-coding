@@ -1,3 +1,5 @@
+import math
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -70,6 +72,75 @@ class ErrorStateConvGRU(nn.Module):
         return (1.0 - update) * hidden + update * candidate
 
 
+class DynamicErrorTransition(nn.Module):
+    """Condition a lightweight hidden transition on accumulated task error."""
+
+    def __init__(self, channels=128, basis_count=3, initial_beta=0.793):
+        super().__init__()
+        self.residual_scale = 0.1
+        self.beta_logit = nn.Parameter(
+            torch.tensor(math.log(initial_beta / (1.0 - initial_beta)))
+        )
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.controller = nn.Linear(channels, basis_count)
+        self.bases = nn.ModuleList(
+            [
+                nn.Conv2d(
+                    channels,
+                    channels,
+                    kernel_size=3,
+                    padding=1,
+                    groups=channels,
+                    bias=False,
+                )
+                for _ in range(basis_count)
+            ]
+        )
+
+    @property
+    def beta(self):
+        return torch.sigmoid(self.beta_logit)
+
+    def forward(self, task_error, hidden, dynamic_error, zero_dynamic=False):
+        if hidden is None:
+            hidden = torch.zeros_like(task_error)
+        if dynamic_error is None:
+            dynamic_error = torch.zeros_like(task_error)
+
+        beta = self.beta
+        dynamic_error = beta * dynamic_error + (1.0 - beta) * task_error
+        controller_state = torch.zeros_like(dynamic_error) if zero_dynamic else dynamic_error
+        weights = torch.softmax(
+            self.controller(self.pool(controller_state).flatten(1)), dim=1
+        )
+
+        transitioned = torch.zeros_like(hidden)
+        for index, basis in enumerate(self.bases):
+            candidate = hidden + self.residual_scale * basis(hidden)
+            transitioned = transitioned + weights[:, index, None, None, None] * candidate
+        return transitioned, dynamic_error, weights
+
+
+class DynamicTransitionErrorStateConvGRU(ErrorStateConvGRU):
+    def __init__(self, channels=128):
+        super().__init__(channels)
+        self.transition = DynamicErrorTransition(channels)
+
+    def forward(self, task_error, hidden, dynamic_error, zero_dynamic=False):
+        transitioned, dynamic_error, weights = self.transition(
+            task_error, hidden, dynamic_error, zero_dynamic
+        )
+        gates = torch.sigmoid(
+            self.gates(torch.cat((task_error, transitioned), dim=1))
+        )
+        update, reset = gates.chunk(2, dim=1)
+        candidate = torch.tanh(
+            self.candidate(torch.cat((task_error, reset * transitioned), dim=1))
+        )
+        hidden = (1.0 - update) * transitioned + update * candidate
+        return hidden, dynamic_error, weights
+
+
 class SemanticTemporalDirectCorrection(nn.Module):
     def __init__(self, channels=128):
         super().__init__()
@@ -104,6 +175,59 @@ class SemanticTemporalErrorCorrection(nn.Module):
         delta = self.direct(observation, hidden)
         entropy = -(attention_weights * (attention_weights.clamp_min(1e-12).log())).sum(dim=1)
         return error, aligned_error, task_error, hidden, delta, attention_weights.max(dim=1).values.mean(), entropy.mean(), error_backbone, base_error, raw_aligned_error
+
+
+class DPCSemanticTemporalErrorCorrection(SemanticTemporalErrorCorrection):
+    """Use explicit dynamic error to select the ConvGRU hidden transition."""
+
+    uses_dynamic_transition = True
+
+    def __init__(self, channels=128):
+        super().__init__(channels)
+        self.error_state = DynamicTransitionErrorStateConvGRU(channels)
+
+    def forward(
+        self,
+        observation,
+        predicted,
+        semantic_context,
+        hidden,
+        dynamic_error,
+        zero_dynamic=False,
+    ):
+        error = observation - predicted
+        aligned_error, raw_aligned_error, attention_weights = self.correlation(
+            observation, predicted, semantic_context
+        )
+        task_error, error_backbone, base_error = self.encoder(
+            error, aligned_error, observation, predicted, semantic_context
+        )
+        hidden, dynamic_error, transition_weights = self.error_state(
+            task_error, hidden, dynamic_error, zero_dynamic
+        )
+        delta = self.direct(observation, hidden)
+        attention_entropy = -(
+            attention_weights * attention_weights.clamp_min(1e-12).log()
+        ).sum(dim=1)
+        transition_entropy = -(
+            transition_weights * transition_weights.clamp_min(1e-12).log()
+        ).sum(dim=1)
+        return {
+            "error": error,
+            "aligned_error": aligned_error,
+            "raw_aligned_error": raw_aligned_error,
+            "task_error": task_error,
+            "hidden": hidden,
+            "dynamic_error": dynamic_error,
+            "delta": delta,
+            "max_attention_weight": attention_weights.max(dim=1).values.mean(),
+            "attention_entropy": attention_entropy.mean(),
+            "error_backbone": error_backbone,
+            "base_error": base_error,
+            "transition_weights": transition_weights,
+            "transition_entropy": transition_entropy.mean(),
+            "beta": self.error_state.transition.beta,
+        }
 
 
 class SemanticPrototypeTargetCorrection(nn.Module):
@@ -197,6 +321,12 @@ def build_semantic_temporal_corrections():
     ).cuda()
 
 
+def build_dpc_semantic_temporal_corrections():
+    return nn.ModuleList(
+        [DPCSemanticTemporalErrorCorrection(), DPCSemanticTemporalErrorCorrection()]
+    ).cuda()
+
+
 def build_semantic_prototype_corrections(prototypes_z1=None, prototypes_z4=None):
     if prototypes_z1 is None:
         prototypes_z1 = torch.zeros(19, 128)
@@ -246,6 +376,72 @@ def apply_semantic_temporal_corrections(corrections, observation, dynamics, sema
         "base_error_z4": base4,
         "raw_aligned_error_z1": raw_aligned_error1,
         "raw_aligned_error_z4": raw_aligned_error4,
+    }
+
+
+def apply_dpc_semantic_temporal_corrections(
+    corrections,
+    observation,
+    dynamics,
+    semantic,
+    state,
+    zero_dynamic=False,
+):
+    values1 = corrections[0](
+        observation.z1,
+        dynamics.z1,
+        semantic.z1,
+        state.hidden[0],
+        state.dynamic_error[0],
+        zero_dynamic,
+    )
+    values4 = corrections[1](
+        observation.z4,
+        dynamics.z4,
+        semantic.z4,
+        state.hidden[1],
+        state.dynamic_error[1],
+        zero_dynamic,
+    )
+    posterior = UnifiedFeatures(
+        observation.z1 + values1["delta"],
+        observation.z2,
+        observation.z3,
+        observation.z4 + values4["delta"],
+    )
+    new_state = state.__class__(
+        hidden=(values1["hidden"], values4["hidden"]),
+        dynamic_error=(values1["dynamic_error"], values4["dynamic_error"]),
+    )
+    return posterior, new_state, {
+        "error_z1": values1["error"],
+        "error_z4": values4["error"],
+        "aligned_error_z1": values1["aligned_error"],
+        "aligned_error_z4": values4["aligned_error"],
+        "raw_aligned_error_z1": values1["raw_aligned_error"],
+        "raw_aligned_error_z4": values4["raw_aligned_error"],
+        "task_error_z1": values1["task_error"],
+        "task_error_z4": values4["task_error"],
+        "hidden_z1": values1["hidden"],
+        "hidden_z4": values4["hidden"],
+        "dynamic_error_z1": values1["dynamic_error"],
+        "dynamic_error_z4": values4["dynamic_error"],
+        "delta_z1": values1["delta"],
+        "delta_z4": values4["delta"],
+        "max_attention_weight_z1": values1["max_attention_weight"],
+        "max_attention_weight_z4": values4["max_attention_weight"],
+        "attention_entropy_z1": values1["attention_entropy"],
+        "attention_entropy_z4": values4["attention_entropy"],
+        "error_backbone_z1": values1["error_backbone"],
+        "error_backbone_z4": values4["error_backbone"],
+        "base_error_z1": values1["base_error"],
+        "base_error_z4": values4["base_error"],
+        "transition_weights_z1": values1["transition_weights"].mean(dim=0),
+        "transition_weights_z4": values4["transition_weights"].mean(dim=0),
+        "transition_entropy_z1": values1["transition_entropy"],
+        "transition_entropy_z4": values4["transition_entropy"],
+        "beta_z1": values1["beta"],
+        "beta_z4": values4["beta"],
     }
 
 

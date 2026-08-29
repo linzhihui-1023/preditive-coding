@@ -35,7 +35,7 @@ from predify2021.mce_scores.role_separated_dynamic_error_correction import (
 from predify2021.mce_scores.semantic_temporal_error_step import (
     detach_error_state,
     semantic_temporal_error_step,
-    zero_error_state,
+    zero_dynamic_transition_state,
 )
 from predify2021.mce_scores.video_metrics import VideoConsistency, weighted_iou
 from predify2021.model_factory.deeplabv3plus_resnet50 import (
@@ -43,7 +43,7 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
     UnifiedFeatures,
 )
 from predify2021.model_factory.deeplabv3plus_resnet50.semantic_temporal_error_correction import (
-    build_semantic_temporal_corrections,
+    build_dpc_semantic_temporal_corrections,
 )
 
 
@@ -135,7 +135,7 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None, collect_val
                     HostFeature(clean_raw.c4, clean_raw.c1, tuple(clean_image.shape[-2:]))
                 )
                 if hidden is None:
-                    hidden = zero_error_state(observation)
+                    hidden = zero_dynamic_transition_state(observation)
                 if frame_index == 0:
                     pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
                         predictor, observation, zero_state(observation), predictor.initial_state()
@@ -192,8 +192,10 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None, collect_val
                     values["aligned_error_z4"],
                     values["task_error_z1"],
                     values["task_error_z4"],
-                    hidden[0],
-                    hidden[1],
+                    hidden.hidden[0],
+                    hidden.hidden[1],
+                    hidden.dynamic_error[0],
+                    hidden.dynamic_error[1],
                     posterior.z1,
                     posterior.z4,
                     logits,
@@ -240,28 +242,48 @@ def gates(model, predictor, corrections, sample):
         identity_difference = float(
             (model.decode_from_host_feature(clean_host) - model.decode_from_host_feature(identity_host)).abs().max().item()
         )
-        hidden = zero_error_state(observation)
+        hidden = zero_dynamic_transition_state(observation)
         zero_dynamics = observation
-        zero_result1 = corrections[0](observation.z1, zero_dynamics.z1, observation.z1, hidden[0])
-        zero_result4 = corrections[1](observation.z4, zero_dynamics.z4, observation.z4, hidden[1])
-        zero_values = (zero_result1, zero_result4)
+        _, _, zero_values = semantic_temporal_error_step(
+            corrections,
+            observation,
+            zero_dynamics,
+            observation,
+            hidden,
+        )
         zero_delta = max(
-            float(zero_result1[4].abs().max().item()),
-            float(zero_result4[4].abs().max().item()),
+            float(zero_values["delta_z1"].abs().max().item()),
+            float(zero_values["delta_z4"].abs().max().item()),
         )
         error_identity = max(
-            float(zero_result1[0].sub(observation.z1 - zero_dynamics.z1).abs().max().item()),
-            float(zero_result4[0].sub(observation.z4 - zero_dynamics.z4).abs().max().item()),
+            float(zero_values["error_z1"].sub(observation.z1 - zero_dynamics.z1).abs().max().item()),
+            float(zero_values["error_z4"].sub(observation.z4 - zero_dynamics.z4).abs().max().item()),
         )
         zero_error_driven = max(
-            float(value[index].abs().max().item())
-            for value in zero_values
-            for index in (2, 3, 7, 8)
+            float(zero_values[key].abs().max().item())
+            for key in (
+                "task_error_z1",
+                "task_error_z4",
+                "hidden_z1",
+                "hidden_z4",
+                "dynamic_error_z1",
+                "dynamic_error_z4",
+                "error_backbone_z1",
+                "error_backbone_z4",
+                "base_error_z1",
+                "base_error_z4",
+            )
         )
         local_correlation_finite = all(
-            torch.isfinite(value[index]).all().item()
-            for value in zero_values
-            for index in (1, 5, 6)
+            torch.isfinite(zero_values[key]).all().item()
+            for key in (
+                "aligned_error_z1",
+                "aligned_error_z4",
+                "max_attention_weight_z1",
+                "max_attention_weight_z4",
+                "attention_entropy_z1",
+                "attention_entropy_z4",
+            )
         )
     only_new_parameters = all(parameter.requires_grad for parameter in corrections.parameters())
     frozen_base = not any(parameter.requires_grad for parameter in model.parameters()) and not any(parameter.requires_grad for parameter in predictor.parameters())
@@ -285,10 +307,10 @@ def main():
     torch.manual_seed(SEED)
     torch.cuda.manual_seed_all(SEED)
     root = Path(os.environ.get("PREDIFY_KITTI_STEP_ROOT", "/home/lin/predify/kitti_step"))
-    output = Path(os.environ.get("PREDIFY_SEMANTIC_TEMPORAL_ERROR_OUTPUT_DIR", "results/kitti_step_semantic_temporal_error_correction"))
+    output = Path(os.environ.get("PREDIFY_DPC_TRANSITION_OUTPUT_DIR", "results/kitti_step_dpc_transition_correction"))
     paths = make_paths()
     model, predictor = load_role_components(paths["static"], paths["adapter"], paths["predictor"], paths["writeback"])
-    corrections = build_semantic_temporal_corrections()
+    corrections = build_dpc_semantic_temporal_corrections()
     model.requires_grad_(False)
     predictor.requires_grad_(False)
     corrections.requires_grad_(True)
@@ -359,7 +381,7 @@ def main():
                     "selection_metric": "val_miou",
                     "val_metrics": val_metrics,
                 },
-                output / "best_semantic_temporal_error_correction.pt",
+                output / "best_dpc_semantic_temporal_error_correction.pt",
             )
         else:
             epochs_without_improvement += 1
@@ -368,11 +390,11 @@ def main():
                 stop_epoch = epoch
                 break
     summary = {
-        "experiment": "kitti_step_semantic_temporal_error_correction_training",
+        "experiment": "kitti_step_dpc_transition_correction_training",
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
-        "checkpoint": str(output / "best_semantic_temporal_error_correction.pt"),
+        "checkpoint": str(output / "best_dpc_semantic_temporal_error_correction.pt"),
         "parameter_efficiency": parameter_efficiency,
-        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT},
+        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "dynamic_error_initial_beta": 0.793, "transition_basis_count": 3, "transition_residual_scale": 0.1},
         "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": len(train.samples), "val_sequence_count": len(val_groups), "val_frame_count": len(val.samples)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "gates": gate,
