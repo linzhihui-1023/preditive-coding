@@ -163,20 +163,183 @@ def benchmark_current_model(model, predictor, corrections, groups):
 
 
 def parameter_counts(model, predictor, corrections):
-    adapter = sum(parameter.numel() for parameter in model.multi_layer_adapter.parameters())
-    writeback = sum(
+    model_count = sum(parameter.numel() for parameter in model.parameters())
+    predictor_count = sum(parameter.numel() for parameter in predictor.parameters())
+    correction_count = sum(parameter.numel() for parameter in corrections.parameters())
+    total_count = model_count + predictor_count + correction_count
+    adapter_count = sum(
+        parameter.numel() for parameter in model.multi_layer_adapter.parameters()
+    )
+    writeback_count = sum(
         parameter.numel()
         for parameter in model.host_conditioned_writebacks.parameters()
     )
-    predictor_count = sum(parameter.numel() for parameter in predictor.parameters())
-    correction = sum(parameter.numel() for parameter in corrections.parameters())
     return {
-        "adapter": adapter,
-        "writeback": writeback,
-        "predictor": predictor_count,
-        "correction": correction,
-        "additional_inference_parameters": adapter + writeback + predictor_count + correction,
-        "trainable_correction_parameters": correction,
+        "trainable_params": correction_count,
+        "total_params": total_count,
+        "trainable_ratio": correction_count / total_count,
+        "trainable_ratio_percent": 100.0 * correction_count / total_count,
+        "components": {
+            "host_and_loaded_adapters": model_count,
+            "predictor": predictor_count,
+            "correction": correction_count,
+            "state_adapter": adapter_count,
+            "host_conditioned_writeback": writeback_count,
+        },
+    }
+
+
+def count_flops(step):
+    try:
+        from torch.utils.flop_counter import FlopCounterMode
+
+        with FlopCounterMode(display=False) as flop_counter:
+            step()
+        flops = int(flop_counter.get_total_flops())
+        method = "torch.utils.flop_counter.FlopCounterMode"
+    except (ImportError, AttributeError):
+        from torch.profiler import ProfilerActivity, profile
+
+        with profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            record_shapes=True,
+            with_flops=True,
+        ) as profiler:
+            step()
+        flops = int(
+            sum(
+                event.flops
+                for event in profiler.key_averages()
+                if event.flops is not None
+            )
+        )
+        method = "torch.profiler.profile(with_flops=True)"
+
+    return {
+        "flops": flops,
+        "gflops": flops / 1e9,
+        "method": method,
+        "note": "Profiler-estimated FLOPs for supported operators; identical profiler protocol is used for Host and Ours.",
+    }
+
+
+def prepare_current_profile_state(model, predictor, corrections, samples, target_index):
+    correction_hidden = None
+    predictor_hidden = predictor.initial_state()
+    pending_dynamics = None
+    pending_semantic = None
+
+    with torch.inference_mode():
+        for frame_index in range(target_index):
+            image = load_image(samples[frame_index])
+            corrupted = persistent_gaussian_blur(image, frame_index, len(samples))
+            raw = model.extract_backbone_features(corrupted)
+            observation = model.encode_backbone_features(raw)
+
+            if correction_hidden is None:
+                correction_hidden = zero_error_state(observation)
+
+            if pending_dynamics is None:
+                prediction_error = zero_state(observation)
+                pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
+                    predictor,
+                    observation,
+                    prediction_error,
+                    predictor_hidden,
+                )
+            else:
+                prediction_error = error_state(observation, pending_dynamics)
+                _, correction_hidden, _ = semantic_temporal_error_step(
+                    corrections,
+                    observation,
+                    pending_dynamics,
+                    pending_semantic,
+                    correction_hidden,
+                )
+                pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
+                    predictor,
+                    observation,
+                    prediction_error,
+                    predictor_hidden,
+                )
+                correction_hidden = detach_error_state(correction_hidden)
+
+    return (
+        correction_hidden,
+        predictor_hidden,
+        pending_dynamics,
+        pending_semantic,
+    )
+
+
+def profile_gflops(model, predictor, corrections, groups):
+    samples = next(iter(groups.values()))
+    target_index = max(2, warmup_frame_count(len(samples)))
+    target_index = min(target_index, len(samples) - 1)
+
+    image = load_image(samples[target_index])
+    corrupted = persistent_gaussian_blur(image, target_index, len(samples))
+    output_size = tuple(corrupted.shape[-2:])
+
+    def host_step():
+        raw = model.extract_backbone_features(corrupted)
+        model.decode_from_host_feature(
+            HostFeature(raw.c4, raw.c1, output_size)
+        )
+
+    (
+        correction_hidden,
+        predictor_hidden,
+        pending_dynamics,
+        pending_semantic,
+    ) = prepare_current_profile_state(
+        model,
+        predictor,
+        corrections,
+        samples,
+        target_index,
+    )
+
+    def current_step():
+        raw = model.extract_backbone_features(corrupted)
+        observation = model.encode_backbone_features(raw)
+        prediction_error = error_state(observation, pending_dynamics)
+        posterior, new_hidden, _ = semantic_temporal_error_step(
+            corrections,
+            observation,
+            pending_dynamics,
+            pending_semantic,
+            correction_hidden,
+        )
+        corrected = corrected_host_feature(
+            model,
+            raw,
+            observation,
+            posterior,
+            output_size,
+        )
+        model.decode_from_host_feature(corrected)
+        next_role_prediction(
+            predictor,
+            observation,
+            prediction_error,
+            predictor_hidden,
+        )
+        detach_error_state(new_hidden)
+
+    with torch.inference_mode():
+        host_flops = count_flops(host_step)
+        current_flops = count_flops(current_step)
+
+    return {
+        "profile_frame_index": target_index,
+        "host_only": host_flops,
+        "full_current_model": current_flops,
+        "gflops_ratio": (
+            current_flops["gflops"] / host_flops["gflops"]
+            if host_flops["gflops"] > 0
+            else None
+        ),
     }
 
 
@@ -209,6 +372,8 @@ def main():
 
     host = benchmark_host(model, groups)
     current = benchmark_current_model(model, predictor, corrections, groups)
+    flops = profile_gflops(model, predictor, corrections, groups)
+    params = parameter_counts(model, predictor, corrections)
 
     result = {
         "experiment": "kitti_step_semantic_temporal_error_efficiency",
@@ -250,7 +415,18 @@ def main():
                 "JSON writing",
             ],
         },
-        "parameters": parameter_counts(model, predictor, corrections),
+        "parameter_efficiency": params,
+        "computational_efficiency": {
+            "host_only": host,
+            "full_current_model": current,
+            "fps_retention": current["fps"] / host["fps"],
+            "fps_retention_percent": 100.0 * current["fps"] / host["fps"],
+            "fps_drop_percentage": 100.0 * (1.0 - current["fps"] / host["fps"]),
+            "latency_overhead_ms": (
+                current["latency_ms_per_frame"] - host["latency_ms_per_frame"]
+            ),
+            "gflops": flops,
+        },
         "host_only": host,
         "full_current_model": current,
         "fps_retention": current["fps"] / host["fps"],
