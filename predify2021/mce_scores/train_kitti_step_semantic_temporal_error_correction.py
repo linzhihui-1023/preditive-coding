@@ -50,6 +50,7 @@ from predify2021.model_factory.deeplabv3plus_resnet50.semantic_temporal_error_co
 SEED = 0
 EPOCHS = 15
 EARLY_STOPPING_PATIENCE = 3
+EARLY_STOPPING_MIN_MIOU_IMPROVEMENT = 1e-4
 MIOU_TIE_TOLERANCE = 1e-6
 TRUNCATED_BPTT = 4
 LEARNING_RATE = 1e-4
@@ -327,6 +328,7 @@ def main():
         raise RuntimeError("semantic temporal error correction gate failed")
     history = []
     best = None
+    early_stopping_best_miou = None
     epochs_without_improvement = 0
     stopped_early = False
     stop_epoch = None
@@ -358,21 +360,17 @@ def main():
             },
             "val": {**val_metrics, "effective_frame_count": val_frames, "finite": val_finite},
         }
-        history.append(row)
-        print(json.dumps(row, sort_keys=True), flush=True)
-
         if best is None:
-            improved = True
+            checkpoint_improved = True
         else:
-            miou_delta = val_metrics["miou"] - best["val"]["miou"]
-            improved = miou_delta > MIOU_TIE_TOLERANCE or (
-                abs(miou_delta) <= MIOU_TIE_TOLERANCE
+            checkpoint_miou_delta = val_metrics["miou"] - best["val"]["miou"]
+            checkpoint_improved = checkpoint_miou_delta > MIOU_TIE_TOLERANCE or (
+                abs(checkpoint_miou_delta) <= MIOU_TIE_TOLERANCE
                 and val_metrics["total_loss"] < best["val"]["total_loss"]
             )
 
-        if improved:
+        if checkpoint_improved:
             best = row
-            epochs_without_improvement = 0
             output.mkdir(parents=True, exist_ok=True)
             torch.save(
                 {
@@ -383,18 +381,38 @@ def main():
                 },
                 output / "best_dpc_semantic_temporal_error_correction.pt",
             )
+
+        meaningful_miou_improvement = (
+            early_stopping_best_miou is None
+            or val_metrics["miou"]
+            > early_stopping_best_miou + EARLY_STOPPING_MIN_MIOU_IMPROVEMENT
+        )
+        if meaningful_miou_improvement:
+            early_stopping_best_miou = val_metrics["miou"]
+            epochs_without_improvement = 0
         else:
             epochs_without_improvement += 1
-            if epochs_without_improvement >= EARLY_STOPPING_PATIENCE:
-                stopped_early = True
-                stop_epoch = epoch
-                break
+
+        row["early_stopping"] = {
+            "meaningful_miou_improvement": meaningful_miou_improvement,
+            "best_miou_reference": early_stopping_best_miou,
+            "min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT,
+            "epochs_without_improvement": epochs_without_improvement,
+            "patience": EARLY_STOPPING_PATIENCE,
+        }
+        history.append(row)
+        print(json.dumps(row, sort_keys=True), flush=True)
+
+        if epochs_without_improvement >= EARLY_STOPPING_PATIENCE:
+            stopped_early = True
+            stop_epoch = epoch
+            break
     summary = {
         "experiment": "kitti_step_dpc_transition_correction_training",
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
         "checkpoint": str(output / "best_dpc_semantic_temporal_error_correction.pt"),
         "parameter_efficiency": parameter_efficiency,
-        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "dynamic_error_initial_beta": 0.793, "transition_basis_count": 3, "transition_residual_scale": 0.1},
+        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "early_stopping_min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "dynamic_error_initial_beta": 0.793, "transition_basis_count": 3, "transition_residual_scale": 0.1},
         "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": len(train.samples), "val_sequence_count": len(val_groups), "val_frame_count": len(val.samples)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "gates": gate,
@@ -413,6 +431,8 @@ def main():
         "best_epoch": best["epoch"],
         "best_val_miou": best["val"]["miou"],
         "best_val_total_loss": best["val"]["total_loss"],
+        "early_stopping_best_miou": early_stopping_best_miou,
+        "epochs_without_miou_improvement": epochs_without_improvement,
         "stopped_early": stopped_early,
         "stop_epoch": stop_epoch,
     }
