@@ -24,16 +24,23 @@ from predify2021.mce_scores.role_separated_dynamic_error_correction import (
 from predify2021.mce_scores.semantic_temporal_error_step import (
     detach_error_state,
     semantic_temporal_error_step,
-    zero_dynamic_transition_state,
+    zero_semantic_temporal_state,
 )
 from predify2021.model_factory.deeplabv3plus_resnet50 import HostFeature, UnifiedFeatures
 from predify2021.model_factory.deeplabv3plus_resnet50.semantic_temporal_error_correction import (
-    build_dpc_semantic_temporal_corrections,
+    build_semantic_temporal_corrections,
+)
+
+
+CHECKPOINT_DEFAULT = (
+    "/home/lin/experiments/"
+    "kitti_step_semantic_temporal_error_correction_10epoch_ffb1a74/"
+    "best_semantic_temporal_error_correction.pt"
 )
 
 
 def load_corrections(path):
-    corrections = build_dpc_semantic_temporal_corrections()
+    corrections = build_semantic_temporal_corrections()
     payload = torch.load(path, map_location="cpu", weights_only=False)
     corrections.load_state_dict(payload["corrections"], strict=True)
     corrections.requires_grad_(False)
@@ -108,7 +115,7 @@ def benchmark_current_model(model, predictor, corrections, groups):
                 output_size = tuple(corrupted.shape[-2:])
 
                 if correction_hidden is None:
-                    correction_hidden = zero_dynamic_transition_state(observation)
+                    correction_hidden = zero_semantic_temporal_state(observation)
 
                 if pending_dynamics is None:
                     prediction_error = zero_state(observation)
@@ -230,7 +237,7 @@ def prepare_current_profile_state(model, predictor, corrections, samples, target
             observation = model.encode_backbone_features(raw)
 
             if correction_hidden is None:
-                correction_hidden = zero_dynamic_transition_state(observation)
+                correction_hidden = zero_semantic_temporal_state(observation)
 
             if pending_dynamics is None:
                 prediction_error = zero_state(observation)
@@ -342,12 +349,12 @@ def main():
 
     root = Path(os.environ.get("PREDIFY_KITTI_STEP_ROOT", "/home/lin/predify/kitti_step"))
     checkpoint = Path(
-        os.environ["PREDIFY_DPC_TRANSITION_CHECKPOINT"]
+        os.environ.get("PREDIFY_SEMANTIC_TEMPORAL_ERROR_CHECKPOINT", CHECKPOINT_DEFAULT)
     )
     output = Path(
         os.environ.get(
-            "PREDIFY_DPC_TRANSITION_EFFICIENCY_OUTPUT",
-            "results/kitti_step_dpc_transition_efficiency.json",
+            "PREDIFY_SEMANTIC_TEMPORAL_ERROR_EFFICIENCY_OUTPUT",
+            "results/kitti_step_semantic_temporal_error_efficiency.json",
         )
     )
 
@@ -369,7 +376,7 @@ def main():
     params = parameter_counts(model, predictor, corrections)
 
     result = {
-        "experiment": "kitti_step_dpc_transition_efficiency",
+        "experiment": "kitti_step_semantic_temporal_error_efficiency",
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
         "checkpoint": str(checkpoint),
         "protocol": {
@@ -386,7 +393,7 @@ def main():
                 "local feature correlation",
                 "semantic error encoder",
                 "temporal error ConvGRU",
-                "dynamic error transition controller",
+                "dynamic error state tracking (not connected to correction)",
                 "semantic correction",
                 "residual writeback",
                 "segmentation decoder",

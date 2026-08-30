@@ -35,7 +35,7 @@ from predify2021.mce_scores.role_separated_dynamic_error_correction import (
 from predify2021.mce_scores.semantic_temporal_error_step import (
     detach_error_state,
     semantic_temporal_error_step,
-    zero_dynamic_transition_state,
+    zero_semantic_temporal_state,
 )
 from predify2021.mce_scores.video_metrics import VideoConsistency, weighted_iou
 from predify2021.model_factory.deeplabv3plus_resnet50 import (
@@ -43,7 +43,7 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
     UnifiedFeatures,
 )
 from predify2021.model_factory.deeplabv3plus_resnet50.semantic_temporal_error_correction import (
-    build_dpc_semantic_temporal_corrections,
+    build_semantic_temporal_corrections,
 )
 
 
@@ -136,7 +136,7 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None, collect_val
                     HostFeature(clean_raw.c4, clean_raw.c1, tuple(clean_image.shape[-2:]))
                 )
                 if hidden is None:
-                    hidden = zero_dynamic_transition_state(observation)
+                    hidden = zero_semantic_temporal_state(observation)
                 if frame_index == 0:
                     pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
                         predictor, observation, zero_state(observation), predictor.initial_state()
@@ -243,7 +243,7 @@ def gates(model, predictor, corrections, sample):
         identity_difference = float(
             (model.decode_from_host_feature(clean_host) - model.decode_from_host_feature(identity_host)).abs().max().item()
         )
-        hidden = zero_dynamic_transition_state(observation)
+        hidden = zero_semantic_temporal_state(observation)
         zero_dynamics = observation
         _, _, zero_values = semantic_temporal_error_step(
             corrections,
@@ -308,10 +308,10 @@ def main():
     torch.manual_seed(SEED)
     torch.cuda.manual_seed_all(SEED)
     root = Path(os.environ.get("PREDIFY_KITTI_STEP_ROOT", "/home/lin/predify/kitti_step"))
-    output = Path(os.environ.get("PREDIFY_DPC_TRANSITION_OUTPUT_DIR", "results/kitti_step_dpc_transition_correction"))
+    output = Path(os.environ.get("PREDIFY_SEMANTIC_TEMPORAL_ERROR_OUTPUT_DIR", "results/kitti_step_semantic_temporal_error_correction"))
     paths = make_paths()
     model, predictor = load_role_components(paths["static"], paths["adapter"], paths["predictor"], paths["writeback"])
-    corrections = build_dpc_semantic_temporal_corrections()
+    corrections = build_semantic_temporal_corrections()
     model.requires_grad_(False)
     predictor.requires_grad_(False)
     corrections.requires_grad_(True)
@@ -379,7 +379,7 @@ def main():
                     "selection_metric": "val_miou",
                     "val_metrics": val_metrics,
                 },
-                output / "best_dpc_semantic_temporal_error_correction.pt",
+                output / "best_semantic_temporal_error_correction.pt",
             )
 
         meaningful_miou_improvement = (
@@ -408,11 +408,11 @@ def main():
             stop_epoch = epoch
             break
     summary = {
-        "experiment": "kitti_step_dpc_transition_correction_training",
+        "experiment": "kitti_step_semantic_temporal_error_correction_training",
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
-        "checkpoint": str(output / "best_dpc_semantic_temporal_error_correction.pt"),
+        "checkpoint": str(output / "best_semantic_temporal_error_correction.pt"),
         "parameter_efficiency": parameter_efficiency,
-        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "early_stopping_min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=(Ts/tau_e)*e_t+(1-K_e*Ts/tau_e)*epsilon_(t-1)", "dynamic_error_sample_time": 0.1035, "dynamic_error_time_constant": 0.5, "dynamic_error_gain": 1.0, "dynamic_error_integration_factor": 0.207, "dynamic_error_memory_factor": 0.793, "transition_basis_count": 3, "transition_residual_scale": 0.1},
+        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "early_stopping_min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=(Ts/tau_e)*e_t+(1-K_e*Ts/tau_e)*epsilon_(t-1)", "dynamic_error_sample_time": 0.1035, "dynamic_error_time_constant": 0.5, "dynamic_error_gain": 1.0, "dynamic_error_integration_factor": 0.207, "dynamic_error_memory_factor": 0.793, "dynamic_error_usage": "tracked_only_not_connected_to_correction"},
         "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": len(train.samples), "val_sequence_count": len(val_groups), "val_frame_count": len(val.samples)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "gates": gate,
