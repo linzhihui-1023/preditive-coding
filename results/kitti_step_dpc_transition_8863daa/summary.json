@@ -1,0 +1,331 @@
+{
+  "base_checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "blur_robustness_benchmark": {
+    "S1": {
+      "baseline_ours": {
+        "miou": 0.6222219812751181,
+        "wiou": 0.8489974329836
+      },
+      "corrupted_host": {
+        "miou": 0.6416350798104951,
+        "wiou": 0.8495245777343031
+      },
+      "dpc_full": {
+        "miou": 0.6061977863099681,
+        "wiou": 0.8411003829135442
+      }
+    },
+    "S2": {
+      "baseline_ours": {
+        "miou": 0.560581165951052,
+        "wiou": 0.827039909325572
+      },
+      "corrupted_host": {
+        "miou": 0.5388578354333687,
+        "wiou": 0.8078010653948317
+      },
+      "dpc_full": {
+        "miou": 0.5549083043118952,
+        "wiou": 0.8235833197631809
+      }
+    },
+    "S3": {
+      "baseline_ours": {
+        "miou": 0.44451982315547545,
+        "wiou": 0.7815214526511144
+      },
+      "corrupted_host": {
+        "miou": 0.37225004457802846,
+        "wiou": 0.7000808692520495
+      },
+      "dpc_full": {
+        "miou": 0.4499605499988958,
+        "wiou": 0.784629766028967
+      }
+    },
+    "S4": {
+      "baseline_ours": {
+        "miou": 0.33736326810372136,
+        "wiou": 0.7028393678962713
+      },
+      "corrupted_host": {
+        "miou": 0.24530550510064306,
+        "wiou": 0.496261492076056
+      },
+      "dpc_full": {
+        "miou": 0.34824662411904544,
+        "wiou": 0.7222481710404296
+      }
+    },
+    "S5": {
+      "baseline_ours": {
+        "miou": 0.18581339727216517,
+        "wiou": 0.4553006413592027
+      },
+      "corrupted_host": {
+        "miou": 0.08952574849630705,
+        "wiou": 0.18010812762291986
+      },
+      "dpc_full": {
+        "miou": 0.19679381408461175,
+        "wiou": 0.49079983032360674
+      }
+    },
+    "clean": {
+      "baseline_ours": {
+        "miou": 0.6144167706532455,
+        "wiou": 0.8496095937512952
+      },
+      "corrupted_host": {
+        "miou": 0.6552125561916007,
+        "wiou": 0.8575019577939713
+      },
+      "dpc_full": {
+        "miou": 0.5967817235667061,
+        "wiou": 0.8393885162343401
+      }
+    }
+  },
+  "checkpoint": "/home/lin/experiments/kitti_step_dpc_transition_8863daa/best_dpc_semantic_temporal_error_correction.pt",
+  "config": {
+    "blur_kernel_size": 11,
+    "blur_sigma_levels": [
+      0.75,
+      1.5,
+      2.25,
+      3.0
+    ],
+    "blur_sigma_max": 3.0,
+    "blur_warmup_fraction": 0.1,
+    "correction_feedback_to_predictor": false,
+    "distillation_weight": 0.5,
+    "dynamic_error_initial_beta": 0.793,
+    "evaluation_excludes_warmup": true,
+    "robustness_benchmark": "ImageNet-C Gaussian Blur",
+    "robustness_blur_sigmas": [
+      1.0,
+      2.0,
+      3.0,
+      4.0,
+      6.0
+    ],
+    "robustness_reference_model": "corrupted_host",
+    "seed": 0,
+    "temperature": 1.0,
+    "transition_basis_count": 3,
+    "transition_residual_scale": 0.1,
+    "zero_dynamic_same_checkpoint": true
+  },
+  "corruption_degradation": {
+    "baseline_ours": {
+      "cd": 0.9155239545076833,
+      "clean_miou": 0.6144167706532455,
+      "mean_blur_miou": 0.43009992715150636,
+      "rcd": 0.8902597918293177,
+      "severity_miou": [
+        0.6222219812751181,
+        0.560581165951052,
+        0.44451982315547545,
+        0.33736326810372136,
+        0.18581339727216517
+      ]
+    },
+    "corrupted_host": {
+      "cd": 1.0,
+      "clean_miou": 0.6552125561916007,
+      "mean_blur_miou": 0.3775148426837685,
+      "rcd": 1.0,
+      "severity_miou": [
+        0.6416350798104951,
+        0.5388578354333687,
+        0.37225004457802846,
+        0.24530550510064306,
+        0.08952574849630705
+      ]
+    },
+    "dpc_full": {
+      "cd": 0.9137223234162497,
+      "clean_miou": 0.5967817235667061,
+      "mean_blur_miou": 0.43122141576488326,
+      "rcd": 0.8818618412032476,
+      "severity_miou": [
+        0.6061977863099681,
+        0.5549083043118952,
+        0.4499605499988958,
+        0.34824662411904544,
+        0.19679381408461175
+      ]
+    }
+  },
+  "dataset": {
+    "effective_frame_count": 2686,
+    "sequence_count": 9,
+    "split": "val",
+    "total_frame_count": 2981
+  },
+  "decision": "DPC_TRANSITION: NO-GO",
+  "diagnostics": {
+    "beta_z1": 0.79477858543396,
+    "beta_z4": 0.7836287617683411,
+    "mean_abs_aligned_error_z1": 0.1615810892860213,
+    "mean_abs_aligned_error_z4": 0.07074341595960658,
+    "mean_abs_delta_z1": 0.01675265936225331,
+    "mean_abs_delta_z4": 0.01389794912756499,
+    "mean_abs_dynamic_error_z1": 0.003598643877794543,
+    "mean_abs_dynamic_error_z4": 0.00167602597515994,
+    "mean_abs_error_z1": 0.009440261133123335,
+    "mean_abs_error_z4": 0.005602422107235762,
+    "mean_abs_hidden_z1": 0.025167112059791365,
+    "mean_abs_hidden_z4": 0.012893371453906783,
+    "mean_abs_task_error_z1": 0.009363889485134376,
+    "mean_abs_task_error_z4": 0.003139857089343569,
+    "mean_attention_entropy_z1": 1.9095272739166123,
+    "mean_attention_entropy_z4": 2.017541168433734,
+    "mean_max_attention_weight_z1": 0.27254572874649374,
+    "mean_max_attention_weight_z4": 0.2164944082121306,
+    "mean_transition_entropy_z1": 1.0976301763187304,
+    "mean_transition_entropy_z4": 1.095835492225698,
+    "mean_transition_weight_v1_z1": 0.3479717187555708,
+    "mean_transition_weight_v1_z4": 0.3495113849972755,
+    "mean_transition_weight_v2_z1": 0.3132093648744535,
+    "mean_transition_weight_v2_z4": 0.2985570780372584,
+    "mean_transition_weight_v3_z1": 0.33881891708008316,
+    "mean_transition_weight_v3_z4": 0.35193153605564087,
+    "r_align_z1": 2.7059492018359506,
+    "r_align_z4": 5.077409796988174,
+    "state_mse_z1": 0.000944483206236918,
+    "state_mse_z4": 0.0007174486615040169
+  },
+  "experiment": "kitti_step_dpc_transition_correction",
+  "fps": {
+    "full_current_model": 5.489163330964231,
+    "host_only": 33.836317889579526
+  },
+  "fps_drop_percentage": 83.77730298882577,
+  "gates": {
+    "finite": {
+      "passed": true
+    },
+    "full_error_driven_zero": {
+      "max_abs": 0.0,
+      "passed": true
+    },
+    "gradient_isolation": {
+      "passed": true
+    },
+    "local_correlation_finite": {
+      "passed": true
+    },
+    "no_clean_leakage": {
+      "passed": true
+    },
+    "no_correction_feedback": {
+      "passed": true
+    },
+    "prediction_error_identity": {
+      "max_abs": 0.0,
+      "passed": true
+    },
+    "residual_writeback_identity": {
+      "max_abs_logit_difference": 0.0,
+      "passed": true
+    },
+    "temporal_causality": {
+      "passed": true
+    },
+    "train_validation_path_consistency": {
+      "passed": true,
+      "shared_step": "semantic_temporal_error_step"
+    }
+  },
+  "git_revision": "8863daa49115597f7145f194183612e866917978",
+  "mIoU": {
+    "baseline_ours": 0.4661094686743259,
+    "clean_host": 0.665796407122072,
+    "corrected_b": 0.43548635135276526,
+    "corrupted_host": 0.39364032096350954,
+    "dpc_full": 0.47358679296891226,
+    "dpc_zero_dynamic": 0.47358661696337556,
+    "error_decomposition_reliability": 0.4365831987906964
+  },
+  "mIoU_new_minus_corrupted_host": 0.07994647200540272,
+  "mVC16_new_minus_corrupted_host": 0.12366918942835115,
+  "mVC8_new_minus_corrupted_host": 0.08416833628985898,
+  "mechanism_comparison": {
+    "decision": "DPC_TRANSITION: NO-GO",
+    "dpc_full_minus_baseline_mean_blur_miou": 0.0011214886133769086,
+    "dpc_full_minus_baseline_miou": 0.007477324294586363,
+    "dpc_full_minus_baseline_mvc16": 0.007133097481731632,
+    "dpc_full_minus_baseline_mvc8": 0.004449139378533196,
+    "dpc_full_minus_zero_dynamic_miou": 1.7600553670060748e-07,
+    "dpc_full_minus_zero_dynamic_mvc16": -5.116855357201189e-07,
+    "dynamic_error_independent_contribution": false,
+    "primary_go": false,
+    "strong_go": false
+  },
+  "metrics": {
+    "baseline_ours": {
+      "miou": 0.4661094686743259,
+      "mvc16": 0.8932396864250411,
+      "mvc8": 0.9100803304734905,
+      "wiou": 0.795248877464547
+    },
+    "clean_host": {
+      "miou": 0.665796407122072,
+      "mvc16": 0.9364045491209548,
+      "mvc8": 0.9435866346539818,
+      "wiou": 0.8624794672247483
+    },
+    "corrected_b": {
+      "miou": 0.43548635135276526,
+      "mvc16": 0.8946263237195808,
+      "mvc8": 0.9099810985145498,
+      "wiou": 0.7713080329178896
+    },
+    "corrupted_host": {
+      "miou": 0.39364032096350954,
+      "mvc16": 0.7767035944784216,
+      "mvc8": 0.8303611335621647,
+      "wiou": 0.7296829722278306
+    },
+    "dpc_full": {
+      "miou": 0.47358679296891226,
+      "mvc16": 0.9003727839067728,
+      "mvc8": 0.9145294698520237,
+      "wiou": 0.7971547779632177
+    },
+    "dpc_zero_dynamic": {
+      "miou": 0.47358661696337556,
+      "mvc16": 0.9003732955923085,
+      "mvc8": 0.9145300700179044,
+      "wiou": 0.7971543052407116
+    },
+    "error_decomposition_reliability": {
+      "miou": 0.4365831987906964,
+      "mvc16": 0.8934009702493243,
+      "mvc8": 0.9080729656675341,
+      "wiou": 0.76615958388239
+    }
+  },
+  "mvc_window_counts": {
+    "8": 2623,
+    "16": 2551
+  },
+  "parameter_efficiency": {
+    "additional_inference_params": 7688,
+    "baseline_correction_trainable_params": 2598080,
+    "dpc_correction_trainable_params": 2605768,
+    "new_parameters": 7688
+  },
+  "recovery_ratio": 0.2937522843373954,
+  "reference_checkpoints": {
+    "baseline_ours": "/home/lin/experiments/kitti_step_semantic_temporal_error_correction_10epoch_ffb1a74/best_semantic_temporal_error_correction.pt",
+    "corrected_b": "/home/lin/experiments/kitti_step_persistent_blur_corrected_b_6dd4cc6/best_corrected_b_persistent_blur.pt",
+    "error_decomposition_reliability": "/home/lin/experiments/kitti_step_error_decomposition_reliability_blur_6dd4cc6/best_error_decomposition_correction.pt"
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "checkpoint": "/home/lin/experiments/kitti_step_dpc_transition_8863daa/best_dpc_semantic_temporal_error_correction.pt",
+  "computational_efficiency": {
+    "fps_drop_percentage": 45.167790573843206,
+    "fps_retention": 0.548322094261568,
+    "fps_retention_percent": 54.8322094261568,
+    "full_current_model": {
+      "fps": 49.0462986755873,
+      "frames": 2686,
+      "latency_ms_per_frame": 20.388898387917457
+    },
+    "gflops": {
+      "full_current_model": {
+        "flops": 1077101255104,
+        "gflops": 1077.101255104,
+        "method": "torch.utils.flop_counter.FlopCounterMode",
+        "note": "Profiler-estimated FLOPs for supported operators; identical profiler protocol is used for Host and Ours."
+      },
+      "gflops_ratio": 1.708405383653178,
+      "host_only": {
+        "flops": 630471705024,
+        "gflops": 630.471705024,
+        "method": "torch.utils.flop_counter.FlopCounterMode",
+        "note": "Profiler-estimated FLOPs for supported operators; identical profiler protocol is used for Host and Ours."
+      },
+      "profile_frame_index": 23
+    },
+    "host_only": {
+      "fps": 89.44797079832894,
+      "frames": 2686,
+      "latency_ms_per_frame": 11.179683463749207
+    },
+    "latency_overhead_ms": 9.20921492416825
+  },
+  "experiment": "kitti_step_dpc_transition_efficiency",
+  "git_revision": "8863daa49115597f7145f194183612e866917978",
+  "parameter_efficiency": {
+    "components": {
+      "correction": 2605768,
+      "host_and_loaded_adapters": 45458682,
+      "host_conditioned_writeback": 884736,
+      "predictor": 6785024,
+      "state_adapter": 984068
+    },
+    "total_params": 54849474,
+    "trainable_params": 2605768,
+    "trainable_ratio": 0.047507620583562934,
+    "trainable_ratio_percent": 4.750762058356293
+  },
+  "protocol": {
+    "batch_size": 1,
+    "excluded": [
+      "clean reference",
+      "Corrected B",
+      "Error Decomposition",
+      "ground truth",
+      "mIoU",
+      "wIoU",
+      "mVC8",
+      "mVC16",
+      "diagnostics",
+      "argmax and CPU transfer",
+      "image loading",
+      "Gaussian Blur generation",
+      "disk I/O",
+      "JSON writing"
+    ],
+    "included_full_model": [
+      "host backbone",
+      "state adapter",
+      "prediction error",
+      "local feature correlation",
+      "semantic error encoder",
+      "temporal error ConvGRU",
+      "dynamic error transition controller",
+      "semantic correction",
+      "residual writeback",
+      "segmentation decoder",
+      "predictor update for next frame"
+    ],
+    "precision": "fp32",
+    "split": "val",
+    "state_policy": "ordered per-sequence steady-state inference",
+    "timed_frames": "post 10-percent state warm-up",
+    "timing": "CUDA events with synchronization after collection"
+  }
+}
