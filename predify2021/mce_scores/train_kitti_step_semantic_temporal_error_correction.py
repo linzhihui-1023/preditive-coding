@@ -71,11 +71,33 @@ def parameter_efficiency_metrics(model, predictor, corrections):
         for parameter in module.parameters()
         if parameter.requires_grad
     )
+    state_adapter_params = sum(
+        parameter.numel() for parameter in model.multi_layer_adapter.parameters()
+    )
+    writeback_params = sum(
+        parameter.numel()
+        for parameter in model.host_conditioned_writebacks.parameters()
+    )
+    predictor_params = sum(parameter.numel() for parameter in predictor.parameters())
+    correction_params = sum(parameter.numel() for parameter in corrections.parameters())
+    additional_inference_params = (
+        state_adapter_params
+        + writeback_params
+        + predictor_params
+        + correction_params
+    )
     return {
         "trainable_params": trainable_params,
         "total_params": total_params,
         "trainable_ratio": trainable_params / total_params,
         "trainable_ratio_percent": 100.0 * trainable_params / total_params,
+        "additional_inference_params": additional_inference_params,
+        "additional_inference_components": {
+            "state_adapter": state_adapter_params,
+            "host_conditioned_writeback": writeback_params,
+            "predictor": predictor_params,
+            "correction": correction_params,
+        },
     }
 
 

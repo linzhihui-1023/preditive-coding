@@ -174,11 +174,21 @@ def parameter_counts(model, predictor, corrections):
         parameter.numel()
         for parameter in model.host_conditioned_writebacks.parameters()
     )
+    additional_inference_params = (
+        adapter_count + writeback_count + predictor_count + correction_count
+    )
     return {
         "trainable_params": correction_count,
         "total_params": total_count,
         "trainable_ratio": correction_count / total_count,
         "trainable_ratio_percent": 100.0 * correction_count / total_count,
+        "additional_inference_params": additional_inference_params,
+        "additional_inference_components": {
+            "state_adapter": adapter_count,
+            "host_conditioned_writeback": writeback_count,
+            "predictor": predictor_count,
+            "correction": correction_count,
+        },
         "components": {
             "host_and_loaded_adapters": model_count,
             "predictor": predictor_count,

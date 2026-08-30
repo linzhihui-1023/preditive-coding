@@ -67,7 +67,6 @@ def run_blur_benchmark(model, predictor, corrections, groups, sigmas):
                 predictor_hidden = predictor.initial_state()
                 pending_dynamics = None
                 pending_semantic = None
-                dynamic = None
                 for frame_index, sample in enumerate(samples):
                     clean_image = load_image(sample)
                     corrupted_image = clean_image if sigma == 0.0 else benchmark_blur(clean_image, frame_index, len(samples), sigma)
@@ -84,7 +83,6 @@ def run_blur_benchmark(model, predictor, corrections, groups, sigmas):
                         pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(predictor, observation, error, predictor_hidden)
                         continue
                     posterior, hidden, _ = semantic_temporal_error_step(corrections, observation, pending_dynamics, pending_semantic, hidden)
-                    dynamic = update_dynamic_error(error, dynamic)
                     raw_host = HostFeature(raw.c4, raw.c1, output_size)
                     current_host = host_from_delta(
                         model,
@@ -102,7 +100,6 @@ def run_blur_benchmark(model, predictor, corrections, groups, sigmas):
                         update_confusion_matrix(results[key][name], prediction, mask)
                     pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(predictor, observation, error, predictor_hidden)
                     hidden = detach_error_state(hidden)
-                    dynamic = UnifiedFeatures(*(value.detach() for value in dynamic.as_tuple()))
     return {key: {name: metric_from_confusion(value) for name, value in confusion.items()} for key, confusion in results.items()}
 
 
@@ -312,7 +309,7 @@ def main():
         "reference_checkpoints": {"corrected_b": str(corrected_b_path), "error_decomposition_reliability": str(decomposition_path)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "config": {"seed": 0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "evaluation_excludes_warmup": True, "temperature": 1.0, "distillation_weight": 0.5, "correction_feedback_to_predictor": False, "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=(Ts/tau_e)*e_t+(1-K_e*Ts/tau_e)*epsilon_(t-1)", "dynamic_error_sample_time": 0.1035, "dynamic_error_time_constant": 0.5, "dynamic_error_gain": 1.0, "dynamic_error_integration_factor": 0.207, "dynamic_error_memory_factor": 0.793, "dynamic_error_usage": "tracked_only_not_connected_to_correction", "robustness_benchmark": "ImageNet-C Gaussian Blur", "robustness_blur_sigmas": IMAGENET_C_GAUSSIAN_BLUR_SIGMAS, "robustness_reference_model": "corrupted_host"},
-        "dataset": {"split": "val", "sequence_count": len(groups), "total_frame_count": len(dataset.samples), "effective_frame_count": frame_count},
+        "dataset": {"split": "val", "sequence_count": len(groups), "total_frame_count": len(dataset.samples), "effective_frame_count": frame_count, "role": "local_metric_evaluation_and_checkpoint_selection", "official_test_ground_truth_available_locally": False, "official_test_path": "separate_unlabeled_inference"},
         "metrics": metrics,
         "mIoU": {name: value["miou"] for name, value in metrics.items()},
         "mIoU_new_minus_corrupted_host": metrics["semantic_temporal_error_correction"]["miou"] - metrics["corrupted_host"]["miou"],
