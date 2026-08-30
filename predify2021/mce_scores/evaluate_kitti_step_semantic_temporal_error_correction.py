@@ -468,8 +468,8 @@ def main():
     dpc_params = sum(parameter.numel() for parameter in corrections.parameters())
     totals.update(
         {
-            "beta_z1": float(corrections[0].error_state.transition.beta.item()),
-            "beta_z4": float(corrections[1].error_state.transition.beta.item()),
+            "dynamic_error_integration_factor": corrections[0].error_state.transition.integration_factor,
+            "dynamic_error_memory_factor": corrections[0].error_state.transition.memory_factor,
         }
     )
     result = {
@@ -478,7 +478,7 @@ def main():
         "checkpoint": str(checkpoint),
         "reference_checkpoints": {"baseline_ours": str(baseline_path), "corrected_b": str(corrected_b_path), "error_decomposition_reliability": str(decomposition_path)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
-        "config": {"seed": 0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "evaluation_excludes_warmup": True, "temperature": 1.0, "distillation_weight": 0.5, "correction_feedback_to_predictor": False, "dynamic_error_initial_beta": 0.793, "transition_basis_count": 3, "transition_residual_scale": 0.1, "zero_dynamic_same_checkpoint": True, "robustness_benchmark": "ImageNet-C Gaussian Blur", "robustness_blur_sigmas": IMAGENET_C_GAUSSIAN_BLUR_SIGMAS, "robustness_reference_model": "corrupted_host"},
+        "config": {"seed": 0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "evaluation_excludes_warmup": True, "temperature": 1.0, "distillation_weight": 0.5, "correction_feedback_to_predictor": False, "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=(Ts/tau_e)*e_t+(1-K_e*Ts/tau_e)*epsilon_(t-1)", "dynamic_error_sample_time": 0.1035, "dynamic_error_time_constant": 0.5, "dynamic_error_gain": 1.0, "dynamic_error_integration_factor": 0.207, "dynamic_error_memory_factor": 0.793, "transition_basis_count": 3, "transition_residual_scale": 0.1, "zero_dynamic_same_checkpoint": True, "robustness_benchmark": "ImageNet-C Gaussian Blur", "robustness_blur_sigmas": IMAGENET_C_GAUSSIAN_BLUR_SIGMAS, "robustness_reference_model": "corrupted_host"},
         "dataset": {"split": "val", "sequence_count": len(groups), "total_frame_count": len(dataset.samples), "effective_frame_count": frame_count},
         "metrics": metrics,
         "mIoU": {name: value["miou"] for name, value in metrics.items()},

@@ -1,11 +1,14 @@
-import math
-
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 from .adapters import UnifiedFeatures
 from .space_time_memory_reader import SpaceTimeMemoryReader
+
+
+DYNAMIC_ERROR_SAMPLE_TIME = 0.1035
+DYNAMIC_ERROR_TIME_CONSTANT = 0.5
+DYNAMIC_ERROR_GAIN = 1.0
 
 
 class LocalFeatureCorrelation(nn.Module):
@@ -73,14 +76,21 @@ class ErrorStateConvGRU(nn.Module):
 
 
 class DynamicErrorTransition(nn.Module):
-    """Condition a lightweight hidden transition on accumulated task error."""
+    """Condition the hidden transition on the full dynamic prediction-error state."""
 
-    def __init__(self, channels=128, basis_count=3, initial_beta=0.793):
+    def __init__(
+        self,
+        channels=128,
+        basis_count=3,
+        sample_time=DYNAMIC_ERROR_SAMPLE_TIME,
+        time_constant=DYNAMIC_ERROR_TIME_CONSTANT,
+        error_gain=DYNAMIC_ERROR_GAIN,
+    ):
         super().__init__()
         self.residual_scale = 0.1
-        self.beta_logit = nn.Parameter(
-            torch.tensor(math.log(initial_beta / (1.0 - initial_beta)))
-        )
+        self.sample_time = float(sample_time)
+        self.time_constant = float(time_constant)
+        self.error_gain = float(error_gain)
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.controller = nn.Linear(channels, basis_count)
         self.bases = nn.ModuleList(
@@ -98,17 +108,27 @@ class DynamicErrorTransition(nn.Module):
         )
 
     @property
-    def beta(self):
-        return torch.sigmoid(self.beta_logit)
+    def integration_factor(self):
+        return self.sample_time / self.time_constant
 
-    def forward(self, task_error, hidden, dynamic_error, zero_dynamic=False):
+    @property
+    def memory_factor(self):
+        return 1.0 - self.error_gain * self.sample_time / self.time_constant
+
+    def forward(self, prediction_error, hidden, dynamic_error, zero_dynamic=False):
         if hidden is None:
-            hidden = torch.zeros_like(task_error)
+            hidden = torch.zeros_like(prediction_error)
         if dynamic_error is None:
-            dynamic_error = torch.zeros_like(task_error)
+            dynamic_error = torch.zeros_like(prediction_error)
 
-        beta = self.beta
-        dynamic_error = beta * dynamic_error + (1.0 - beta) * task_error
+        dynamic_error = (
+            (self.sample_time / self.time_constant) * prediction_error
+            + (
+                1.0
+                - self.error_gain * self.sample_time / self.time_constant
+            )
+            * dynamic_error
+        )
         controller_state = torch.zeros_like(dynamic_error) if zero_dynamic else dynamic_error
         weights = torch.softmax(
             self.controller(self.pool(controller_state).flatten(1)), dim=1
@@ -126,9 +146,16 @@ class DynamicTransitionErrorStateConvGRU(ErrorStateConvGRU):
         super().__init__(channels)
         self.transition = DynamicErrorTransition(channels)
 
-    def forward(self, task_error, hidden, dynamic_error, zero_dynamic=False):
+    def forward(
+        self,
+        task_error,
+        prediction_error,
+        hidden,
+        dynamic_error,
+        zero_dynamic=False,
+    ):
         transitioned, dynamic_error, weights = self.transition(
-            task_error, hidden, dynamic_error, zero_dynamic
+            prediction_error, hidden, dynamic_error, zero_dynamic
         )
         gates = torch.sigmoid(
             self.gates(torch.cat((task_error, transitioned), dim=1))
@@ -203,7 +230,7 @@ class DPCSemanticTemporalErrorCorrection(SemanticTemporalErrorCorrection):
             error, aligned_error, observation, predicted, semantic_context
         )
         hidden, dynamic_error, transition_weights = self.error_state(
-            task_error, hidden, dynamic_error, zero_dynamic
+            task_error, error, hidden, dynamic_error, zero_dynamic
         )
         delta = self.direct(observation, hidden)
         attention_entropy = -(
@@ -226,7 +253,11 @@ class DPCSemanticTemporalErrorCorrection(SemanticTemporalErrorCorrection):
             "base_error": base_error,
             "transition_weights": transition_weights,
             "transition_entropy": transition_entropy.mean(),
-            "beta": self.error_state.transition.beta,
+            "dynamic_error_sample_time": self.error_state.transition.sample_time,
+            "dynamic_error_time_constant": self.error_state.transition.time_constant,
+            "dynamic_error_gain": self.error_state.transition.error_gain,
+            "dynamic_error_integration_factor": self.error_state.transition.integration_factor,
+            "dynamic_error_memory_factor": self.error_state.transition.memory_factor,
         }
 
 
@@ -440,8 +471,11 @@ def apply_dpc_semantic_temporal_corrections(
         "transition_weights_z4": values4["transition_weights"].mean(dim=0),
         "transition_entropy_z1": values1["transition_entropy"],
         "transition_entropy_z4": values4["transition_entropy"],
-        "beta_z1": values1["beta"],
-        "beta_z4": values4["beta"],
+        "dynamic_error_sample_time": values1["dynamic_error_sample_time"],
+        "dynamic_error_time_constant": values1["dynamic_error_time_constant"],
+        "dynamic_error_gain": values1["dynamic_error_gain"],
+        "dynamic_error_integration_factor": values1["dynamic_error_integration_factor"],
+        "dynamic_error_memory_factor": values1["dynamic_error_memory_factor"],
     }
 
 
