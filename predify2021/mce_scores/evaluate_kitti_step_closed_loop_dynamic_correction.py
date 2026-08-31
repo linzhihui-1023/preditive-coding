@@ -16,6 +16,9 @@ from predify2021.mce_scores.evaluate_kitti_step_adaptive_dynamic_correction impo
 )
 from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import (
     ADAPTER_CHECKPOINT_DEFAULT,
+    DYNAMIC_ERROR_GAIN,
+    DYNAMIC_ERROR_SAMPLE_TIME,
+    DYNAMIC_ERROR_TIME_CONSTANT,
     PREDICTOR_CHECKPOINT_DEFAULT,
     STATIC_CHECKPOINT_DEFAULT,
     encode_image,
@@ -49,7 +52,6 @@ FIXED_DYNAMIC_CHECKPOINT_DEFAULT = (
     "/home/lin/predify/experiments/kitti_step_dynamic_error_correction_9fc8d81/"
     "best_dynamic_correction.pt"
 )
-GAMMA = 0.207
 
 
 def add_frame_noise(clean_image, sigma):
@@ -608,7 +610,9 @@ def main():
             "learning_rate": learning_rate,
             "weight_decay": weight_decay,
             "gaussian_noise_sigma": sigma,
-            "gamma_ts_over_tau": GAMMA,
+            "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME,
+            "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT,
+            "dynamic_error_gain": DYNAMIC_ERROR_GAIN,
             "corrected_layers": [1, 4],
             "trainable_parameter_count": sum(
                 parameter.numel() for parameter in corrections.parameters()
