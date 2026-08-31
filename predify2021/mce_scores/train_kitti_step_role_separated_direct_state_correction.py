@@ -8,8 +8,6 @@ from torch.nn import functional as F
 
 from predify2021.datasets.kitti_step import KITTISTEPSegmentationDataset, semantic_mask_from_panoptic_png
 from predify2021.mce_scores.role_separated_direct_state_correction import (
-    ALPHA,
-    BETA,
     add_frame_noise,
     direct_posterior,
     error_state,
@@ -25,7 +23,12 @@ from predify2021.mce_scores.role_separated_direct_state_correction import (
     build_corrections,
 )
 from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import sequence_groups
-from predify2021.mce_scores.role_separated_dynamic_error_correction import residual_writeback_host_feature
+from predify2021.mce_scores.role_separated_dynamic_error_correction import (
+    DYNAMIC_ERROR_GAIN,
+    DYNAMIC_ERROR_SAMPLE_TIME,
+    DYNAMIC_ERROR_TIME_CONSTANT,
+    residual_writeback_host_feature,
+)
 from predify2021.model_factory.deeplabv3plus_resnet50 import HostFeature
 
 
@@ -182,7 +185,7 @@ def main():
             torch.save({"mode": mode, "corrections": {str(index): corrections[position].state_dict() for position, index in enumerate((0, 3))}, "epoch": epoch, "val": val_values}, output / f"best_role_separated_direct_{mode}.pt")
     output = Path(os.environ.get("PREDIFY_ROLE_SEPARATED_DIRECT_CORRECTION_OUTPUT_DIR", f"/home/lin/predify/experiments/kitti_step_role_separated_direct_{mode}"))
     output.mkdir(parents=True, exist_ok=True)
-    summary = {"experiment": "kitti_step_role_separated_direct_state_correction_training", "mode": mode, "git_revision": os.environ.get("PREDIFY_GIT_REVISION"), "checkpoint": str(output / f"best_role_separated_direct_{mode}.pt"), "base_checkpoints": {key: str(value) for key, value in paths.items()}, "config": {"epochs": EPOCHS, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "gaussian_noise_sigma": SIGMA, "alpha": ALPHA, "beta": BETA, "labels_used_for_training": mode == "semantic_state"}, "dataset": {"train_sequence_count": len(train_groups), "val_sequence_count": len(val_groups), "train_frame_count": len(train.samples), "val_frame_count": len(val.samples)}, "trainable_parameter_count": sum(parameter.numel() for parameter in parameters), "gates": {**gates, "correction_gradient_nonzero": all(record["correction_gradient_nonzero"] for record in history)}, "history": history, "best_epoch": best["epoch"]}
+    summary = {"experiment": "kitti_step_role_separated_direct_state_correction_training", "mode": mode, "git_revision": os.environ.get("PREDIFY_GIT_REVISION"), "checkpoint": str(output / f"best_role_separated_direct_{mode}.pt"), "base_checkpoints": {key: str(value) for key, value in paths.items()}, "config": {"epochs": EPOCHS, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "gaussian_noise_sigma": SIGMA, "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME, "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_gain": DYNAMIC_ERROR_GAIN, "labels_used_for_training": mode == "semantic_state"}, "dataset": {"train_sequence_count": len(train_groups), "val_sequence_count": len(val_groups), "train_frame_count": len(train.samples), "val_frame_count": len(val.samples)}, "trainable_parameter_count": sum(parameter.numel() for parameter in parameters), "gates": {**gates, "correction_gradient_nonzero": all(record["correction_gradient_nonzero"] for record in history)}, "history": history, "best_epoch": best["epoch"]}
     (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     print(json.dumps(summary, indent=2, sort_keys=True), flush=True)
 
