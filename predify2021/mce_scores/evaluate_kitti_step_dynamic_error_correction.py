@@ -31,6 +31,9 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
 from predify2021.model_factory.deeplabv3plus_resnet50.corrections import (
     ErrorGainCorrection,
 )
+from predify2021.model_factory.targetflow.core import (
+    build_temporal_prediction_error_state,
+)
 
 
 STATIC_CHECKPOINT_DEFAULT = (
@@ -50,8 +53,17 @@ INSTANT_CORRECTION_CHECKPOINT_DEFAULT = (
     "best_correction.pt"
 )
 
-ALPHA = 0.207
-BETA = 0.793
+# Provisional experiment defaults. These are parameters of the original
+# first-order dynamic-error law, not the definition of the law itself.
+DYNAMIC_ERROR_SAMPLE_TIME = float(
+    os.environ.get("PREDIFY_DYNAMIC_ERROR_SAMPLE_TIME", "0.1035")
+)
+DYNAMIC_ERROR_TIME_CONSTANT = float(
+    os.environ.get("PREDIFY_DYNAMIC_ERROR_TIME_CONSTANT", "0.5")
+)
+DYNAMIC_ERROR_GAIN = float(
+    os.environ.get("PREDIFY_DYNAMIC_ERROR_GAIN", "1.0")
+)
 
 
 def sequence_groups(dataset):
@@ -90,10 +102,22 @@ def predict_current(predictor, previous_previous, previous, current):
 
 def update_dynamic_error(error, previous_error):
     if previous_error is None:
-        previous_error = UnifiedFeatures(*(torch.zeros_like(value) for value in error.as_tuple()))
+        previous_error = UnifiedFeatures(
+            *(torch.zeros_like(value) for value in error.as_tuple())
+        )
     return UnifiedFeatures(
-        *(ALPHA * current + BETA * previous
-          for current, previous in zip(error.as_tuple(), previous_error.as_tuple()))
+        *(
+            build_temporal_prediction_error_state(
+                current,
+                previous,
+                sample_time=DYNAMIC_ERROR_SAMPLE_TIME,
+                time_constant=DYNAMIC_ERROR_TIME_CONSTANT,
+                error_gain=DYNAMIC_ERROR_GAIN,
+            )
+            for current, previous in zip(
+                error.as_tuple(), previous_error.as_tuple()
+            )
+        )
     )
 
 
@@ -346,8 +370,13 @@ def main():
             "learning_rate": learning_rate,
             "weight_decay": weight_decay,
             "gaussian_noise_sigma": sigma,
-            "alpha": ALPHA,
-            "beta": BETA,
+            "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME,
+            "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT,
+            "dynamic_error_gain": DYNAMIC_ERROR_GAIN,
+            "dynamic_error_definition": (
+                "epsilon_t=epsilon_(t-1)+(Ts/tau_e)"
+                "*(e_t-K_e*epsilon_(t-1))"
+            ),
             "corrected_layers": [1, 4],
             "trainable_parameter_count": sum(
                 parameter.numel() for parameter in dynamic_corrections.parameters()
