@@ -1,3 +1,4 @@
+import os
 from typing import NamedTuple
 
 import torch
@@ -10,9 +11,18 @@ from predify2021.model_factory.targetflow.core import (
 )
 
 
-DYNAMIC_ERROR_SAMPLE_TIME = 0.1035
-DYNAMIC_ERROR_TIME_CONSTANT = 0.5
-DYNAMIC_ERROR_GAIN = 1.0
+# Provisional experiment defaults only. The dynamic-error definition is the
+# parameterized first-order law in targetflow.core; these values are not fixed
+# parts of that definition and can be replaced by later adaptation.
+DYNAMIC_ERROR_SAMPLE_TIME = float(
+    os.environ.get("PREDIFY_DYNAMIC_ERROR_SAMPLE_TIME", "0.1035")
+)
+DYNAMIC_ERROR_TIME_CONSTANT = float(
+    os.environ.get("PREDIFY_DYNAMIC_ERROR_TIME_CONSTANT", "0.5")
+)
+DYNAMIC_ERROR_GAIN = float(
+    os.environ.get("PREDIFY_DYNAMIC_ERROR_GAIN", "1.0")
+)
 
 
 class SemanticTemporalState(NamedTuple):
