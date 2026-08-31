@@ -22,6 +22,9 @@ from predify2021.mce_scores.role_separated_direct_state_correction import (
     zero_state,
 )
 from predify2021.mce_scores.role_separated_dynamic_error_correction import (
+    DYNAMIC_ERROR_GAIN,
+    DYNAMIC_ERROR_SAMPLE_TIME,
+    DYNAMIC_ERROR_TIME_CONSTANT,
     detach_state,
     residual_writeback_host_feature,
 )
@@ -164,7 +167,7 @@ def main():
         "experiment": "kitti_step_role_separated_direct_state_correction_evaluation",
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
         "checkpoints": {**{key: str(value) for key, value in paths.items()}, **{key: str(value) for key, value in correction_paths.items()}},
-        "config": {"seed": SEED, "gaussian_noise_sigma": SIGMA, "alpha": 0.207, "beta": 0.793, "corrected_layers": [1, 4], "correction_feedback_to_predictor": False},
+        "config": {"seed": SEED, "gaussian_noise_sigma": SIGMA, "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME, "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_gain": DYNAMIC_ERROR_GAIN, "corrected_layers": [1, 4], "correction_feedback_to_predictor": False},
         "dataset": {"split": "val", "sequence_count": len(groups), "total_frame_count": len(dataset.samples), "effective_frame_count": frame_count},
         "metrics": {"mIoU": metrics, "references": {"current_gain_correction": CURRENT_GAIN_MIOU, "historical_direct_open_loop": HISTORICAL_DIRECT_MIOU}},
         "state_mse": state_mse,
