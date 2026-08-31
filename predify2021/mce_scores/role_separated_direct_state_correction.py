@@ -21,8 +21,6 @@ from predify2021.mce_scores.role_separated_dynamic_error_correction import (
 from predify2021.model_factory.deeplabv3plus_resnet50 import DirectStateCorrection, UnifiedFeatures
 
 
-ALPHA = 0.207
-BETA = 0.793
 CORRECTION_INDICES = (0, 3)
 
 
