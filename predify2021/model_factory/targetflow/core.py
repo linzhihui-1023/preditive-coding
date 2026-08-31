@@ -239,7 +239,7 @@ def build_dynamic_targetflow_error(
     time_constant,
     error_gain,
 ):
-    """Update epsilon_t = alpha*r_t + (1-K*alpha)*epsilon_(t-1)."""
+    """Update the dynamic error from the original parameterized first-order law.\n\n    epsilon_t = epsilon_(t-1) + (Ts / tau_e) * (r_t - K_e * epsilon_(t-1))\n    """
     if targetflow_residual is None:
         return None
 
@@ -265,7 +265,7 @@ def build_dynamic_targetflow_error(
             "abs(1 - error_gain * sample_time / time_constant) < 1, but got "
             f"memory_factor={float(memory_factor.item())}."
         )
-    return integration_factor * targetflow_residual + memory_factor * previous_error
+    return previous_error + integration_factor * (\n        targetflow_residual - error_gain_tensor * previous_error\n    )
 
 
 def build_temporal_prediction_error_state(
@@ -275,7 +275,7 @@ def build_temporal_prediction_error_state(
     time_constant,
     error_gain,
 ):
-    """Update epsilon_t = alpha*e_t + (1-K*alpha)*epsilon_(t-1)."""
+    """Update the temporal prediction-error state from the original law.\n\n    epsilon_t = epsilon_(t-1) + (Ts / tau_e) * (e_t - K_e * epsilon_(t-1))\n    """
     if prediction_error is None:
         return None
 
@@ -310,7 +310,7 @@ def build_temporal_prediction_error_state(
             "abs(1 - error_gain * sample_time / time_constant) < 1, but got "
             f"memory_factor={float(memory_factor.item())}."
         )
-    return integration_factor * prediction_error + memory_factor * previous_state
+    return previous_state + integration_factor * (\n        prediction_error - error_gain_tensor * previous_state\n    )
 
 
 def build_targetflow_error(
