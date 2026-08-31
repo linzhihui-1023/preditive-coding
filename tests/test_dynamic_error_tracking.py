@@ -63,14 +63,17 @@ def test_dynamic_error_uses_observation_minus_prediction_and_full_formula():
     assert torch.allclose(values["error_z1"], expected_error)
     assert torch.allclose(values["dynamic_error_z1"], expected_dynamic)
     assert torch.allclose(new_state.dynamic_error[0], expected_dynamic)
-    assert DYNAMIC_ERROR_SAMPLE_TIME / DYNAMIC_ERROR_TIME_CONSTANT == 0.207
-    assert (
-        1.0
-        - DYNAMIC_ERROR_GAIN
-        * DYNAMIC_ERROR_SAMPLE_TIME
-        / DYNAMIC_ERROR_TIME_CONSTANT
-        == 0.793
+    integration_factor = (
+        DYNAMIC_ERROR_SAMPLE_TIME / DYNAMIC_ERROR_TIME_CONSTANT
     )
+    expected_from_original_law = torch.zeros_like(expected_error) + (
+        integration_factor
+        * (
+            expected_error
+            - DYNAMIC_ERROR_GAIN * torch.zeros_like(expected_error)
+        )
+    )
+    assert torch.allclose(expected_dynamic, expected_from_original_law)
 
 
 def test_dynamic_error_is_tracked_but_does_not_change_correction():
