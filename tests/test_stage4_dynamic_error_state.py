@@ -59,23 +59,30 @@ class DynamicErrorStateSequenceTest(unittest.TestCase):
 
 class DynamicErrorScoreTest(unittest.TestCase):
     def test_dynamic_matches_tensor_ema_at_unit_gain_but_not_scalar_envelope(self):
-        alpha = 0.207
+        sample_time = 0.1035
+        time_constant = 0.5
+        error_gain = 1.0
+        integration_factor = sample_time / time_constant
         error = torch.tensor([[[[2.0, -2.0]]]])
-        dynamic = alpha * error
+        dynamic = torch.zeros_like(error) + integration_factor * (
+            error - error_gain * torch.zeros_like(error)
+        )
         stats, scalar, tensor = update_error_score_states(
             error,
             dynamic,
             previous_scalar_ema=0.0,
             previous_tensor_ema=None,
-            ema_alpha=alpha,
+            ema_alpha=integration_factor,
         )
         self.assertTrue(torch.equal(tensor, dynamic))
         self.assertEqual(stats["dynamic_minus_matched_tensor_ema_max_abs"], 0.0)
-        self.assertAlmostEqual(scalar, alpha * 2.0)
+        self.assertAlmostEqual(scalar, integration_factor * 2.0)
         self.assertAlmostEqual(stats["dynamic_error_state_rms"], scalar)
 
         opposite_error = -error
-        opposite_dynamic = alpha * opposite_error + (1.0 - alpha) * dynamic
+        opposite_dynamic = dynamic + integration_factor * (
+            opposite_error - error_gain * dynamic
+        )
         stats, scalar, tensor = update_error_score_states(
             opposite_error,
             opposite_dynamic,
