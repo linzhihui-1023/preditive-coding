@@ -1,4 +1,5 @@
 import math
+import os
 
 import torch
 from torch import nn
@@ -6,7 +7,20 @@ from torch import nn
 from .adapters import UNIFIED_STATE_CHANNELS
 
 
-INITIAL_UPDATE_RATE = 0.207
+# Provisional experiment defaults expressed in the original dynamic-error
+# parameters. The learned update rate is initialized from Ts / tau_e.
+DYNAMIC_ERROR_SAMPLE_TIME = float(
+    os.environ.get("PREDIFY_DYNAMIC_ERROR_SAMPLE_TIME", "0.1035")
+)
+DYNAMIC_ERROR_TIME_CONSTANT = float(
+    os.environ.get("PREDIFY_DYNAMIC_ERROR_TIME_CONSTANT", "0.5")
+)
+DYNAMIC_ERROR_GAIN = float(
+    os.environ.get("PREDIFY_DYNAMIC_ERROR_GAIN", "1.0")
+)
+INITIAL_UPDATE_RATE = (
+    DYNAMIC_ERROR_SAMPLE_TIME / DYNAMIC_ERROR_TIME_CONSTANT
+)
 
 
 class AdaptiveUpdateRate(nn.Module):
