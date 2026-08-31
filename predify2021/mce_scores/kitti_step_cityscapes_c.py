@@ -32,6 +32,26 @@ def apply_cityscapes_c_corruption(image, corruption, severity):
         raise ValueError("Expected one RGB image with shape [1, 3, H, W]")
 
     from imagecorruptions import corrupt
+    from imagecorruptions import corruptions as imagecorruptions_impl
+
+    # imagecorruptions releases before the scikit-image channel_axis rename
+    # still call gaussian(..., multichannel=True). Keep the published
+    # corruption implementation and translate only that renamed keyword.
+    gaussian = imagecorruptions_impl.gaussian
+    if not getattr(gaussian, "_predify_channel_axis_compat", False):
+        import inspect
+
+        if "multichannel" not in inspect.signature(gaussian).parameters:
+            from functools import wraps
+
+            @wraps(gaussian)
+            def gaussian_compat(*args, **kwargs):
+                if kwargs.pop("multichannel", False):
+                    kwargs["channel_axis"] = -1
+                return gaussian(*args, **kwargs)
+
+            gaussian_compat._predify_channel_axis_compat = True
+            imagecorruptions_impl.gaussian = gaussian_compat
 
     source = (
         image.detach()
