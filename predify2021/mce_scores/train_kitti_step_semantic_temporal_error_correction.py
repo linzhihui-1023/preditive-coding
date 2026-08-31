@@ -33,6 +33,9 @@ from predify2021.mce_scores.role_separated_dynamic_error_correction import (
     residual_writeback_host_feature,
 )
 from predify2021.mce_scores.semantic_temporal_error_step import (
+    DYNAMIC_ERROR_GAIN,
+    DYNAMIC_ERROR_SAMPLE_TIME,
+    DYNAMIC_ERROR_TIME_CONSTANT,
     detach_error_state,
     semantic_temporal_error_step,
     zero_semantic_temporal_state,
@@ -434,7 +437,7 @@ def main():
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
         "checkpoint": str(output / "best_semantic_temporal_error_correction.pt"),
         "parameter_efficiency": parameter_efficiency,
-        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "early_stopping_min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=(Ts/tau_e)*e_t+(1-K_e*Ts/tau_e)*epsilon_(t-1)", "dynamic_error_sample_time": 0.1035, "dynamic_error_time_constant": 0.5, "dynamic_error_gain": 1.0, "dynamic_error_integration_factor": 0.207, "dynamic_error_memory_factor": 0.793, "dynamic_error_usage": "tracked_only_not_connected_to_correction"},
+        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "early_stopping_min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=epsilon_(t-1)+(Ts/tau_e)*(e_t-K_e*epsilon_(t-1))", "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME, "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_gain": DYNAMIC_ERROR_GAIN, "dynamic_error_usage": "tracked_only_not_connected_to_correction"},
         "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": len(train.samples), "val_sequence_count": len(val_groups), "val_frame_count": len(val.samples)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "gates": gate,
