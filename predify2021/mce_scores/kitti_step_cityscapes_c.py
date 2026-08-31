@@ -1,5 +1,6 @@
 import inspect
 from functools import wraps
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -23,6 +24,34 @@ CITYSCAPES_C_COMMON_CORRUPTIONS = (
     "jpeg_compression",
 )
 CITYSCAPES_C_SEVERITIES = (1, 2, 3, 4, 5)
+DEFAULT_CACHED_CORRUPTIONS = ("glass_blur",)
+
+
+def canonical_condition_ordinal(corruption, severity):
+    return (
+        1
+        + CITYSCAPES_C_COMMON_CORRUPTIONS.index(corruption)
+        * len(CITYSCAPES_C_SEVERITIES)
+        + CITYSCAPES_C_SEVERITIES.index(int(severity))
+    )
+
+
+def corruption_seed(base_seed, frames_per_condition, frame_index, corruption, severity):
+    return (
+        int(base_seed)
+        + canonical_condition_ordinal(corruption, severity) * int(frames_per_condition)
+        + int(frame_index)
+    )
+
+
+def corruption_cache_path(cache_root, corruption, severity, sequence_id, image_path):
+    return (
+        Path(cache_root)
+        / corruption
+        / f"S{int(severity)}"
+        / str(sequence_id)
+        / Path(image_path).name
+    )
 
 
 def _imagecorruptions():

@@ -24,6 +24,8 @@ from predify2021.mce_scores.kitti_step_cityscapes_c import (
     CITYSCAPES_C_COMMON_CORRUPTIONS,
     CITYSCAPES_C_SEVERITIES,
     apply_cityscapes_c_corruption_uint8,
+    corruption_cache_path,
+    corruption_seed,
 )
 from predify2021.mce_scores.role_separated_direct_state_correction import (
     error_state,
@@ -54,12 +56,27 @@ def parse_csv(value, allowed, cast=str):
     return selected
 
 
+def parse_optional_csv(value, allowed):
+    if not value:
+        return ()
+    return parse_csv(value, allowed)
+
+
 class CorruptedKITTIStepSuite(Dataset):
-    def __init__(self, frame_records, conditions, seed):
+    def __init__(
+        self,
+        frame_records,
+        conditions,
+        seed,
+        cache_root=None,
+        cached_corruptions=(),
+    ):
         self.frame_records = tuple(frame_records)
         self.conditions = tuple(conditions)
         self.seed = int(seed)
         self.frames_per_condition = len(self.frame_records)
+        self.cache_root = Path(cache_root) if cache_root else None
+        self.cached_corruptions = frozenset(cached_corruptions)
 
     def __len__(self):
         return self.frames_per_condition * len(self.conditions)
@@ -69,17 +86,34 @@ class CorruptedKITTIStepSuite(Dataset):
         condition_key, corruption, severity = self.conditions[condition_index]
         record = self.frame_records[frame_index]
 
-        with Image.open(record["image_path"]) as image:
-            image_uint8 = np.array(image.convert("RGB"), dtype=np.uint8)
-
-        if corruption:
-            sample_seed = self.seed + condition_index * self.frames_per_condition + frame_index
-            image_uint8 = apply_cityscapes_c_corruption_uint8(
-                image_uint8,
+        if corruption in self.cached_corruptions:
+            cached_path = corruption_cache_path(
+                self.cache_root,
                 corruption,
                 severity,
-                seed=sample_seed,
+                record["sequence_id"],
+                record["image_path"],
             )
+            with Image.open(cached_path) as image:
+                image_uint8 = np.array(image.convert("RGB"), dtype=np.uint8)
+        else:
+            with Image.open(record["image_path"]) as image:
+                image_uint8 = np.array(image.convert("RGB"), dtype=np.uint8)
+
+            if corruption:
+                sample_seed = corruption_seed(
+                    self.seed,
+                    self.frames_per_condition,
+                    frame_index,
+                    corruption,
+                    severity,
+                )
+                image_uint8 = apply_cityscapes_c_corruption_uint8(
+                    image_uint8,
+                    corruption,
+                    severity,
+                    seed=sample_seed,
+                )
 
         image_tensor = torch.from_numpy(image_uint8).permute(2, 0, 1).contiguous()
         mask = semantic_mask_from_panoptic_png(record["mask_path"]).to(torch.uint8)
@@ -480,6 +514,15 @@ def main():
         CITYSCAPES_C_SEVERITIES,
         int,
     )
+    cached_corruptions = parse_optional_csv(
+        os.environ.get("PREDIFY_CITYSCAPES_C_CACHED_CORRUPTIONS"),
+        CITYSCAPES_C_COMMON_CORRUPTIONS,
+    )
+    cache_root_value = os.environ.get("PREDIFY_CITYSCAPES_C_CACHE_ROOT")
+    cache_root = Path(cache_root_value) if cache_root_value else None
+    if cached_corruptions and cache_root is None:
+        raise ValueError("PREDIFY_CITYSCAPES_C_CACHE_ROOT is required for cached corruptions")
+
     max_sequences = int(os.environ.get("PREDIFY_CITYSCAPES_C_MAX_SEQUENCES", "0"))
     num_workers = int(os.environ.get("PREDIFY_CITYSCAPES_C_NUM_WORKERS", "8"))
     prefetch_factor = int(os.environ.get("PREDIFY_CITYSCAPES_C_PREFETCH_FACTOR", "4"))
@@ -503,6 +546,8 @@ def main():
         build_frame_records(groups),
         conditions,
         seed,
+        cache_root=cache_root,
+        cached_corruptions=cached_corruptions,
     )
     loader = make_loader(suite_dataset, num_workers, prefetch_factor)
 
@@ -538,7 +583,7 @@ def main():
             "checkpoint_selection": False,
             "correction_feedback_to_predictor": False,
             "cd_reference_model": "host",
-            "corruption_seed_policy": "deterministic_per_condition_and_frame",
+            "corruption_seed_policy": "canonical_condition_ordinal_plus_global_frame_index",
         },
         "pipeline": {
             "corruption_device": "cpu",
@@ -549,6 +594,9 @@ def main():
             "non_blocking_cuda_copy": True,
             "shared_backbone_for_host_and_ours": True,
             "single_loader_for_clean_and_all_conditions": True,
+            "cached_corruptions": cached_corruptions,
+            "cache_root": str(cache_root) if cache_root is not None else None,
+            "cache_format": "lossless_png",
         },
         "timing": {
             "total_wall_seconds": total_wall_seconds,

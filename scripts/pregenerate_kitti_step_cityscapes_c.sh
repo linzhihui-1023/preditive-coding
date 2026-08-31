@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON_BIN="${PREDIFY_PYTHON_BIN:-/home/lin/anaconda3/envs/predifyproject/bin/python}"
+MODE="${1:-formal}"
+
+if [[ "$MODE" == "smoke" ]]; then
+    CORRUPTIONS="${PREDIFY_CITYSCAPES_C_PREGENERATE_CORRUPTIONS:-glass_blur}"
+    SEVERITIES="${PREDIFY_CITYSCAPES_C_SEVERITIES:-1}"
+    MAX_SEQUENCES="${PREDIFY_CITYSCAPES_C_MAX_SEQUENCES:-1}"
+    WORKERS="${PREDIFY_CITYSCAPES_C_PREGENERATE_WORKERS:-4}"
+elif [[ "$MODE" == "formal" ]]; then
+    CORRUPTIONS="${PREDIFY_CITYSCAPES_C_PREGENERATE_CORRUPTIONS:-glass_blur}"
+    SEVERITIES="${PREDIFY_CITYSCAPES_C_SEVERITIES:-}"
+    MAX_SEQUENCES="${PREDIFY_CITYSCAPES_C_MAX_SEQUENCES:-0}"
+    WORKERS="${PREDIFY_CITYSCAPES_C_PREGENERATE_WORKERS:-8}"
+else
+    echo "Usage: $0 [smoke|formal]" >&2
+    exit 2
+fi
+
+"$PYTHON_BIN" -c "import imagecorruptions" >/dev/null
+
+PREDIFY_KITTI_STEP_ROOT="${PREDIFY_KITTI_STEP_ROOT:-/home/lin/predify/kitti_step}" \
+PREDIFY_CITYSCAPES_C_CACHE_ROOT="${PREDIFY_CITYSCAPES_C_CACHE_ROOT:-/home/lin/predify/kitti_step_cityscapes_c_cache}" \
+PREDIFY_CITYSCAPES_C_PREGENERATE_CORRUPTIONS="$CORRUPTIONS" \
+PREDIFY_CITYSCAPES_C_SEVERITIES="$SEVERITIES" \
+PREDIFY_CITYSCAPES_C_MAX_SEQUENCES="$MAX_SEQUENCES" \
+PREDIFY_CITYSCAPES_C_PREGENERATE_WORKERS="$WORKERS" \
+PREDIFY_SEED="${PREDIFY_SEED:-0}" \
+PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}" \
+"$PYTHON_BIN" -u -m predify2021.mce_scores.pregenerate_kitti_step_cityscapes_c
