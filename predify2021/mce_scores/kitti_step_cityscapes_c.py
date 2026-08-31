@@ -58,6 +58,10 @@ def _imagecorruptions():
     from imagecorruptions import corrupt
     from imagecorruptions import corruptions as imagecorruptions_impl
 
+    # Older imagecorruptions uses np.float_, removed in NumPy 2.0.
+    if not hasattr(np, "float_"):
+        np.float_ = np.float64
+
     gaussian = imagecorruptions_impl.gaussian
     if not getattr(gaussian, "_predify_channel_axis_compat", False):
         if "multichannel" not in inspect.signature(gaussian).parameters:
