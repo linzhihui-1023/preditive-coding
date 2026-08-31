@@ -39,6 +39,9 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
 )
 from predify2021.model_factory.deeplabv3plus_resnet50.adaptive_dynamics import (
     AdaptiveUpdateRate,
+    DYNAMIC_ERROR_GAIN,
+    DYNAMIC_ERROR_SAMPLE_TIME,
+    DYNAMIC_ERROR_TIME_CONSTANT,
 )
 from predify2021.model_factory.deeplabv3plus_resnet50.corrections import (
     ErrorGainCorrection,
@@ -460,7 +463,12 @@ def main():
             "learning_rate": learning_rate,
             "weight_decay": weight_decay,
             "gaussian_noise_sigma": sigma,
-            "initial_update_rate": 0.207,
+            "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME,
+            "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT,
+            "dynamic_error_gain": DYNAMIC_ERROR_GAIN,
+            "initial_update_rate": (
+                DYNAMIC_ERROR_SAMPLE_TIME / DYNAMIC_ERROR_TIME_CONSTANT
+            ),
             "corrected_layers": [1, 4],
             "trainable_parameter_count": sum(
                 parameter.numel() for parameter in trainable_parameters
