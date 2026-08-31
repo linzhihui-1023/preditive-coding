@@ -230,7 +230,74 @@ def aggregate_suite(clean, results, corruptions):
         metric: aggregate["ours"][metric] - aggregate["host"][metric]
         for metric in ("miou", "wiou", "mvc8", "mvc16")
     }
+    aggregate["severity"] = {
+        f"S{severity}": {
+            name: {
+                metric: sum(
+                    results[corruption][f"S{severity}"]["metrics"][name][metric]
+                    for corruption in corruptions
+                )
+                / len(corruptions)
+                for metric in ("miou", "wiou", "mvc8", "mvc16")
+            }
+            for name in MODEL_NAMES
+        }
+        for severity in CITYSCAPES_C_SEVERITIES
+    }
     return per_corruption, aggregate
+
+
+def write_readme(result, path):
+    clean = result["clean"]["metrics"]
+    aggregate = result["aggregate"]
+    lines = [
+        "# KITTI-STEP Common Corruption Evaluation",
+        "",
+        "| Model | Clean mIoU | Mean Corruption mIoU | Corruption Drop |",
+        "| --- | ---: | ---: | ---: |",
+    ]
+    for name, label in (("host", "Baseline Host"), ("ours", "Ours")):
+        clean_miou = clean[name]["miou"]
+        corruption_miou = aggregate[name]["miou"]
+        lines.append(
+            f"| {label} | {clean_miou:.7f} | {corruption_miou:.7f} | "
+            f"{clean_miou - corruption_miou:.7f} |"
+        )
+    lines.extend(
+        [
+            "",
+            f"Ours - Baseline Clean: {clean['ours']['miou'] - clean['host']['miou']:.7f}",
+            f"Ours - Baseline Corruption: {aggregate['ours_minus_host']['miou']:.7f}",
+            "",
+            "| Model | Clean mVC8 | Corruption mVC8 | Clean mVC16 | Corruption mVC16 |",
+            "| --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for name, label in (("host", "Baseline"), ("ours", "Ours")):
+        lines.append(
+            f"| {label} | {clean[name]['mvc8']:.7f} | {aggregate[name]['mvc8']:.7f} | "
+            f"{clean[name]['mvc16']:.7f} | {aggregate[name]['mvc16']:.7f} |"
+        )
+    lines.extend(["", "## Severity Trend", "", "| Severity | Baseline | Ours | Delta |", "| --- | ---: | ---: | ---: |"])
+    for severity in CITYSCAPES_C_SEVERITIES:
+        baseline = aggregate["severity"][f"S{severity}"]["host"]["miou"]
+        ours = aggregate["severity"][f"S{severity}"]["ours"]["miou"]
+        lines.append(f"| S{severity} | {baseline:.7f} | {ours:.7f} | {ours - baseline:.7f} |")
+    wins = sum(
+        result["conditions"][corruption][f"S{severity}"]["metrics"]["ours"]["miou"]
+        > result["conditions"][corruption][f"S{severity}"]["metrics"]["host"]["miou"]
+        for corruption in result["conditions"]
+        for severity in CITYSCAPES_C_SEVERITIES
+    )
+    total = len(result["conditions"]) * len(CITYSCAPES_C_SEVERITIES)
+    lines.extend(
+        [
+            "",
+            f"Ours wins {wins}/{total} corruption conditions by mIoU.",
+            "CD/rCD in summary.json are reported against the internal Host reference, not official Cityscapes-C metrics.",
+        ]
+    )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def main():
@@ -332,6 +399,7 @@ def main():
         json.dumps(result, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    write_readme(result, output / "README.md")
     print(json.dumps(result, indent=2, sort_keys=True), flush=True)
 
 

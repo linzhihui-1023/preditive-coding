@@ -265,7 +265,9 @@ def build_dynamic_targetflow_error(
             "abs(1 - error_gain * sample_time / time_constant) < 1, but got "
             f"memory_factor={float(memory_factor.item())}."
         )
-    return previous_error + integration_factor * (\n        targetflow_residual - error_gain_tensor * previous_error\n    )
+    return previous_error + integration_factor * (
+        targetflow_residual - error_gain_tensor * previous_error
+    )
 
 
 def build_temporal_prediction_error_state(
@@ -310,7 +312,9 @@ def build_temporal_prediction_error_state(
             "abs(1 - error_gain * sample_time / time_constant) < 1, but got "
             f"memory_factor={float(memory_factor.item())}."
         )
-    return previous_state + integration_factor * (\n        prediction_error - error_gain_tensor * previous_state\n    )
+    return previous_state + integration_factor * (
+        prediction_error - error_gain_tensor * previous_state
+    )
 
 
 def build_targetflow_error(
