@@ -1,0 +1,39 @@
+{
+  "name": "Cityscapes-C published corruption inventory",
+  "version": "kamann_rother_cvpr2020_ijcv2021",
+  "severity_levels": [1, 2, 3, 4, 5],
+  "online_generation": true,
+  "paper_scope": "16 ImageNet-C-derived transformations plus three Kamann-Rother camera/geometry transformations",
+  "sources": {
+    "kamann_rother_cvpr2020": "https://openaccess.thecvf.com/content_CVPR_2020/html/Kamann_Benchmarking_the_Robustness_of_Semantic_Segmentation_Models_CVPR_2020_paper.html",
+    "kamann_rother_supplement": "https://openaccess.thecvf.com/content_CVPR_2020/supplemental/Kamann_Benchmarking_the_Robustness_CVPR_2020_supplemental.pdf",
+    "kamann_rother_ijcv2021": "https://link.springer.com/article/10.1007/s11263-020-01383-2",
+    "hendrycks_dietterich_iclr2019": "https://arxiv.org/abs/1903.12261",
+    "imagecorruptions": "https://github.com/bethgelab/imagecorruptions"
+  },
+  "parameter_status": {
+    "imagecorruptions_derived": "reproducible from the cited implementation; stochastic transforms retain the implementation's random sampling",
+    "kamann_rother_additions": "the papers describe the method and severity progression, but do not publish the complete numeric parameter tables or PSF files; do not claim these three are executable until the author artifacts are obtained"
+  },
+  "corruptions": [
+    {"name": "motion_blur", "name_zh": "运动模糊", "category": "blur", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"radius_sigma_angle": [[10, 3, [-45, 45]], [15, 5, [-45, 45]], [15, 8, [-45, 45]], [15, 12, [-45, 45]], [20, 15, [-45, 45]]] }},
+    {"name": "defocus_blur", "name_zh": "散焦模糊", "category": "blur", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"disk_radius_alias_blur": [[3, 0.1], [4, 0.5], [6, 0.5], [8, 0.5], [10, 0.5]]}},
+    {"name": "glass_blur", "name_zh": "磨砂玻璃模糊", "category": "blur", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"sigma_max_delta_iterations": [[0.7, 1, 2], [0.9, 2, 1], [1.0, 2, 3], [1.1, 3, 2], [1.5, 4, 2]]}},
+    {"name": "gaussian_blur", "name_zh": "高斯模糊", "category": "blur", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"sigma": [1, 2, 3, 4, 6]}},
+    {"name": "gaussian_noise", "name_zh": "高斯噪声", "category": "noise", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"std_normalized": [0.08, 0.12, 0.18, 0.26, 0.38]}},
+    {"name": "impulse_noise", "name_zh": "脉冲噪声", "category": "noise", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"salt_pepper_amount": [0.03, 0.06, 0.09, 0.17, 0.27]}},
+    {"name": "shot_noise", "name_zh": "散粒噪声", "category": "noise", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"poisson_c": [60, 25, 12, 5, 3]}},
+    {"name": "speckle_noise", "name_zh": "斑点噪声", "category": "noise", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"multiplicative_std": [0.15, 0.2, 0.35, 0.45, 0.6]}},
+    {"name": "snow", "name_zh": "降雪", "category": "weather", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"implementation_tuple": [[0.1, 0.3, 3, 0.5, 10, 4, 0.8], [0.2, 0.3, 2, 0.5, 12, 4, 0.7], [0.55, 0.3, 4, 0.9, 12, 8, 0.7], [0.55, 0.3, 4.5, 0.85, 12, 8, 0.65], [0.55, 0.3, 2.5, 0.85, 12, 12, 0.55]]}},
+    {"name": "spatter", "name_zh": "飞溅", "category": "weather", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"implementation_tuple": [[0.65, 0.3, 4, 0.69, 0.6, 0], [0.65, 0.3, 3, 0.68, 0.6, 0], [0.65, 0.3, 2, 0.68, 0.5, 0], [0.65, 0.3, 1, 0.65, 1.5, 1], [0.67, 0.4, 1, 0.65, 1.5, 1]]}},
+    {"name": "fog", "name_zh": "雾", "category": "weather", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"plasma_alpha_wibbledecay": [[1.5, 2], [2.0, 2], [2.5, 1.7], [2.5, 1.5], [3.0, 1.4]]}},
+    {"name": "frost", "name_zh": "霜冻", "category": "weather", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"image_weight_frost_weight": [[1.0, 0.4], [0.8, 0.6], [0.7, 0.7], [0.65, 0.7], [0.6, 0.75]]}},
+    {"name": "brightness", "name_zh": "亮度", "category": "digital", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"value_delta": [0.1, 0.2, 0.3, 0.4, 0.5]}},
+    {"name": "contrast", "name_zh": "对比度", "category": "digital", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"contrast_factor": [0.4, 0.3, 0.2, 0.1, 0.05]}},
+    {"name": "saturate", "name_zh": "饱和度", "category": "digital", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"saturation_factor_offset": [[0.3, 0], [0.1, 0], [2, 0], [5, 0.1], [20, 0.2]]}},
+    {"name": "jpeg_compression", "name_zh": "JPEG 压缩", "category": "digital", "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions", "from_hendrycks": true, "kamann_rother_new": false, "parameters": {"quality": [25, 18, 15, 10, 7]}},
+    {"name": "intensity_dependent_noise", "name_zh": "强度相关噪声", "category": "noise", "source": "Kamann & Rother CVPR 2020 / IJCV 2021 Section 3.2 and supplement Section A.2", "from_hendrycks": false, "kamann_rother_new": true, "parameters": {"formula": "log2(2^Phi_c + w_s*(N_luminance + N_chrominance,c))", "severity_levels": [1, 2, 3, 4, 5], "w_s": null, "status": "numeric weights not published in the paper/supplement"}},
+    {"name": "psf_blur", "name_zh": "点扩散函数模糊", "category": "blur", "source": "Kamann & Rother CVPR 2020 / IJCV 2021 Section 3.2 and supplement Figure A.2", "from_hendrycks": false, "kamann_rother_new": true, "parameters": {"severity_levels": [1, 2, 3, 4, 5], "incidence_angles_degrees": [0, 15, 30, 45], "kernel_artifacts": null, "status": "Zemax PSF files and complete severity kernels not published in the paper/supplement"}},
+    {"name": "geometric_distortion", "name_zh": "几何畸变", "category": "geometric_distortion", "source": "Kamann & Rother CVPR 2020 / IJCV 2021 Section 3.2 and supplement Section A.2", "from_hendrycks": false, "kamann_rother_new": true, "parameters": {"distortion": "radially symmetric barrel distortion", "polynomial_grade": 4, "severity_levels": [1, 2, 3, 4, 5], "coefficients": null, "status": "complete severity coefficients not published in the paper/supplement"}}
+  ]
+}
