@@ -307,6 +307,97 @@ def evaluate_condition(model, predictor, groups, condition, max_effective_frames
     }
 
 
+
+def evaluate_clean_identity(model, predictor, groups, max_effective_frames=0):
+    confusion = {
+        name: torch.zeros((19, 19), dtype=torch.int64)
+        for name in ("clean_host", "semantic_no_history", "semantic_continuous")
+    }
+    no_history_sse = 0.0
+    continuous_sse = 0.0
+    element_count = 0
+    effective_frames = 0
+
+    predictor.eval()
+    with torch.inference_mode():
+        for samples in groups.values():
+            if len(samples) < 2:
+                continue
+
+            first_image = load_image(samples[0])
+            first_raw = model.extract_backbone_features(first_image)
+            first_observation = model.encode_backbone_features(first_raw)
+            zero = zero_state(first_observation)
+            pending_prediction, h4_dyn, h1_dyn = predictor.predict_next(
+                first_observation, zero, None, None
+            )
+            continuous_hidden = None
+
+            for frame_index in range(1, len(samples)):
+                if max_effective_frames and effective_frames >= max_effective_frames:
+                    break
+
+                sample = samples[frame_index]
+                image = load_image(sample)
+                output_size = tuple(image.shape[-2:])
+                raw = model.extract_backbone_features(image)
+                observation = model.encode_backbone_features(raw)
+                prediction_error = error_state(observation, pending_prediction)
+
+                no_history, _, _ = predictor.restore_current(
+                    observation, pending_prediction, None
+                )
+                continuous, continuous_hidden, _ = predictor.restore_current(
+                    observation, pending_prediction, continuous_hidden
+                )
+
+                no_history_error = no_history.z4.float() - observation.z4.float()
+                continuous_error = continuous.z4.float() - observation.z4.float()
+                no_history_sse += float(no_history_error.square().sum().item())
+                continuous_sse += float(continuous_error.square().sum().item())
+                element_count += continuous_error.numel()
+
+                mask = semantic_mask_from_panoptic_png(sample["mask_path"])
+                logits = {
+                    "clean_host": decode_host(model, raw, output_size),
+                    "semantic_no_history": decode_z4_writeback(
+                        model, raw, observation, no_history.z4, output_size
+                    ),
+                    "semantic_continuous": decode_z4_writeback(
+                        model, raw, observation, continuous.z4, output_size
+                    ),
+                }
+                for name, value in logits.items():
+                    update_confusion_matrix(
+                        confusion[name], value.argmax(1).squeeze(0).cpu(), mask
+                    )
+                effective_frames += 1
+
+                pending_prediction, h4_dyn, h1_dyn = predictor.predict_next(
+                    observation, prediction_error, h4_dyn, h1_dyn
+                )
+
+            if max_effective_frames and effective_frames >= max_effective_frames:
+                break
+
+    elements = max(element_count, 1)
+    miou = {
+        name: float(torch.nanmean(compute_iou(matrix)).item())
+        for name, matrix in confusion.items()
+    }
+    return {
+        "effective_frame_count": effective_frames,
+        "mIoU": miou,
+        "no_history_z4_change_mse": no_history_sse / elements,
+        "continuous_z4_change_mse": continuous_sse / elements,
+        "no_history_mIoU_gain_vs_clean": (
+            miou["semantic_no_history"] - miou["clean_host"]
+        ),
+        "continuous_mIoU_gain_vs_clean": (
+            miou["semantic_continuous"] - miou["clean_host"]
+        ),
+    }
+
 def write_csv(path, results):
     rows = []
     for condition, result in results.items():
@@ -388,7 +479,16 @@ def main():
         results[condition] = result
         print(json.dumps(result, sort_keys=True), flush=True)
 
-    overall_go = all(result["judgement"]["STAGE_A"] == "GO" for result in results.values())
+    clean_identity = evaluate_clean_identity(
+        model, predictor, groups, max_effective_frames=max_effective_frames
+    )
+    print(json.dumps({"Clean-Identity": clean_identity}, sort_keys=True), flush=True)
+
+    pressure_go = all(
+        result["judgement"]["STAGE_A"] == "GO" for result in results.values()
+    )
+    clean_go = clean_identity["continuous_mIoU_gain_vs_clean"] >= -0.005
+    overall_go = pressure_go and clean_go
     summary = {
         "experiment": "kitti_step_error_guided_semantic_restoration_diagnostic",
         "diagnostic_only": True,
@@ -401,11 +501,13 @@ def main():
             "Blur-Max": "Gaussian blur sigma=3.0 after existing 10% warmup",
         },
         "results": results,
+        "clean_identity": clean_identity,
         "decision": {
             "STAGE_A": "GO" if overall_go else "NO-GO",
             "criterion": (
-                "Both Blur-Mid and Blur-Max require feature recovery > 0, "
-                "continuous mIoU > no-history mIoU, and continuous mIoU > Blur Host"
+                "Blur-Mid and Blur-Max both require feature recovery > 0, "
+                "continuous mIoU > no-history mIoU, and continuous mIoU > Blur Host; "
+                "Clean continuous mIoU loss must be <= 0.005 (diagnostic tolerance)"
             ),
         },
     }
