@@ -287,12 +287,26 @@ def evaluate_condition(model, predictor, groups, condition, max_effective_frames
         "task_recovery": (
             "SUPPORTED" if continuous > blur else "NOT_SUPPORTED"
         ),
+        "strong_writeback_capacity": (
+            "SUPPORTED"
+            if task["semantic_continuous_fraction_of_writeback_capacity"] >= 0.5
+            else "NOT_SUPPORTED"
+        ),
         "STAGE_A": (
             "GO"
             if (
                 feature_metrics["semantic_continuous"]["feature_recovery_fraction"] > 0.0
                 and continuous > no_history
                 and continuous > blur
+            )
+            else "NO-GO"
+        ),
+        "STAGE_A_STRONG": (
+            "GO"
+            if (
+                feature_metrics["semantic_continuous"]["feature_recovery_fraction"] > 0.0
+                and continuous > no_history
+                and task["semantic_continuous_fraction_of_writeback_capacity"] >= 0.5
             )
             else "NO-GO"
         ),
@@ -487,8 +501,12 @@ def main():
     pressure_go = all(
         result["judgement"]["STAGE_A"] == "GO" for result in results.values()
     )
+    pressure_strong_go = all(
+        result["judgement"]["STAGE_A_STRONG"] == "GO" for result in results.values()
+    )
     clean_go = clean_identity["continuous_mIoU_gain_vs_clean"] >= -0.005
     overall_go = pressure_go and clean_go
+    overall_strong_go = pressure_strong_go and clean_go
     summary = {
         "experiment": "kitti_step_error_guided_semantic_restoration_diagnostic",
         "diagnostic_only": True,
@@ -504,10 +522,13 @@ def main():
         "clean_identity": clean_identity,
         "decision": {
             "STAGE_A": "GO" if overall_go else "NO-GO",
+            "STAGE_A_STRONG": "GO" if overall_strong_go else "NO-GO",
             "criterion": (
-                "Blur-Mid and Blur-Max both require feature recovery > 0, "
+                "Basic: Blur-Mid and Blur-Max both require feature recovery > 0, "
                 "continuous mIoU > no-history mIoU, and continuous mIoU > Blur Host; "
-                "Clean continuous mIoU loss must be <= 0.005 (diagnostic tolerance)"
+                "Clean continuous mIoU loss must be <= 0.005. Strong: additionally "
+                "recover at least 50% of the current Oracle-Z4 writeback capacity in "
+                "both Blur-Mid and Blur-Max."
             ),
         },
     }
