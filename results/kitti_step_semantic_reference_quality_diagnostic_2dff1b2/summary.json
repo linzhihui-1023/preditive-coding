@@ -1,0 +1,737 @@
+{
+  "conditions": {
+    "Blur-Max": {
+      "condition": "Blur-Max",
+      "host": {
+        "clean": {
+          "0-31": {
+            "mIoU": 0.5065248052384825
+          },
+          "128+": {
+            "mIoU": 0.6160852603186674
+          },
+          "32-63": {
+            "mIoU": 0.5592214927410328
+          },
+          "64-127": {
+            "mIoU": 0.5735413695668505
+          },
+          "overall": {
+            "mIoU": 0.6545130588393236
+          }
+        },
+        "corrupted": {
+          "0-31": {
+            "mIoU": 0.4740781564940769
+          },
+          "128+": {
+            "mIoU": 0.38488639343761033
+          },
+          "32-63": {
+            "mIoU": 0.3910048197772122
+          },
+          "64-127": {
+            "mIoU": 0.4022974785965438
+          },
+          "overall": {
+            "mIoU": 0.4038910168361447
+          }
+        }
+      },
+      "modes": {
+        "continuous": {
+          "0-31": {
+            "count": 279,
+            "decoded_mIoU": 0.2916086583382413,
+            "observation_cos_mean": 0.9996748375422638,
+            "observation_cos_z1": 0.9997553853151192,
+            "observation_cos_z4": 0.9995942897694086,
+            "observation_mse_mean": 8.279940000869581e-05,
+            "observation_mse_z1": 9.706256724226432e-05,
+            "observation_mse_z4": 6.85362327751273e-05,
+            "semantic_cos_gain_vs_observation": -0.042009302578519314,
+            "semantic_cos_mean": 0.9576655349637445,
+            "semantic_cos_z1": 0.9807013553103239,
+            "semantic_cos_z4": 0.9346297146171652,
+            "semantic_mse_mean": 0.006763231124408463,
+            "semantic_mse_ratio_vs_observation": 81.68212720983692,
+            "semantic_mse_z1": 0.005435069952841087,
+            "semantic_mse_z4": 0.008091392295975839
+          },
+          "128+": {
+            "count": 1851,
+            "decoded_mIoU": 0.25692233275301257,
+            "observation_cos_mean": 0.9983382466707533,
+            "observation_cos_z1": 0.9986744373634272,
+            "observation_cos_z4": 0.9980020559780794,
+            "observation_mse_mean": 0.0004543227802651435,
+            "observation_mse_z1": 0.0005258586866376587,
+            "observation_mse_z4": 0.0003827868738926284,
+            "semantic_cos_gain_vs_observation": -0.05121169093169109,
+            "semantic_cos_mean": 0.9471265557390622,
+            "semantic_cos_z1": 0.9726843084276592,
+            "semantic_cos_z4": 0.9215688030504652,
+            "semantic_mse_mean": 0.008827946339253394,
+            "semantic_mse_ratio_vs_observation": 19.43100087145397,
+            "semantic_mse_z1": 0.00785764493501022,
+            "semantic_mse_z4": 0.009798247743496568
+          },
+          "32-63": {
+            "count": 288,
+            "decoded_mIoU": 0.266505443756715,
+            "observation_cos_mean": 0.9986082494465841,
+            "observation_cos_z1": 0.9988755178120401,
+            "observation_cos_z4": 0.9983409810811281,
+            "observation_mse_mean": 0.0003703800328670089,
+            "observation_mse_z1": 0.00044765421969512117,
+            "observation_mse_z4": 0.00029310584603889665,
+            "semantic_cos_gain_vs_observation": -0.04936235977543724,
+            "semantic_cos_mean": 0.9492458896711469,
+            "semantic_cos_z1": 0.9753680458913246,
+            "semantic_cos_z4": 0.9231237334509691,
+            "semantic_mse_mean": 0.008365502861528916,
+            "semantic_mse_ratio_vs_observation": 22.58626847882129,
+            "semantic_mse_z1": 0.007027251104268039,
+            "semantic_mse_z4": 0.009703754618789794
+          },
+          "64-127": {
+            "count": 554,
+            "decoded_mIoU": 0.2810451271001028,
+            "observation_cos_mean": 0.9983815421158656,
+            "observation_cos_z1": 0.998708562945631,
+            "observation_cos_z4": 0.9980545212861003,
+            "observation_mse_mean": 0.00043582866999956557,
+            "observation_mse_z1": 0.0005192382855106327,
+            "observation_mse_z4": 0.0003524190544884985,
+            "semantic_cos_gain_vs_observation": -0.05094250805326317,
+            "semantic_cos_mean": 0.9474390340626024,
+            "semantic_cos_z1": 0.9734138938924466,
+            "semantic_cos_z4": 0.9214641742327584,
+            "semantic_mse_mean": 0.008745575996135976,
+            "semantic_mse_ratio_vs_observation": 20.06654586570611,
+            "semantic_mse_z1": 0.007631910971570962,
+            "semantic_mse_z4": 0.009859241020700992
+          },
+          "overall": {
+            "count": 2972,
+            "decoded_mIoU": 0.2693498521390908,
+            "observation_cos_mean": 0.9984979557317166,
+            "observation_cos_z1": 0.9988017594429237,
+            "observation_cos_z4": 0.9981941520205097,
+            "observation_mse_mean": 0.0004078637387344094,
+            "observation_mse_z1": 0.00047679250022610476,
+            "observation_mse_z4": 0.00033893497724271404,
+            "semantic_cos_gain_vs_observation": -0.050118420057470026,
+            "semantic_cos_mean": 0.9483795356742466,
+            "semantic_cos_z1": 0.973832983669009,
+            "semantic_cos_z4": 0.9229260876794844,
+            "semantic_mse_mean": 0.008573951575924513,
+            "semantic_mse_ratio_vs_observation": 21.021607859843737,
+            "semantic_mse_z1": 0.00750767573614606,
+            "semantic_mse_z4": 0.009640227415702966
+          }
+        },
+        "reset8": {
+          "0-31": {
+            "count": 279,
+            "decoded_mIoU": 0.29738359878292875,
+            "observation_cos_mean": 0.9996748375422638,
+            "observation_cos_z1": 0.9997553853151192,
+            "observation_cos_z4": 0.9995942897694086,
+            "observation_mse_mean": 8.279940000869581e-05,
+            "observation_mse_z1": 9.706256724226432e-05,
+            "observation_mse_z4": 6.85362327751273e-05,
+            "semantic_cos_gain_vs_observation": -0.033570492246244976,
+            "semantic_cos_mean": 0.9661043452960189,
+            "semantic_cos_z1": 0.9839137585359662,
+            "semantic_cos_z4": 0.9482949320560715,
+            "semantic_mse_mean": 0.005474797072803675,
+            "semantic_mse_ratio_vs_observation": 66.12121672655476,
+            "semantic_mse_z1": 0.004525829036469742,
+            "semantic_mse_z4": 0.006423765109137608
+          },
+          "128+": {
+            "count": 1851,
+            "decoded_mIoU": 0.2680871241434761,
+            "observation_cos_mean": 0.9983382466707533,
+            "observation_cos_z1": 0.9986744373634272,
+            "observation_cos_z4": 0.9980020559780794,
+            "observation_mse_mean": 0.0004543227802651435,
+            "observation_mse_z1": 0.0005258586866376587,
+            "observation_mse_z4": 0.0003827868738926284,
+            "semantic_cos_gain_vs_observation": -0.03302347185095211,
+            "semantic_cos_mean": 0.9653147748198012,
+            "semantic_cos_z1": 0.9834032908508676,
+            "semantic_cos_z4": 0.9472262587887348,
+            "semantic_mse_mean": 0.005628946912487509,
+            "semantic_mse_ratio_vs_observation": 12.389752741877585,
+            "semantic_mse_z1": 0.0047079255162405685,
+            "semantic_mse_z4": 0.006549968308734449
+          },
+          "32-63": {
+            "count": 288,
+            "decoded_mIoU": 0.27741198104425263,
+            "observation_cos_mean": 0.9986082494465841,
+            "observation_cos_z1": 0.9988755178120401,
+            "observation_cos_z4": 0.9983409810811281,
+            "observation_mse_mean": 0.0003703800328670089,
+            "observation_mse_z1": 0.00044765421969512117,
+            "observation_mse_z4": 0.00029310584603889665,
+            "semantic_cos_gain_vs_observation": -0.03327967661122477,
+            "semantic_cos_mean": 0.9653285728353593,
+            "semantic_cos_z1": 0.983415337279439,
+            "semantic_cos_z4": 0.9472418083912797,
+            "semantic_mse_mean": 0.005671982004261938,
+            "semantic_mse_ratio_vs_observation": 15.313951889783858,
+            "semantic_mse_z1": 0.004701752223708253,
+            "semantic_mse_z4": 0.0066422117848156225
+          },
+          "64-127": {
+            "count": 554,
+            "decoded_mIoU": 0.3036253309873844,
+            "observation_cos_mean": 0.9983815421158656,
+            "observation_cos_z1": 0.998708562945631,
+            "observation_cos_z4": 0.9980545212861003,
+            "observation_mse_mean": 0.00043582866999956557,
+            "observation_mse_z1": 0.0005192382855106327,
+            "observation_mse_z4": 0.0003524190544884985,
+            "semantic_cos_gain_vs_observation": -0.0331386692472313,
+            "semantic_cos_mean": 0.9652428728686343,
+            "semantic_cos_z1": 0.9834290952673888,
+            "semantic_cos_z4": 0.9470566504698799,
+            "semantic_mse_mean": 0.005660070882209102,
+            "semantic_mse_ratio_vs_observation": 12.986917272364721,
+            "semantic_mse_z1": 0.004705939427630082,
+            "semantic_mse_z4": 0.006614202336788124
+          },
+          "overall": {
+            "count": 2972,
+            "decoded_mIoU": 0.2794610687361852,
+            "observation_cos_mean": 0.9984979557317166,
+            "observation_cos_z1": 0.9988017594429237,
+            "observation_cos_z4": 0.9981941520205097,
+            "observation_mse_mean": 0.0004078637387344094,
+            "observation_mse_z1": 0.00047679250022610476,
+            "observation_mse_z4": 0.00033893497724271404,
+            "semantic_cos_gain_vs_observation": -0.03312112495283093,
+            "semantic_cos_mean": 0.9653768307788857,
+            "semantic_cos_z1": 0.9834571890683386,
+            "semantic_cos_z4": 0.9472964724894327,
+            "semantic_mse_mean": 0.005624447915308845,
+            "semantic_mse_ratio_vs_observation": 13.790017060014604,
+            "semantic_mse_z1": 0.004689862555542191,
+            "semantic_mse_z4": 0.006559033275075498
+          }
+        }
+      }
+    },
+    "Blur-Mid": {
+      "condition": "Blur-Mid",
+      "host": {
+        "clean": {
+          "0-31": {
+            "mIoU": 0.5065248052384825
+          },
+          "128+": {
+            "mIoU": 0.6160852603186674
+          },
+          "32-63": {
+            "mIoU": 0.5592214927410328
+          },
+          "64-127": {
+            "mIoU": 0.5735413695668505
+          },
+          "overall": {
+            "mIoU": 0.6545130588393236
+          }
+        },
+        "corrupted": {
+          "0-31": {
+            "mIoU": 0.4849542920890102
+          },
+          "128+": {
+            "mIoU": 0.4812863875258535
+          },
+          "32-63": {
+            "mIoU": 0.4446690324907812
+          },
+          "64-127": {
+            "mIoU": 0.46060367010504355
+          },
+          "overall": {
+            "mIoU": 0.49925737137484505
+          }
+        }
+      },
+      "modes": {
+        "continuous": {
+          "0-31": {
+            "count": 279,
+            "decoded_mIoU": 0.29736214436834385,
+            "observation_cos_mean": 0.9997363835039105,
+            "observation_cos_z1": 0.9997990026696181,
+            "observation_cos_z4": 0.9996737643382028,
+            "observation_mse_mean": 6.82212450171447e-05,
+            "observation_mse_z1": 8.31549539686411e-05,
+            "observation_mse_z4": 5.328753606564829e-05,
+            "semantic_cos_gain_vs_observation": -0.04205057174501459,
+            "semantic_cos_mean": 0.9576858117588959,
+            "semantic_cos_z1": 0.9807243001076483,
+            "semantic_cos_z4": 0.9346473234101436,
+            "semantic_mse_mean": 0.0067557532817632705,
+            "semantic_mse_ratio_vs_observation": 99.02711801969431,
+            "semantic_mse_z1": 0.00542782990789328,
+            "semantic_mse_z4": 0.008083676655633261
+          },
+          "128+": {
+            "count": 1851,
+            "decoded_mIoU": 0.274115344414645,
+            "observation_cos_mean": 0.9987225974011846,
+            "observation_cos_z1": 0.9989091901763718,
+            "observation_cos_z4": 0.9985360046259975,
+            "observation_mse_mean": 0.00035479113033391296,
+            "observation_mse_z1": 0.00044950873302388887,
+            "observation_mse_z4": 0.00026007352764393705,
+            "semantic_cos_gain_vs_observation": -0.051491200811215054,
+            "semantic_cos_mean": 0.9472313965899696,
+            "semantic_cos_z1": 0.9727463617252698,
+            "semantic_cos_z4": 0.9217164314546693,
+            "semantic_mse_mean": 0.008769062052741002,
+            "semantic_mse_ratio_vs_observation": 24.716125356594926,
+            "semantic_mse_z1": 0.007831919122978377,
+            "semantic_mse_z4": 0.009706204982503628
+          },
+          "32-63": {
+            "count": 288,
+            "decoded_mIoU": 0.28340205911498284,
+            "observation_cos_mean": 0.9989207809170088,
+            "observation_cos_z1": 0.9990743740151325,
+            "observation_cos_z4": 0.9987671878188848,
+            "observation_mse_mean": 0.00029610466958729376,
+            "observation_mse_z1": 0.00038320709457669483,
+            "observation_mse_z4": 0.00020900224459789266,
+            "semantic_cos_gain_vs_observation": -0.0495731654680438,
+            "semantic_cos_mean": 0.949347615448965,
+            "semantic_cos_z1": 0.9754512988858752,
+            "semantic_cos_z4": 0.9232439320120547,
+            "semantic_mse_mean": 0.008324115897671113,
+            "semantic_mse_ratio_vs_observation": 28.11207236033508,
+            "semantic_mse_z1": 0.006997847991038321,
+            "semantic_mse_z4": 0.009650383804303905
+          },
+          "64-127": {
+            "count": 554,
+            "decoded_mIoU": 0.29909113581887403,
+            "observation_cos_mean": 0.998749379431728,
+            "observation_cos_z1": 0.9989369637484155,
+            "observation_cos_z4": 0.9985617951150405,
+            "observation_mse_mean": 0.0003465158062766807,
+            "observation_mse_z1": 0.0004441931357608086,
+            "observation_mse_z4": 0.0002488384767925528,
+            "semantic_cos_gain_vs_observation": -0.05118661123707846,
+            "semantic_cos_mean": 0.9475627681946496,
+            "semantic_cos_z1": 0.9734853021935005,
+            "semantic_cos_z4": 0.9216402341957988,
+            "semantic_mse_mean": 0.008696036878973246,
+            "semantic_mse_ratio_vs_observation": 25.095642742570206,
+            "semantic_mse_z1": 0.0076037391159508635,
+            "semantic_mse_z4": 0.009788334641995628
+          },
+          "overall": {
+            "count": 2972,
+            "decoded_mIoU": 0.28625937396922513,
+            "observation_cos_mean": 0.9988419649718908,
+            "observation_cos_z1": 0.999013906592957,
+            "observation_cos_z4": 0.9986700233508248,
+            "observation_mse_mean": 0.00032065949230359285,
+            "observation_mse_z1": 0.0004077010556642144,
+            "observation_mse_z4": 0.0002336179289429713,
+            "semantic_cos_gain_vs_observation": -0.050362307031815656,
+            "semantic_cos_mean": 0.9484796579400752,
+            "semantic_cos_z1": 0.9738951637879676,
+            "semantic_cos_z4": 0.9230641520921827,
+            "semantic_mse_mean": 0.008523330698087486,
+            "semantic_mse_ratio_vs_observation": 26.580628057683686,
+            "semantic_mse_z1": 0.007482872992123491,
+            "semantic_mse_z4": 0.00956378840405148
+          }
+        },
+        "reset8": {
+          "0-31": {
+            "count": 279,
+            "decoded_mIoU": 0.303083859291513,
+            "observation_cos_mean": 0.9997363835039105,
+            "observation_cos_z1": 0.9997990026696181,
+            "observation_cos_z4": 0.9996737643382028,
+            "observation_mse_mean": 6.82212450171447e-05,
+            "observation_mse_z1": 8.31549539686411e-05,
+            "observation_mse_z4": 5.328753606564829e-05,
+            "semantic_cos_gain_vs_observation": -0.03359795054654491,
+            "semantic_cos_mean": 0.9661384329573656,
+            "semantic_cos_z1": 0.9839439313044257,
+            "semantic_cos_z4": 0.9483329346103053,
+            "semantic_mse_mean": 0.005466286483551225,
+            "semantic_mse_ratio_vs_observation": 80.12586815408443,
+            "semantic_mse_z1": 0.004516722699527138,
+            "semantic_mse_z4": 0.0064158502675753125
+          },
+          "128+": {
+            "count": 1851,
+            "decoded_mIoU": 0.28509438614668076,
+            "observation_cos_mean": 0.9987225974011846,
+            "observation_cos_z1": 0.9989091901763718,
+            "observation_cos_z4": 0.9985360046259975,
+            "observation_mse_mean": 0.00035479113033391296,
+            "observation_mse_z1": 0.00044950873302388887,
+            "observation_mse_z4": 0.00026007352764393705,
+            "semantic_cos_gain_vs_observation": -0.0332629866918186,
+            "semantic_cos_mean": 0.965459610709366,
+            "semantic_cos_z1": 0.983573680211247,
+            "semantic_cos_z4": 0.9473455412074852,
+            "semantic_mse_mean": 0.0055749070573284185,
+            "semantic_mse_ratio_vs_observation": 15.713208647808006,
+            "semantic_mse_z1": 0.004655038120063059,
+            "semantic_mse_z4": 0.0064947759945937775
+          },
+          "32-63": {
+            "count": 288,
+            "decoded_mIoU": 0.2948709594034097,
+            "observation_cos_mean": 0.9989207809170088,
+            "observation_cos_z1": 0.9990743740151325,
+            "observation_cos_z4": 0.9987671878188848,
+            "observation_mse_mean": 0.00029610466958729376,
+            "observation_mse_z1": 0.00038320709457669483,
+            "observation_mse_z4": 0.00020900224459789266,
+            "semantic_cos_gain_vs_observation": -0.033430676596860165,
+            "semantic_cos_mean": 0.9654901043201486,
+            "semantic_cos_z1": 0.9835601788428094,
+            "semantic_cos_z4": 0.9474200297974877,
+            "semantic_mse_mean": 0.005628287730764391,
+            "semantic_mse_ratio_vs_observation": 19.007764175448546,
+            "semantic_mse_z1": 0.00465660129136975,
+            "semantic_mse_z4": 0.006599974170159031
+          },
+          "64-127": {
+            "count": 554,
+            "decoded_mIoU": 0.3238649889743128,
+            "observation_cos_mean": 0.998749379431728,
+            "observation_cos_z1": 0.9989369637484155,
+            "observation_cos_z4": 0.9985617951150405,
+            "observation_mse_mean": 0.0003465158062766807,
+            "observation_mse_z1": 0.0004441931357608086,
+            "observation_mse_z4": 0.0002488384767925528,
+            "semantic_cos_gain_vs_observation": -0.03332659155668338,
+            "semantic_cos_mean": 0.9654227878750447,
+            "semantic_cos_z1": 0.9835959492177309,
+            "semantic_cos_z4": 0.9472496265323583,
+            "semantic_mse_mean": 0.0056075666924360265,
+            "semantic_mse_ratio_vs_observation": 16.182715451538684,
+            "semantic_mse_z1": 0.004653296947802017,
+            "semantic_mse_z4": 0.006561836437070036
+          },
+          "overall": {
+            "count": 2972,
+            "decoded_mIoU": 0.29671749333668346,
+            "observation_cos_mean": 0.9988419649718908,
+            "observation_cos_z1": 0.999013906592957,
+            "observation_cos_z4": 0.9986700233508248,
+            "observation_mse_mean": 0.00032065949230359285,
+            "observation_mse_z1": 0.0004077010556642144,
+            "observation_mse_z4": 0.0002336179289429713,
+            "semantic_cos_gain_vs_observation": -0.03332253807245644,
+            "semantic_cos_mean": 0.9655194268994344,
+            "semantic_cos_z1": 0.983611280712754,
+            "semantic_cos_z4": 0.9474275730861148,
+            "semantic_mse_mean": 0.005575970964365881,
+            "semantic_mse_ratio_vs_observation": 17.38907189152125,
+            "semantic_mse_z1": 0.004641880509556393,
+            "semantic_mse_z4": 0.006510061419175369
+          }
+        }
+      }
+    },
+    "Clean": {
+      "condition": "Clean",
+      "host": {
+        "clean": {
+          "0-31": {
+            "mIoU": 0.5065248052384825
+          },
+          "128+": {
+            "mIoU": 0.6160852603186674
+          },
+          "32-63": {
+            "mIoU": 0.5592214927410328
+          },
+          "64-127": {
+            "mIoU": 0.5735413695668505
+          },
+          "overall": {
+            "mIoU": 0.6545130588393236
+          }
+        },
+        "corrupted": {
+          "0-31": {
+            "mIoU": 0.5065248052384825
+          },
+          "128+": {
+            "mIoU": 0.6160852603186674
+          },
+          "32-63": {
+            "mIoU": 0.5592214927410328
+          },
+          "64-127": {
+            "mIoU": 0.5735413695668505
+          },
+          "overall": {
+            "mIoU": 0.6545130588393236
+          }
+        }
+      },
+      "modes": {
+        "continuous": {
+          "0-31": {
+            "count": 279,
+            "decoded_mIoU": 0.30758988528394965,
+            "observation_cos_mean": 1.0,
+            "observation_cos_z1": 1.0,
+            "observation_cos_z4": 1.0,
+            "observation_mse_mean": 0.0,
+            "observation_mse_z1": 0.0,
+            "observation_mse_z4": 0.0,
+            "semantic_cos_gain_vs_observation": -0.04221816825610336,
+            "semantic_cos_mean": 0.9577818317438966,
+            "semantic_cos_z1": 0.9807279084318428,
+            "semantic_cos_z4": 0.9348357550559505,
+            "semantic_mse_mean": 0.006729875744644245,
+            "semantic_mse_ratio_vs_observation": 6729875744.644245,
+            "semantic_mse_z1": 0.005419684403766227,
+            "semantic_mse_z4": 0.008040067085522264
+          },
+          "128+": {
+            "count": 1851,
+            "decoded_mIoU": 0.30516818073633784,
+            "observation_cos_mean": 1.0,
+            "observation_cos_z1": 1.0,
+            "observation_cos_z4": 1.0,
+            "observation_mse_mean": 0.0,
+            "observation_mse_z1": 0.0,
+            "observation_mse_z4": 0.0,
+            "semantic_cos_gain_vs_observation": -0.052694785633581764,
+            "semantic_cos_mean": 0.9473052143664182,
+            "semantic_cos_z1": 0.9722594074916994,
+            "semantic_cos_z4": 0.922351021241137,
+            "semantic_mse_mean": 0.00869308250288563,
+            "semantic_mse_ratio_vs_observation": 8693082502.88563,
+            "semantic_mse_z1": 0.007932491074223122,
+            "semantic_mse_z4": 0.00945367393154814
+          },
+          "32-63": {
+            "count": 288,
+            "decoded_mIoU": 0.31505207075924163,
+            "observation_cos_mean": 1.0,
+            "observation_cos_z1": 1.0,
+            "observation_cos_z4": 1.0,
+            "observation_mse_mean": 0.0,
+            "observation_mse_z1": 0.0,
+            "observation_mse_z4": 0.0,
+            "semantic_cos_gain_vs_observation": -0.05046854840798509,
+            "semantic_cos_mean": 0.9495314515920149,
+            "semantic_cos_z1": 0.9752508648153808,
+            "semantic_cos_z4": 0.923812038368649,
+            "semantic_mse_mean": 0.00824137349263765,
+            "semantic_mse_ratio_vs_observation": 8241373492.63765,
+            "semantic_mse_z1": 0.007018976958028765,
+            "semantic_mse_z4": 0.009463770027246533
+          },
+          "64-127": {
+            "count": 554,
+            "decoded_mIoU": 0.34968427555888276,
+            "observation_cos_mean": 1.0,
+            "observation_cos_z1": 1.0,
+            "observation_cos_z4": 1.0,
+            "observation_mse_mean": 0.0,
+            "observation_mse_z1": 0.0,
+            "observation_mse_z4": 0.0,
+            "semantic_cos_gain_vs_observation": -0.05224414659321097,
+            "semantic_cos_mean": 0.947755853406789,
+            "semantic_cos_z1": 0.9731206967081835,
+            "semantic_cos_z4": 0.9223910101053947,
+            "semantic_mse_mean": 0.008601736259270151,
+            "semantic_mse_ratio_vs_observation": 8601736259.270151,
+            "semantic_mse_z1": 0.007661734905181325,
+            "semantic_mse_z4": 0.009541737613358975
+          },
+          "overall": {
+            "count": 2972,
+            "decoded_mIoU": 0.3162107601346172,
+            "observation_cos_mean": 1.0,
+            "observation_cos_z1": 1.0,
+            "observation_cos_z4": 1.0,
+            "observation_mse_mean": 0.0,
+            "observation_mse_z1": 0.0,
+            "observation_mse_z4": 0.0,
+            "semantic_cos_gain_vs_observation": -0.0514115465361209,
+            "semantic_cos_mean": 0.9485884534638791,
+            "semantic_cos_z1": 0.973504833365674,
+            "semantic_cos_z4": 0.9236720735620843,
+            "semantic_mse_mean": 0.008447984017197966,
+            "semantic_mse_ratio_vs_observation": 8447984017.197966,
+            "semantic_mse_z1": 0.007557604114542569,
+            "semantic_mse_z4": 0.009338363919853362
+          }
+        },
+        "reset8": {
+          "0-31": {
+            "count": 279,
+            "decoded_mIoU": 0.312722807256148,
+            "observation_cos_mean": 1.0,
+            "observation_cos_z1": 1.0,
+            "observation_cos_z4": 1.0,
+            "observation_mse_mean": 0.0,
+            "observation_mse_z1": 0.0,
+            "observation_mse_z4": 0.0,
+            "semantic_cos_gain_vs_observation": -0.033719298873750914,
+            "semantic_cos_mean": 0.9662807011262491,
+            "semantic_cos_z1": 0.9839974496526958,
+            "semantic_cos_z4": 0.9485639525998023,
+            "semantic_mse_mean": 0.005437285214575762,
+            "semantic_mse_ratio_vs_observation": 5437285214.575762,
+            "semantic_mse_z1": 0.004494724301187368,
+            "semantic_mse_z4": 0.0063798461279641555
+          },
+          "128+": {
+            "count": 1851,
+            "decoded_mIoU": 0.31947609092526735,
+            "observation_cos_mean": 1.0,
+            "observation_cos_z1": 1.0,
+            "observation_cos_z4": 1.0,
+            "observation_mse_mean": 0.0,
+            "observation_mse_z1": 0.0,
+            "observation_mse_z4": 0.0,
+            "semantic_cos_gain_vs_observation": -0.03424090584956396,
+            "semantic_cos_mean": 0.965759094150436,
+            "semantic_cos_z1": 0.9837810294103906,
+            "semantic_cos_z4": 0.9477371588904815,
+            "semantic_mse_mean": 0.005476335830873795,
+            "semantic_mse_ratio_vs_observation": 5476335830.873795,
+            "semantic_mse_z1": 0.004561041453616771,
+            "semantic_mse_z4": 0.00639163020813082
+          },
+          "32-63": {
+            "count": 288,
+            "decoded_mIoU": 0.3240017332102223,
+            "observation_cos_mean": 1.0,
+            "observation_cos_z1": 1.0,
+            "observation_cos_z4": 1.0,
+            "observation_mse_mean": 0.0,
+            "observation_mse_z1": 0.0,
+            "observation_mse_z4": 0.0,
+            "semantic_cos_gain_vs_observation": -0.03410920097182191,
+            "semantic_cos_mean": 0.9658907990281781,
+            "semantic_cos_z1": 0.9837776635669999,
+            "semantic_cos_z4": 0.9480039344893562,
+            "semantic_mse_mean": 0.005527849356035909,
+            "semantic_mse_ratio_vs_observation": 5527849356.035909,
+            "semantic_mse_z1": 0.004561082146311592,
+            "semantic_mse_z4": 0.006494616565760225
+          },
+          "64-127": {
+            "count": 554,
+            "decoded_mIoU": 0.35990830829871023,
+            "observation_cos_mean": 1.0,
+            "observation_cos_z1": 1.0,
+            "observation_cos_z4": 1.0,
+            "observation_mse_mean": 0.0,
+            "observation_mse_z1": 0.0,
+            "observation_mse_z4": 0.0,
+            "semantic_cos_gain_vs_observation": -0.03415538456680978,
+            "semantic_cos_mean": 0.9658446154331902,
+            "semantic_cos_z1": 0.9838545474119565,
+            "semantic_cos_z4": 0.947834683454424,
+            "semantic_mse_mean": 0.005488943520829162,
+            "semantic_mse_ratio_vs_observation": 5488943520.829163,
+            "semantic_mse_z1": 0.004536370015518222,
+            "semantic_mse_z4": 0.006441517026140102
+          },
+          "overall": {
+            "count": 2972,
+            "decoded_mIoU": 0.32813566384479503,
+            "observation_cos_mean": 1.0,
+            "observation_cos_z1": 1.0,
+            "observation_cos_z4": 1.0,
+            "observation_mse_mean": 0.0,
+            "observation_mse_z1": 0.0,
+            "observation_mse_z4": 0.0,
+            "semantic_cos_gain_vs_observation": -0.03416323487322226,
+            "semantic_cos_mean": 0.9658367651267777,
+            "semantic_cos_z1": 0.9838147241807722,
+            "semantic_cos_z4": 0.9478588060727832,
+            "semantic_mse_mean": 0.0054800119525207705,
+            "semantic_mse_ratio_vs_observation": 5480011952.520771,
+            "semantic_mse_z1": 0.004550220880690024,
+            "semantic_mse_z4": 0.006409803024351517
+          }
+        }
+      }
+    }
+  },
+  "decisions": {
+    "Blur-Max": {
+      "SEMANTIC_STATE_DRIFT": "SUPPORTED",
+      "available": true,
+      "continuous_early_to_late_cos_drop": 0.010538979224682277,
+      "continuous_late_vs_early_mse_ratio": 1.305285325440585,
+      "note": "Diagnostic criterion only. Main claim must rely on formal task metrics.",
+      "reset8_late_decoded_mIoU_gain": 0.011164791390463502,
+      "reset8_late_mse_improvement": 0.36237187040224283
+    },
+    "Blur-Mid": {
+      "SEMANTIC_STATE_DRIFT": "SUPPORTED",
+      "available": true,
+      "continuous_early_to_late_cos_drop": 0.010454415168926312,
+      "continuous_late_vs_early_mse_ratio": 1.2980139574386962,
+      "note": "Diagnostic criterion only. Main claim must rely on formal task metrics.",
+      "reset8_late_decoded_mIoU_gain": 0.010979041732035733,
+      "reset8_late_mse_improvement": 0.36425275316807293
+    },
+    "Clean": {
+      "SEMANTIC_STATE_DRIFT": "SUPPORTED",
+      "available": true,
+      "continuous_early_to_late_cos_drop": 0.010476617377478403,
+      "continuous_late_vs_early_mse_ratio": 1.2917151568219873,
+      "note": "Diagnostic criterion only. Main claim must rely on formal task metrics.",
+      "reset8_late_decoded_mIoU_gain": 0.014307910188929518,
+      "reset8_late_mse_improvement": 0.3700352171906859
+    }
+  },
+  "experiment": "semantic_reference_quality_diagnostic",
+  "parameters_updated": false,
+  "protocol": {
+    "conditions": {
+      "Blur-Max": "diagnostic sigma=3.0 with existing warmup",
+      "Blur-Mid": "diagnostic sigma=2.25 with existing warmup",
+      "Clean": "none"
+    },
+    "position_bins": [
+      "0-31",
+      "32-63",
+      "64-127",
+      "128+"
+    ],
+    "semantic_state_control": "reset only h4_sem/h1_sem every 8 frames; dynamics recurrent states remain continuous",
+    "sequence_count": 9,
+    "sequence_names": [
+      "0002",
+      "0006",
+      "0007",
+      "0008",
+      "0010",
+      "0013",
+      "0014",
+      "0016",
+      "0018"
+    ],
+    "split": "val"
+  }
+}
