@@ -1,0 +1,485 @@
+[
+  {
+    "epoch": 1,
+    "train": {
+      "full-scalar": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.909514656015098,
+        "finite": true,
+        "mean_loss": 0.7485976219177246,
+        "mean_temporal_loss": 0.006398078985512257,
+        "mean_gate": 0.002023453591391444,
+        "mean_abs_delta": 0.001158399973064661,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0005059563554823399
+      },
+      "full-channel-gate": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.909514656015098,
+        "finite": true,
+        "mean_loss": 0.7215885519981384,
+        "mean_temporal_loss": 0.006398078985512257,
+        "mean_gate": 0.0011520793195813894,
+        "mean_abs_delta": 0.0008214780245907605,
+        "mean_gate_channel_std": 0.0006544901407323778,
+        "mean_gate_spatial_std": 0.0003063140611629933
+      },
+      "full-temporal-semantic": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.909514656015098,
+        "finite": true,
+        "mean_loss": 0.7953753471374512,
+        "mean_temporal_loss": 0.006398078985512257,
+        "mean_gate": 0.002023032633587718,
+        "mean_abs_delta": 0.0012700813822448254,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0005057841772213578
+      },
+      "full-channel-temporal": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.909514656015098,
+        "finite": true,
+        "mean_loss": 0.7708038687705994,
+        "mean_temporal_loss": 0.006398078985512257,
+        "mean_gate": 0.0011530221672728658,
+        "mean_abs_delta": 0.0009032305097207427,
+        "mean_gate_channel_std": 0.000652761256787926,
+        "mean_gate_spatial_std": 0.00030672780121676624
+      }
+    },
+    "val": {
+      "full-scalar": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.17101413008684,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5495986927148364,
+        "wIoU": 0.8719978964955379,
+        "mVC8": 0.9557889648612637,
+        "mVC16": 0.9566603781482795,
+        "mean_gate": 0.0006101626204326749,
+        "mean_abs_delta": 0.0004580507520586252,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0004367222427390516
+      },
+      "full-channel-gate": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.17101413008684,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5494309691486351,
+        "wIoU": 0.8720396122084885,
+        "mVC8": 0.9556778159753917,
+        "mVC16": 0.9565315315271271,
+        "mean_gate": 0.0004495233588386327,
+        "mean_abs_delta": 0.00030398560920730233,
+        "mean_gate_channel_std": 0.00025173622998408973,
+        "mean_gate_spatial_std": 0.0003251423768233508
+      },
+      "full-temporal-semantic": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.17101413008684,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5499875718059755,
+        "wIoU": 0.8721147446373216,
+        "mVC8": 0.9558414547780841,
+        "mVC16": 0.9567584348894249,
+        "mean_gate": 0.0006024100002832711,
+        "mean_abs_delta": 0.00046755102812312543,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.00043150634155608714
+      },
+      "full-channel-temporal": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.17101413008684,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5497946435625897,
+        "wIoU": 0.8721520669852927,
+        "mVC8": 0.9557327260015172,
+        "mVC16": 0.9566371981289072,
+        "mean_gate": 0.00045502473949454725,
+        "mean_abs_delta": 0.0003140442131552845,
+        "mean_gate_channel_std": 0.0002476381487213075,
+        "mean_gate_spatial_std": 0.00032888597343117
+      }
+    },
+    "best": {
+      "full-scalar": {
+        "mIoU": 0.5504802800362203,
+        "epoch": 3
+      },
+      "full-channel-gate": {
+        "mIoU": 0.5494309691486351,
+        "epoch": 1
+      },
+      "full-temporal-semantic": {
+        "mIoU": 0.5499875718059755,
+        "epoch": 1
+      },
+      "full-channel-temporal": {
+        "mIoU": 0.5497946435625897,
+        "epoch": 1
+      }
+    }
+  },
+  {
+    "epoch": 2,
+    "train": {
+      "full-scalar": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.972027393417142,
+        "finite": true,
+        "mean_loss": 0.5314548015594482,
+        "mean_temporal_loss": 0.00039589821244589984,
+        "mean_gate": 0.0013556814519688487,
+        "mean_abs_delta": 0.0011126358294859529,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.00040089309914037585
+      },
+      "full-channel-gate": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.972027393417142,
+        "finite": true,
+        "mean_loss": 0.5280302166938782,
+        "mean_temporal_loss": 0.00039589821244589984,
+        "mean_gate": 0.004769316874444485,
+        "mean_abs_delta": 0.0033920160494744778,
+        "mean_gate_channel_std": 0.002444528043270111,
+        "mean_gate_spatial_std": 0.0012040096335113049
+      },
+      "full-temporal-semantic": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.972027393417142,
+        "finite": true,
+        "mean_loss": 0.5300638675689697,
+        "mean_temporal_loss": 0.00039589821244589984,
+        "mean_gate": 0.0013714953092858195,
+        "mean_abs_delta": 0.0011617159470915794,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.00039956733235158026
+      },
+      "full-channel-temporal": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.972027393417142,
+        "finite": true,
+        "mean_loss": 0.5265935659408569,
+        "mean_temporal_loss": 0.00039589821244589984,
+        "mean_gate": 0.004772915504872799,
+        "mean_abs_delta": 0.0033237445168197155,
+        "mean_gate_channel_std": 0.00242496095597744,
+        "mean_gate_spatial_std": 0.0012040621368214488
+      }
+    },
+    "val": {
+      "full-scalar": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.359090651662976,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5455871320578904,
+        "wIoU": 0.8703047222361793,
+        "mVC8": 0.9550160888803545,
+        "mVC16": 0.9557196801583471,
+        "mean_gate": 0.0012440511491149664,
+        "mean_abs_delta": 0.0010039462940767407,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0005714117432944477
+      },
+      "full-channel-gate": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.359090651662976,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5423569095114621,
+        "wIoU": 0.8689894727114271,
+        "mVC8": 0.9547733885744188,
+        "mVC16": 0.9550822350981242,
+        "mean_gate": 0.004497785586863756,
+        "mean_abs_delta": 0.0029118629172444344,
+        "mean_gate_channel_std": 0.0018134211422875524,
+        "mean_gate_spatial_std": 0.00198309775441885
+      },
+      "full-temporal-semantic": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.359090651662976,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.543810396586011,
+        "wIoU": 0.8700375549064717,
+        "mVC8": 0.9550601800550546,
+        "mVC16": 0.955786417874441,
+        "mean_gate": 0.0013785732444375753,
+        "mean_abs_delta": 0.0011355362366884947,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0006268377183005214
+      },
+      "full-channel-temporal": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.359090651662976,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5422678140234489,
+        "wIoU": 0.8690649440341053,
+        "mVC8": 0.9552075545511127,
+        "mVC16": 0.9557881205346195,
+        "mean_gate": 0.004536678548902273,
+        "mean_abs_delta": 0.003001757897436619,
+        "mean_gate_channel_std": 0.0017941293772310019,
+        "mean_gate_spatial_std": 0.001999915111809969
+      }
+    },
+    "best": {
+      "full-scalar": {
+        "mIoU": 0.5504802800362203,
+        "epoch": 3
+      },
+      "full-channel-gate": {
+        "mIoU": 0.5494309691486351,
+        "epoch": 1
+      },
+      "full-temporal-semantic": {
+        "mIoU": 0.5499875718059755,
+        "epoch": 1
+      },
+      "full-channel-temporal": {
+        "mIoU": 0.5497946435625897,
+        "epoch": 1
+      }
+    }
+  },
+  {
+    "epoch": 3,
+    "train": {
+      "full-scalar": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.963995659321392,
+        "finite": true,
+        "mean_loss": 0.4931008815765381,
+        "mean_temporal_loss": 0.00010297739208908752,
+        "mean_gate": 0.0030730857979506254,
+        "mean_abs_delta": 0.002458241768181324,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0006165722734294832
+      },
+      "full-channel-gate": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.963995659321392,
+        "finite": true,
+        "mean_loss": 0.48544037342071533,
+        "mean_temporal_loss": 0.00010297739208908752,
+        "mean_gate": 0.008622759953141212,
+        "mean_abs_delta": 0.0054918378591537476,
+        "mean_gate_channel_std": 0.0034029423259198666,
+        "mean_gate_spatial_std": 0.0016494502779096365
+      },
+      "full-temporal-semantic": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.963995659321392,
+        "finite": true,
+        "mean_loss": 0.4949777126312256,
+        "mean_temporal_loss": 0.00010297739208908752,
+        "mean_gate": 0.0032416130416095257,
+        "mean_abs_delta": 0.002655798802152276,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0006455385009758174
+      },
+      "full-channel-temporal": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 7.963995659321392,
+        "finite": true,
+        "mean_loss": 0.4895463287830353,
+        "mean_temporal_loss": 0.00010297739208908752,
+        "mean_gate": 0.0086668087169528,
+        "mean_abs_delta": 0.005556561052799225,
+        "mean_gate_channel_std": 0.0032731592655181885,
+        "mean_gate_spatial_std": 0.0016576310154050589
+      }
+    },
+    "val": {
+      "full-scalar": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.285367708280692,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5504802800362203,
+        "wIoU": 0.870855773689375,
+        "mVC8": 0.9550145790013155,
+        "mVC16": 0.9556047469060728,
+        "mean_gate": 0.0016963306115940213,
+        "mean_abs_delta": 0.0012558939633890986,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0006450227228924632
+      },
+      "full-channel-gate": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.285367708280692,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5471243538299001,
+        "wIoU": 0.8700811122947391,
+        "mVC8": 0.9541729761739137,
+        "mVC16": 0.9544356245997923,
+        "mean_gate": 0.00519520603120327,
+        "mean_abs_delta": 0.002683954546228051,
+        "mean_gate_channel_std": 0.0019956703763455153,
+        "mean_gate_spatial_std": 0.0018542419420555234
+      },
+      "full-temporal-semantic": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.285367708280692,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5482209629264236,
+        "wIoU": 0.8706575455295558,
+        "mVC8": 0.9550503807447833,
+        "mVC16": 0.9556795631354483,
+        "mean_gate": 0.0018982378533110023,
+        "mean_abs_delta": 0.001433757715858519,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0007125205011107028
+      },
+      "full-channel-temporal": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 8.285367708280692,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5464488650692297,
+        "wIoU": 0.8702526469739414,
+        "mVC8": 0.9546813944331569,
+        "mVC16": 0.9552049439837662,
+        "mean_gate": 0.005220513790845871,
+        "mean_abs_delta": 0.0027880389243364334,
+        "mean_gate_channel_std": 0.0019258081447333097,
+        "mean_gate_spatial_std": 0.0018636554013937712
+      }
+    },
+    "best": {
+      "full-scalar": {
+        "mIoU": 0.5504802800362203,
+        "epoch": 3
+      },
+      "full-channel-gate": {
+        "mIoU": 0.5494309691486351,
+        "epoch": 1
+      },
+      "full-temporal-semantic": {
+        "mIoU": 0.5499875718059755,
+        "epoch": 1
+      },
+      "full-channel-temporal": {
+        "mIoU": 0.5497946435625897,
+        "epoch": 1
+      }
+    }
+  }
+]
