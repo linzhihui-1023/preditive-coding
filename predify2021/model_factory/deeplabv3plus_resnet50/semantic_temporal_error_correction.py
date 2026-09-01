@@ -155,6 +155,73 @@ class ExplicitSemanticCorrection(nn.Module):
         }
 
 
+class SemanticResidualRefinementBlock(nn.Module):
+    """Lightweight bottleneck residual refinement with controllable receptive field."""
+
+    def __init__(self, channels=128, bottleneck_channels=64, dilation=1):
+        super().__init__()
+        self.reduce = nn.Conv2d(channels, bottleneck_channels, kernel_size=1, bias=False)
+        self.spatial = nn.Conv2d(
+            bottleneck_channels,
+            bottleneck_channels,
+            kernel_size=3,
+            padding=dilation,
+            dilation=dilation,
+            bias=False,
+        )
+        self.expand = nn.Conv2d(bottleneck_channels, channels, kernel_size=1, bias=True)
+        self.activation = nn.GELU()
+
+        # Identity initialization: the new refinement branch starts from zero,
+        # so ResidualSemanticCorrection is functionally identical to the
+        # existing ExplicitSemanticCorrection before training.
+        nn.init.zeros_(self.expand.weight)
+        nn.init.zeros_(self.expand.bias)
+
+    def forward(self, residual):
+        update = self.activation(self.reduce(residual))
+        update = self.activation(self.spatial(update))
+        update = self.expand(update)
+        return residual + update
+
+
+class ResidualSemanticCorrection(nn.Module):
+    """Refine the explicit semantic residual with lightweight spatial context."""
+
+    def __init__(self, channels=128, bottleneck_channels=64, baseline=None):
+        super().__init__()
+        self.base = ExplicitSemanticCorrection(channels)
+        self.local_refine = SemanticResidualRefinementBlock(
+            channels=channels,
+            bottleneck_channels=bottleneck_channels,
+            dilation=1,
+        )
+        self.context_refine = SemanticResidualRefinementBlock(
+            channels=channels,
+            bottleneck_channels=bottleneck_channels,
+            dilation=2,
+        )
+        if baseline is not None:
+            self.initialize_from_baseline(baseline)
+
+    @torch.no_grad()
+    def initialize_from_baseline(self, baseline):
+        """Copy the current explicit generator; refinement blocks remain identity."""
+        self.base.load_state_dict(baseline.state_dict(), strict=True)
+
+    def forward(self, observation, semantic_reference):
+        semantic_residual = self.base(observation, semantic_reference)
+        semantic_residual = self.local_refine(semantic_residual)
+        return self.context_refine(semantic_residual)
+
+    def forward_semantic_only(self, observation, semantic_reference):
+        semantic_residual = self.forward(observation, semantic_reference)
+        return observation + semantic_residual, {
+            "semantic_residual": semantic_residual,
+            "delta": semantic_residual,
+        }
+
+
 class TemporalConditionedSemanticCorrection(nn.Module):
     """Semantic residual correction conditioned on detached temporal state."""
 
