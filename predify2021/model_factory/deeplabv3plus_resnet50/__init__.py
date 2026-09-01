@@ -29,11 +29,13 @@ from .error_decomposition_correction import (
     ReliabilityGate,
 )
 from .semantic_temporal_error_correction import (
+    DynamicsGateEncoder,
     ErrorStateConvGRU,
     LocalFeatureCorrelation,
     SemanticTemporalDirectCorrection,
     SemanticTemporalErrorCorrection,
     SemanticTemporalErrorEncoder,
+    TemporalErrorPredictionHead,
 )
 
 __all__ = [
@@ -64,7 +66,9 @@ __all__ = [
     "RoleSeparatedRecurrentPredictor",
     "LocalFeatureCorrelation",
     "SemanticTemporalErrorEncoder",
+    "DynamicsGateEncoder",
     "ErrorStateConvGRU",
     "SemanticTemporalDirectCorrection",
     "SemanticTemporalErrorCorrection",
+    "TemporalErrorPredictionHead",
 ]

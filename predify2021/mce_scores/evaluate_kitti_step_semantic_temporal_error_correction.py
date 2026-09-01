@@ -22,8 +22,17 @@ from predify2021.mce_scores.train_kitti_step_error_decomposition_correction impo
 CORRECTED_B_CHECKPOINT = "/home/lin/experiments/kitti_step_persistent_blur_corrected_b_6dd4cc6/best_corrected_b_persistent_blur.pt"
 DECOMPOSITION_CHECKPOINT = "/home/lin/experiments/kitti_step_error_decomposition_reliability_blur_6dd4cc6/best_error_decomposition_correction.pt"
 def load_new(path):
-    corrections = build_semantic_temporal_corrections()
     payload = torch.load(path, map_location="cpu", weights_only=False)
+    dynamic_enabled = any(
+        key.startswith("0.dynamic_encoder.") for key in payload["corrections"]
+    )
+    temporal_prediction_enabled = any(
+        key.startswith("0.temporal_prediction.") for key in payload["corrections"]
+    )
+    corrections = build_semantic_temporal_corrections(
+        use_dynamic_error=dynamic_enabled,
+        use_temporal_prediction=temporal_prediction_enabled,
+    )
     corrections.load_state_dict(payload["corrections"], strict=True)
     corrections.requires_grad_(False)
     corrections.eval()
@@ -308,7 +317,7 @@ def main():
         "checkpoint": str(checkpoint),
         "reference_checkpoints": {"corrected_b": str(corrected_b_path), "error_decomposition_reliability": str(decomposition_path)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
-        "config": {"seed": 0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "evaluation_excludes_warmup": True, "temperature": 1.0, "distillation_weight": 0.5, "correction_feedback_to_predictor": False, "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=epsilon_(t-1)+(Ts/tau_e)*(e_t-K_e*epsilon_(t-1))", "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME, "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_gain": DYNAMIC_ERROR_GAIN, "dynamic_error_usage": "tracked_only_not_connected_to_correction", "robustness_benchmark": "ImageNet-C Gaussian Blur", "robustness_blur_sigmas": IMAGENET_C_GAUSSIAN_BLUR_SIGMAS, "robustness_reference_model": "corrupted_host"},
+        "config": {"seed": 0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "evaluation_excludes_warmup": True, "temperature": 1.0, "distillation_weight": 0.5, "correction_feedback_to_predictor": False, "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=epsilon_(t-1)+(Ts/tau_e)*(e_t-K_e*epsilon_(t-1))", "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME, "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_gain": DYNAMIC_ERROR_GAIN, "dynamic_error_enabled": corrections[0].use_dynamic_error, "dynamic_error_usage": "gate_modulation_and_H_next_error_prediction" if corrections[0].use_dynamic_error else "tracked_only_not_connected_to_correction", "robustness_benchmark": "ImageNet-C Gaussian Blur", "robustness_blur_sigmas": IMAGENET_C_GAUSSIAN_BLUR_SIGMAS, "robustness_reference_model": "corrupted_host"},
         "dataset": {"split": "val", "sequence_count": len(groups), "total_frame_count": len(dataset.samples), "effective_frame_count": frame_count, "role": "local_metric_evaluation_and_checkpoint_selection", "official_test_ground_truth_available_locally": False, "official_test_path": "separate_unlabeled_inference"},
         "metrics": metrics,
         "mIoU": {name: value["miou"] for name, value in metrics.items()},

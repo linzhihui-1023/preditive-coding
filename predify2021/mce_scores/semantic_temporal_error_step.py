@@ -48,6 +48,7 @@ def semantic_temporal_error_step(
         dynamics,
         semantic,
         state.hidden,
+        previous_dynamic_error=state.dynamic_error,
     )
     dynamic_error = (
         build_temporal_prediction_error_state(
@@ -56,14 +57,14 @@ def semantic_temporal_error_step(
             sample_time=DYNAMIC_ERROR_SAMPLE_TIME,
             time_constant=DYNAMIC_ERROR_TIME_CONSTANT,
             error_gain=DYNAMIC_ERROR_GAIN,
-        ),
+        ).detach(),
         build_temporal_prediction_error_state(
             values["error_z4"],
             state.dynamic_error[1],
             sample_time=DYNAMIC_ERROR_SAMPLE_TIME,
             time_constant=DYNAMIC_ERROR_TIME_CONSTANT,
             error_gain=DYNAMIC_ERROR_GAIN,
-        ),
+        ).detach(),
     )
     values = {
         **values,

@@ -1,3 +1,5 @@
+import os
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -54,6 +56,58 @@ class SemanticTemporalErrorEncoder(nn.Module):
         return base_error * (1.0 + semantic_gain), error_backbone, base_error
 
 
+class DynamicsGateEncoder(nn.Module):
+    """Encode the analytical first-order error state as bounded gate logits.
+
+    The encoder deliberately only modulates the GRU gates.  The analytical
+    state is supplied by the caller so that this module cannot accidentally
+    become another recurrent state or read a post-correction feature.
+    """
+
+    def __init__(self, channels=128, scale=1.0, gate_limit=0.25):
+        super().__init__()
+        if scale <= 0:
+            raise ValueError("Dynamics normalization scale must be positive")
+        if gate_limit <= 0:
+            raise ValueError("Dynamics gate limit must be positive")
+        self.register_buffer("normalization_scale", torch.tensor(float(scale)))
+        self.register_buffer("gate_limit", torch.tensor(float(gate_limit)))
+        self.projection = nn.Sequential(
+            nn.Conv2d(2 * channels, channels, 1),
+            nn.GELU(),
+            nn.Conv2d(channels, 2 * channels, 3, padding=1),
+        )
+        # Preserve the exact original ConvGRU at initialization.  The
+        # preceding layers remain normally initialized so the final layer can
+        # learn from the first update.
+        nn.init.zeros_(self.projection[-1].weight)
+        nn.init.zeros_(self.projection[-1].bias)
+
+    def forward(self, error, previous_dynamic_error, error_gain=1.0):
+        if error.shape != previous_dynamic_error.shape:
+            raise ValueError(
+                "Prediction error and previous dynamics state must have the "
+                f"same shape, got {tuple(error.shape)} and "
+                f"{tuple(previous_dynamic_error.shape)}"
+            )
+        error_gain = torch.as_tensor(
+            error_gain,
+            device=error.device,
+            dtype=error.dtype,
+        )
+        historical = error_gain * previous_dynamic_error
+        residual = error - historical
+        features = torch.cat(
+            (
+                historical / self.normalization_scale,
+                residual / self.normalization_scale,
+            ),
+            dim=1,
+        )
+        modulation = self.gate_limit * torch.tanh(self.projection(features))
+        return modulation, historical, residual
+
+
 class ErrorStateConvGRU(nn.Module):
     def __init__(self, channels=128):
         super().__init__()
@@ -61,12 +115,28 @@ class ErrorStateConvGRU(nn.Module):
         self.gates = nn.Conv2d(channels * 2, channels * 2, 3, padding=1, bias=False)
         self.candidate = nn.Conv2d(channels * 2, channels, 3, padding=1, bias=False)
 
-    def forward(self, task_error, hidden):
+    def forward(self, task_error, hidden, gate_modulation=None):
         if hidden is None:
             hidden = torch.zeros_like(task_error)
-        gates = torch.sigmoid(self.gates(torch.cat((task_error, hidden), dim=1)))
+        gate_logits = self.gates(torch.cat((task_error, hidden), dim=1))
+        base_gates = torch.sigmoid(gate_logits)
+        if gate_modulation is not None:
+            if gate_modulation.shape != (task_error.shape[0], 2 * self.hidden_channels, task_error.shape[2], task_error.shape[3]):
+                raise ValueError(
+                    "Dynamics gate modulation has incompatible shape: "
+                    f"expected {(task_error.shape[0], 2 * self.hidden_channels, task_error.shape[2], task_error.shape[3])}, "
+                    f"got {tuple(gate_modulation.shape)}"
+                )
+            gate_logits = gate_logits + gate_modulation
+        gates = torch.sigmoid(gate_logits)
         update, reset = gates.chunk(2, dim=1)
         candidate = torch.tanh(self.candidate(torch.cat((task_error, reset * hidden), dim=1)))
+        self.last_gate_values = {
+            "base_update": base_gates[:, : self.hidden_channels],
+            "base_reset": base_gates[:, self.hidden_channels :],
+            "update": update,
+            "reset": reset,
+        }
         return (1.0 - update) * hidden + update * candidate
 
 
@@ -86,21 +156,105 @@ class SemanticTemporalDirectCorrection(nn.Module):
         )
 
 
-class SemanticTemporalErrorCorrection(nn.Module):
+class TemporalErrorPredictionHead(nn.Module):
+    """Predict the next raw prediction error from the learned state only."""
+
     def __init__(self, channels=128):
+        super().__init__()
+        self.projection = nn.Conv2d(channels, channels, 1)
+
+    def forward(self, hidden):
+        return self.projection(hidden)
+
+
+class SemanticTemporalErrorCorrection(nn.Module):
+    def __init__(
+        self,
+        channels=128,
+        use_dynamic_error=False,
+        dynamic_scale=1.0,
+        dynamic_gate_limit=0.25,
+        dynamic_error_gain=1.0,
+        use_temporal_prediction=False,
+        dynamic_sample_time=0.1035,
+        dynamic_time_constant=0.5,
+    ):
         super().__init__()
         self.correlation = LocalFeatureCorrelation(channels)
         self.encoder = SemanticTemporalErrorEncoder(channels)
         self.error_state = ErrorStateConvGRU(channels)
         self.direct = SemanticTemporalDirectCorrection(channels)
+        self.use_dynamic_error = bool(use_dynamic_error)
+        self.use_temporal_prediction = bool(
+            use_temporal_prediction or use_dynamic_error
+        )
+        if self.use_dynamic_error:
+            self.register_buffer(
+                "dynamic_error_gain", torch.tensor(float(dynamic_error_gain))
+            )
+            self.register_buffer(
+                "dynamic_sample_time", torch.tensor(float(dynamic_sample_time))
+            )
+            self.register_buffer(
+                "dynamic_time_constant", torch.tensor(float(dynamic_time_constant))
+            )
+        else:
+            self.dynamic_error_gain = None
+            self.dynamic_sample_time = None
+            self.dynamic_time_constant = None
+        self.dynamic_encoder = (
+            DynamicsGateEncoder(channels, dynamic_scale, dynamic_gate_limit)
+            if self.use_dynamic_error
+            else None
+        )
+        self.temporal_prediction = (
+            TemporalErrorPredictionHead(channels)
+            if self.use_temporal_prediction
+            else None
+        )
+        self.last_dynamic_values = {}
 
-    def forward(self, observation, predicted, semantic_context, hidden):
+    def forward(
+        self,
+        observation,
+        predicted,
+        semantic_context,
+        hidden,
+        previous_dynamic_error=None,
+    ):
         error = observation - predicted
         aligned_error, raw_aligned_error, attention_weights = self.correlation(observation, predicted, semantic_context)
         task_error, error_backbone, base_error = self.encoder(
             error, aligned_error, observation, predicted, semantic_context
         )
-        hidden = self.error_state(task_error, hidden)
+        self.last_dynamic_values = {}
+        gate_modulation = None
+        if self.use_dynamic_error:
+            if previous_dynamic_error is None:
+                raise ValueError("Dynamic-aware correction requires previous_dynamic_error")
+            gate_modulation, historical, residual = self.dynamic_encoder(
+                error,
+                previous_dynamic_error,
+                error_gain=self.dynamic_error_gain,
+            )
+            self.last_dynamic_values = {
+                "historical_dynamic_component": historical,
+                "first_order_model_residual": residual,
+                "gate_modulation": gate_modulation,
+            }
+        hidden = self.error_state(task_error, hidden, gate_modulation=gate_modulation)
+        if gate_modulation is not None:
+            gate_values = self.error_state.last_gate_values
+            self.last_dynamic_values.update(
+                {
+                    "update_gate_delta": gate_values["update"] - gate_values["base_update"],
+                    "reset_gate_delta": gate_values["reset"] - gate_values["base_reset"],
+                    "update_gate": gate_values["update"],
+                    "reset_gate": gate_values["reset"],
+                }
+            )
+        if self.temporal_prediction is not None:
+            self.last_dynamic_values["predicted_next_error"] = self.temporal_prediction(hidden)
         delta = self.direct(observation, hidden)
         entropy = -(attention_weights * (attention_weights.clamp_min(1e-12).log())).sum(dim=1)
         return error, aligned_error, task_error, hidden, delta, attention_weights.max(dim=1).values.mean(), entropy.mean(), error_backbone, base_error, raw_aligned_error
@@ -191,10 +345,70 @@ class STCNMemoryCorrection(nn.Module):
         return base[4], observation + delta, base_hidden, self.memory_reader.push(observation, memory), {"delta": delta, "gain": gain, "reference": reference, "weights": weights, "time_ratios": memory_stats["time_ratios"], "memory_entropy": memory_stats["entropy"], "memory_normalized_entropy": memory_stats["normalized_entropy"]}
 
 
-def build_semantic_temporal_corrections():
+def _env_float(name, default):
+    value = os.environ.get(name)
+    return default if value is None else float(value)
+
+
+def build_semantic_temporal_corrections(
+    use_dynamic_error=None,
+    use_temporal_prediction=None,
+):
+    """Build the existing correction path, optionally with dynamics gates.
+
+    The default remains the historical mainline.  Setting
+    ``PREDIFY_ENABLE_DYNAMICS_ERROR=1`` (or passing ``True`` explicitly)
+    creates the isolated dynamic-aware branch.
+    """
+    if use_dynamic_error is None:
+        use_dynamic_error = os.environ.get("PREDIFY_ENABLE_DYNAMICS_ERROR", "0") == "1"
+    if use_temporal_prediction is None:
+        use_temporal_prediction = (
+            os.environ.get("PREDIFY_ENABLE_TEMPORAL_PREDICTION", "0") == "1"
+        )
+    dynamic_scale_z1 = _env_float("PREDIFY_DYNAMIC_ERROR_SCALE_Z1", 1.0)
+    dynamic_scale_z4 = _env_float("PREDIFY_DYNAMIC_ERROR_SCALE_Z4", 1.0)
+    dynamic_gate_limit = _env_float("PREDIFY_DYNAMIC_ERROR_GATE_LIMIT", 0.25)
+    dynamic_gain = _env_float("PREDIFY_DYNAMIC_ERROR_GAIN", 1.0)
+    sample_time = _env_float("PREDIFY_DYNAMIC_ERROR_SAMPLE_TIME", 0.1035)
+    time_constant = _env_float("PREDIFY_DYNAMIC_ERROR_TIME_CONSTANT", 0.5)
+    if use_dynamic_error:
+        if time_constant <= 0:
+            raise ValueError("Dynamics time constant must be positive")
+        effective_q = sample_time * dynamic_gain / time_constant
+        if not 0.0 < effective_q <= 1.0:
+            raise ValueError(
+                "Dynamic-aware ConvGRU V1 requires "
+                "0 < Ts * K_e / tau_e <= 1, but got "
+                f"q={effective_q}."
+            )
     return nn.ModuleList(
-        [SemanticTemporalErrorCorrection(), SemanticTemporalErrorCorrection()]
+        [
+            SemanticTemporalErrorCorrection(
+                use_dynamic_error=use_dynamic_error,
+                dynamic_scale=dynamic_scale_z1,
+                dynamic_gate_limit=dynamic_gate_limit,
+                dynamic_error_gain=dynamic_gain,
+                use_temporal_prediction=use_temporal_prediction,
+                dynamic_sample_time=sample_time,
+                dynamic_time_constant=time_constant,
+            ),
+            SemanticTemporalErrorCorrection(
+                use_dynamic_error=use_dynamic_error,
+                dynamic_scale=dynamic_scale_z4,
+                dynamic_gate_limit=dynamic_gate_limit,
+                dynamic_error_gain=dynamic_gain,
+                use_temporal_prediction=use_temporal_prediction,
+                dynamic_sample_time=sample_time,
+                dynamic_time_constant=time_constant,
+            ),
+        ]
     ).cuda()
+
+
+def build_dynamic_semantic_temporal_corrections():
+    """Explicit constructor for the opt-in dynamics experiment branch."""
+    return build_semantic_temporal_corrections(use_dynamic_error=True)
 
 
 def build_semantic_prototype_corrections(prototypes_z1=None, prototypes_z4=None):
@@ -214,12 +428,27 @@ def build_stcn_memory_corrections():
     return nn.ModuleList([STCNMemoryCorrection(False), STCNMemoryCorrection(True)]).cuda()
 
 
-def apply_semantic_temporal_corrections(corrections, observation, dynamics, semantic, hidden):
+def apply_semantic_temporal_corrections(
+    corrections,
+    observation,
+    dynamics,
+    semantic,
+    hidden,
+    previous_dynamic_error=None,
+):
     error1, aligned_error1, task1, hidden1, delta1, max_weight1, entropy1, backbone1, base1, raw_aligned_error1 = corrections[0](
-        observation.z1, dynamics.z1, semantic.z1, hidden[0]
+        observation.z1,
+        dynamics.z1,
+        semantic.z1,
+        hidden[0],
+        None if previous_dynamic_error is None else previous_dynamic_error[0],
     )
     error4, aligned_error4, task4, hidden4, delta4, max_weight4, entropy4, backbone4, base4, raw_aligned_error4 = corrections[1](
-        observation.z4, dynamics.z4, semantic.z4, hidden[1]
+        observation.z4,
+        dynamics.z4,
+        semantic.z4,
+        hidden[1],
+        None if previous_dynamic_error is None else previous_dynamic_error[1],
     )
     posterior = UnifiedFeatures(
         observation.z1 + delta1,
@@ -227,7 +456,7 @@ def apply_semantic_temporal_corrections(corrections, observation, dynamics, sema
         observation.z3,
         observation.z4 + delta4,
     )
-    return posterior, (hidden1, hidden4), {
+    values = {
         "error_z1": error1,
         "error_z4": error4,
         "aligned_error_z1": aligned_error1,
@@ -247,6 +476,11 @@ def apply_semantic_temporal_corrections(corrections, observation, dynamics, sema
         "raw_aligned_error_z1": raw_aligned_error1,
         "raw_aligned_error_z4": raw_aligned_error4,
     }
+    for level, correction in (("z1", corrections[0]), ("z4", corrections[1])):
+        if correction.last_dynamic_values:
+            for name, value in correction.last_dynamic_values.items():
+                values[f"{name}_{level}"] = value
+    return posterior, (hidden1, hidden4), values
 
 
 def apply_semantic_prototype_corrections(corrections, observation, dynamics, semantic, hidden):

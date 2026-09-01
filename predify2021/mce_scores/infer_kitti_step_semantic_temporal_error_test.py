@@ -43,8 +43,17 @@ def test_sequence_groups(root):
 
 
 def load_corrections(path):
-    corrections = build_semantic_temporal_corrections()
     payload = torch.load(path, map_location="cpu", weights_only=False)
+    dynamic_enabled = any(
+        key.startswith("0.dynamic_encoder.") for key in payload["corrections"]
+    )
+    temporal_prediction_enabled = any(
+        key.startswith("0.temporal_prediction.") for key in payload["corrections"]
+    )
+    corrections = build_semantic_temporal_corrections(
+        use_dynamic_error=dynamic_enabled,
+        use_temporal_prediction=temporal_prediction_enabled,
+    )
     corrections.load_state_dict(payload["corrections"], strict=True)
     corrections.requires_grad_(False)
     corrections.eval()
@@ -161,7 +170,12 @@ def main():
             "ground_truth_available_locally": False,
         },
         "prediction_error_definition": "observation_minus_prediction",
-        "dynamic_error_usage": "tracked_only_not_connected_to_correction",
+        "dynamic_error_enabled": corrections[0].use_dynamic_error,
+        "dynamic_error_usage": (
+            "gate_modulation_and_H_next_error_prediction"
+            if corrections[0].use_dynamic_error
+            else "tracked_only_not_connected_to_correction"
+        ),
         "metrics_computed": False,
         "reason_metrics_not_computed": "official KITTI-STEP test ground truth is not publicly provided",
         "semantic_prediction_dir": str(prediction_root),

@@ -54,18 +54,47 @@ from predify2021.model_factory.deeplabv3plus_resnet50.semantic_temporal_error_co
 )
 
 
-SEED = 0
-EPOCHS = 15
-EARLY_STOPPING_PATIENCE = 3
+SEED = int(os.environ.get("PREDIFY_SEED", "0"))
+EPOCHS = int(os.environ.get("PREDIFY_EPOCHS", "15"))
+EARLY_STOPPING_PATIENCE = int(
+    os.environ.get("PREDIFY_EARLY_STOPPING_PATIENCE", "3")
+)
 EARLY_STOPPING_MIN_MIOU_IMPROVEMENT = 1e-4
 MIOU_TIE_TOLERANCE = 1e-6
-TRUNCATED_BPTT = 4
+TRUNCATED_BPTT = int(os.environ.get("PREDIFY_TRUNCATED_BPTT", "4"))
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.01
 DISTILL_WEIGHT = 0.5
-FROZEN_ENCODE_BATCH_SIZE = 8
-LOADER_WORKERS = 8
-LOADER_PREFETCH_FACTOR = 2
+TEMPORAL_PREDICTION_LOSS_WEIGHT = float(
+    os.environ.get("PREDIFY_TEMPORAL_PREDICTION_LOSS_WEIGHT", "0.1")
+)
+DYNAMIC_DIAGNOSTICS = (
+    "historical_dynamic_component",
+    "first_order_model_residual",
+    "gate_modulation",
+    "update_gate_delta",
+    "reset_gate_delta",
+)
+GATE_DIAGNOSTICS = (
+    "mean_update_gate",
+    "mean_reset_gate",
+    "gate_saturation_rate",
+    "corr_abs_residual_update_delta",
+    "corr_abs_residual_reset_delta",
+    "mean_abs_dynamic_error",
+)
+FROZEN_ENCODE_BATCH_SIZE = int(
+    os.environ.get("PREDIFY_FROZEN_ENCODE_BATCH_SIZE", "8")
+)
+LOADER_WORKERS = int(os.environ.get("PREDIFY_LOADER_WORKERS", "8"))
+LOADER_PREFETCH_FACTOR = int(
+    os.environ.get("PREDIFY_LOADER_PREFETCH_FACTOR", "2")
+)
+TRAIN_SEQUENCE_LIMIT = int(os.environ.get("PREDIFY_TRAIN_SEQUENCE_LIMIT", "0"))
+VAL_SEQUENCE_LIMIT = int(os.environ.get("PREDIFY_VAL_SEQUENCE_LIMIT", "0"))
+FRAMES_PER_SEQUENCE_LIMIT = int(
+    os.environ.get("PREDIFY_FRAMES_PER_SEQUENCE_LIMIT", "0")
+)
 
 
 def parameter_efficiency_metrics(model, predictor, corrections):
@@ -121,6 +150,17 @@ def corrected_host_feature(model, raw_features, observation, posterior, output_s
     return residual_writeback_host_feature(model, raw_features, delta, output_size)
 
 
+def absolute_pearson_correlation(left, right):
+    left = left.detach().abs().float().reshape(-1)
+    right = right.detach().abs().float().reshape(-1)
+    left = left - left.mean()
+    right = right - right.mean()
+    denominator = left.square().sum().sqrt() * right.square().sum().sqrt()
+    if denominator <= 1e-12:
+        return left.new_zeros(())
+    return (left * right).sum() / denominator
+
+
 class SequenceChunkDataset(Dataset):
     """Ordered per-sequence chunks for parallel CPU image loading."""
 
@@ -156,16 +196,32 @@ def collate_sequence_chunk(chunks):
 
 def make_sequence_chunk_loader(groups):
     dataset = SequenceChunkDataset(groups, FROZEN_ENCODE_BATCH_SIZE)
+    loader_options = {
+        "dataset": dataset,
+        "batch_size": 1,
+        "shuffle": False,
+        "num_workers": LOADER_WORKERS,
+        "pin_memory": True,
+        "collate_fn": collate_sequence_chunk,
+    }
+    if LOADER_WORKERS > 0:
+        loader_options.update(
+            persistent_workers=True,
+            prefetch_factor=LOADER_PREFETCH_FACTOR,
+        )
     return DataLoader(
-        dataset,
-        batch_size=1,
-        shuffle=False,
-        num_workers=LOADER_WORKERS,
-        pin_memory=True,
-        persistent_workers=True,
-        prefetch_factor=LOADER_PREFETCH_FACTOR,
-        collate_fn=collate_sequence_chunk,
+        **loader_options,
     )
+
+
+def limit_sequence_groups(groups, sequence_limit=0, frame_limit=0):
+    items = list(groups.items())
+    if sequence_limit > 0:
+        items = items[:sequence_limit]
+    return {
+        sequence_id: samples[:frame_limit] if frame_limit > 0 else samples
+        for sequence_id, samples in items
+    }
 
 
 def stack_backbone_features(features):
@@ -241,13 +297,112 @@ def flush_bptt_batch(
     semantic, distillation, logits = semantic_losses_batch(
         model, raw_features, observation, posterior, clean_logits, masks, output_size
     )
-    total = semantic + DISTILL_WEIGHT * distillation
+    temporal_predictions = [
+        record.get("temporal_prediction")
+        for record in records
+        if record.get("temporal_prediction") is not None
+    ]
+    temporal_targets = [
+        record["temporal_target"]
+        for record in records
+        if record.get("temporal_prediction") is not None
+    ]
+    persistence_predictions = [
+        record["temporal_persistence"]
+        for record in records
+        if record.get("temporal_prediction") is not None
+    ]
+    if temporal_predictions:
+        target_z1 = torch.cat([value[0] for value in temporal_targets], dim=0).detach()
+        target_z4 = torch.cat([value[1] for value in temporal_targets], dim=0).detach()
+        temporal_loss = 0.5 * (
+            F.smooth_l1_loss(
+                torch.cat([value[0] for value in temporal_predictions], dim=0),
+                target_z1,
+            )
+            + F.smooth_l1_loss(
+                torch.cat([value[1] for value in temporal_predictions], dim=0),
+                target_z4,
+            )
+        )
+        zero_temporal_loss = 0.5 * (
+            F.smooth_l1_loss(torch.zeros_like(target_z1), target_z1)
+            + F.smooth_l1_loss(torch.zeros_like(target_z4), target_z4)
+        )
+        persistence_temporal_loss = 0.5 * (
+            F.smooth_l1_loss(
+                torch.cat([value[0] for value in persistence_predictions], dim=0),
+                target_z1,
+            )
+            + F.smooth_l1_loss(
+                torch.cat([value[1] for value in persistence_predictions], dim=0),
+                target_z4,
+            )
+        )
+    else:
+        temporal_loss = semantic.new_zeros(())
+        zero_temporal_loss = semantic.new_zeros(())
+        persistence_temporal_loss = semantic.new_zeros(())
+    total = semantic + DISTILL_WEIGHT * distillation + TEMPORAL_PREDICTION_LOSS_WEIGHT * temporal_loss
     if optimizer is not None:
         optimizer.zero_grad(set_to_none=True)
         total.backward()
         optimizer.step()
     totals["segmentation_cross_entropy"].add_(semantic.detach() * len(records))
     totals["distillation_kl"].add_(distillation.detach() * len(records))
+    if "temporal_prediction_loss" in totals:
+        temporal_pair_count = len(temporal_predictions)
+        totals["temporal_pair_count"].add_(temporal_pair_count)
+        totals["temporal_prediction_loss"].add_(
+            temporal_loss.detach() * temporal_pair_count
+        )
+        totals["zero_temporal_loss"].add_(
+            zero_temporal_loss.detach() * temporal_pair_count
+        )
+        totals["persistence_temporal_loss"].add_(
+            persistence_temporal_loss.detach() * temporal_pair_count
+        )
+    for level in ("z1", "z4"):
+        for name in DYNAMIC_DIAGNOSTICS:
+            value = records[0]["values"].get(f"{name}_{level}")
+            if value is not None and f"mean_abs_{name}_{level}" in totals:
+                total_value = sum(
+                    record["values"][f"{name}_{level}"].abs().mean()
+                    for record in records
+                )
+                totals[f"mean_abs_{name}_{level}"].add_(total_value.detach())
+        value = records[0]["values"].get(f"gate_modulation_{level}")
+        if value is not None and f"std_gate_modulation_{level}" in totals:
+            total_value = sum(
+                record["values"][f"gate_modulation_{level}"].std()
+                for record in records
+            )
+            totals[f"std_gate_modulation_{level}"].add_(total_value.detach())
+        if f"mean_update_gate_{level}" in totals:
+            level_index = 0 if level == "z1" else 1
+            for record in records:
+                values = record["values"]
+                update = values[f"update_gate_{level}"]
+                reset = values[f"reset_gate_{level}"]
+                residual = values[f"first_order_model_residual_{level}"]
+                update_delta = values[f"update_gate_delta_{level}"]
+                reset_delta = values[f"reset_gate_delta_{level}"]
+                totals[f"mean_update_gate_{level}"].add_(update.detach().mean())
+                totals[f"mean_reset_gate_{level}"].add_(reset.detach().mean())
+                saturation = 0.5 * (
+                    ((update < 0.05) | (update > 0.95)).float().mean()
+                    + ((reset < 0.05) | (reset > 0.95)).float().mean()
+                )
+                totals[f"gate_saturation_rate_{level}"].add_(saturation.detach())
+                totals[f"corr_abs_residual_update_delta_{level}"].add_(
+                    absolute_pearson_correlation(residual, update_delta)
+                )
+                totals[f"corr_abs_residual_reset_delta_{level}"].add_(
+                    absolute_pearson_correlation(residual, reset_delta)
+                )
+                totals[f"mean_abs_dynamic_error_{level}"].add_(
+                    record["hidden"].dynamic_error[level_index].detach().abs().mean()
+                )
     totals["total_loss"].add_(total.detach() * len(records))
     finite_tensors = [logits, total]
     for record in records:
@@ -269,6 +424,11 @@ def flush_bptt_batch(
                 record["posterior"].z4,
             )
         )
+        for level in ("z1", "z4"):
+            for name in DYNAMIC_DIAGNOSTICS + ("predicted_next_error",):
+                value = values.get(f"{name}_{level}")
+                if value is not None:
+                    finite_tensors.append(value)
     finite = bool(torch.stack([torch.isfinite(value).all() for value in finite_tensors]).all().item())
     if confusion is not None:
         for index, record in enumerate(records):
@@ -291,7 +451,23 @@ def run_epoch(
 ):
     training = optimizer is not None
     corrections.train(training)
-    totals = {key: torch.zeros((), device="cuda") for key in ("segmentation_cross_entropy", "distillation_kl", "total_loss")}
+    total_keys = ["segmentation_cross_entropy", "distillation_kl", "total_loss"]
+    if corrections[0].temporal_prediction is not None:
+        total_keys.extend(
+            (
+                "temporal_pair_count",
+                "temporal_prediction_loss",
+                "zero_temporal_loss",
+                "persistence_temporal_loss",
+            )
+        )
+    if corrections[0].use_dynamic_error:
+        for level in ("z1", "z4"):
+            for name in DYNAMIC_DIAGNOSTICS:
+                total_keys.append(f"mean_abs_{name}_{level}")
+            total_keys.append(f"std_gate_modulation_{level}")
+            total_keys.extend(f"{name}_{level}" for name in GATE_DIAGNOSTICS)
+    totals = {key: torch.zeros((), device="cuda") for key in total_keys}
     frame_count = 0
     finite = True
     confusion = torch.zeros((19, 19), dtype=torch.int64) if collect_validation_metrics else None
@@ -301,6 +477,8 @@ def run_epoch(
     pending_dynamics = None
     pending_semantic = None
     previous_sequence = None
+    previous_temporal_prediction = None
+    previous_prediction_error = None
     records = []
     for chunk in sequence_loader:
         sequence_id = chunk["sequence_id"]
@@ -311,6 +489,8 @@ def run_epoch(
             predictor_hidden = predictor.initial_state()
             pending_dynamics = None
             pending_semantic = None
+            previous_temporal_prediction = None
+            previous_prediction_error = None
             previous_sequence = sequence_id
             if video_consistency is not None:
                 video_consistency.reset_sequence()
@@ -350,6 +530,8 @@ def run_epoch(
                         predictor, observation, prediction_error, predictor_hidden
                     )
                 hidden = detach_error_state(hidden)
+                previous_temporal_prediction = None
+                previous_prediction_error = None
                 continue
             posterior, hidden, values = semantic_temporal_error_step(
                 corrections, observation, pending_dynamics, pending_semantic, hidden
@@ -364,7 +546,24 @@ def run_epoch(
                     "prediction_error": prediction_error,
                     "values": values,
                     "hidden": hidden,
+                    "temporal_prediction": previous_temporal_prediction,
+                    "temporal_target": (
+                        prediction_error.z1.detach(),
+                        prediction_error.z4.detach(),
+                    ),
+                    "temporal_persistence": previous_prediction_error,
                 }
+            )
+            if "predicted_next_error_z1" in values:
+                previous_temporal_prediction = (
+                    values["predicted_next_error_z1"],
+                    values["predicted_next_error_z4"],
+                )
+            else:
+                previous_temporal_prediction = None
+            previous_prediction_error = (
+                prediction_error.z1.detach(),
+                prediction_error.z4.detach(),
             )
             frame_count += 1
             with torch.no_grad():
@@ -377,6 +576,8 @@ def run_epoch(
                 ) and finite
                 records.clear()
                 hidden = detach_error_state(hidden)
+                previous_temporal_prediction = None
+                previous_prediction_error = None
             elif not training:
                 hidden = detach_error_state(hidden)
         if start + len(clean_images) == total_frames and records:
@@ -385,7 +586,28 @@ def run_epoch(
             ) and finite
             records.clear()
             hidden = detach_error_state(hidden)
-    metrics = {key: value.item() / frame_count for key, value in totals.items()}
+            previous_temporal_prediction = None
+            previous_prediction_error = None
+    temporal_pair_count = int(totals.get("temporal_pair_count", torch.zeros(())).item())
+    metrics = {}
+    for key, value in totals.items():
+        if key == "temporal_pair_count":
+            metrics[key] = temporal_pair_count
+        elif key in {
+            "temporal_prediction_loss",
+            "zero_temporal_loss",
+            "persistence_temporal_loss",
+        }:
+            metrics[key] = value.item() / max(temporal_pair_count, 1)
+        else:
+            metrics[key] = value.item() / frame_count
+    if temporal_pair_count:
+        persistence = metrics["persistence_temporal_loss"]
+        metrics["learned_vs_persistence_relative_improvement"] = (
+            1.0 - metrics["temporal_prediction_loss"] / persistence
+            if persistence > 0
+            else 0.0
+        )
     if collect_validation_metrics:
         metrics.update(
             {
@@ -475,10 +697,21 @@ def main():
     torch.manual_seed(SEED)
     torch.cuda.manual_seed_all(SEED)
     root = Path(os.environ.get("PREDIFY_KITTI_STEP_ROOT", "/home/lin/predify/kitti_step"))
-    output = Path(os.environ.get("PREDIFY_SEMANTIC_TEMPORAL_ERROR_OUTPUT_DIR", "results/kitti_step_semantic_temporal_error_correction"))
     paths = make_paths()
     model, predictor = load_role_components(paths["static"], paths["adapter"], paths["predictor"], paths["writeback"])
     corrections = build_semantic_temporal_corrections()
+    default_output = (
+        "results/kitti_step_semantic_temporal_error_dynamic"
+        if corrections[0].use_dynamic_error
+        else (
+            "results/kitti_step_semantic_temporal_prediction_baseline"
+            if corrections[0].temporal_prediction is not None
+            else "results/kitti_step_semantic_temporal_error_correction"
+        )
+    )
+    output = Path(
+        os.environ.get("PREDIFY_SEMANTIC_TEMPORAL_ERROR_OUTPUT_DIR", default_output)
+    )
     model.requires_grad_(False)
     predictor.requires_grad_(False)
     corrections.requires_grad_(True)
@@ -490,6 +723,18 @@ def main():
     val_groups = sequence_groups(val)
     if len(train_groups) != 12 or len(train.samples) != 5027 or len(val_groups) != 9 or len(val.samples) != 2981:
         raise RuntimeError("KITTI-STEP protocol mismatch")
+    train_groups = limit_sequence_groups(
+        train_groups,
+        sequence_limit=TRAIN_SEQUENCE_LIMIT,
+        frame_limit=FRAMES_PER_SEQUENCE_LIMIT,
+    )
+    val_groups = limit_sequence_groups(
+        val_groups,
+        sequence_limit=VAL_SEQUENCE_LIMIT,
+        frame_limit=FRAMES_PER_SEQUENCE_LIMIT,
+    )
+    if not train_groups or not val_groups:
+        raise ValueError("Quick-run limits removed every train or validation sequence")
     gate = gates(model, predictor, corrections, train.samples[0])
     if not all((value if isinstance(value, bool) else value <= 1e-6) for key, value in gate.items() if key.endswith("passed")):
         raise RuntimeError("semantic temporal error correction gate failed")
@@ -611,8 +856,8 @@ def main():
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
         "checkpoint": str(output / "best_semantic_temporal_error_correction.pt"),
         "parameter_efficiency": parameter_efficiency,
-        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "early_stopping_min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "frozen_encode_batch_size": FROZEN_ENCODE_BATCH_SIZE, "loader_workers": LOADER_WORKERS, "loader_prefetch_factor": LOADER_PREFETCH_FACTOR, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=epsilon_(t-1)+(Ts/tau_e)*(e_t-K_e*epsilon_(t-1))", "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME, "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_gain": DYNAMIC_ERROR_GAIN, "dynamic_error_usage": "tracked_only_not_connected_to_correction"},
-        "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": len(train.samples), "val_sequence_count": len(val_groups), "val_frame_count": len(val.samples)},
+        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "early_stopping_min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "frozen_encode_batch_size": FROZEN_ENCODE_BATCH_SIZE, "loader_workers": LOADER_WORKERS, "loader_prefetch_factor": LOADER_PREFETCH_FACTOR, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "temporal_prediction_loss_weight": TEMPORAL_PREDICTION_LOSS_WEIGHT, "temporal_prediction_enabled": corrections[0].temporal_prediction is not None, "temporal_baselines": ["zero", "persistence"], "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=epsilon_(t-1)+(Ts/tau_e)*(e_t-K_e*epsilon_(t-1))", "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME, "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_gain": DYNAMIC_ERROR_GAIN, "dynamic_error_effective_q": DYNAMIC_ERROR_SAMPLE_TIME * DYNAMIC_ERROR_GAIN / DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_enabled": corrections[0].use_dynamic_error, "dynamic_error_usage": "gate_modulation_and_H_next_error_prediction" if corrections[0].use_dynamic_error else "tracked_only_not_connected_to_correction"},
+        "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": sum(len(samples) for samples in train_groups.values()), "val_sequence_count": len(val_groups), "val_frame_count": sum(len(samples) for samples in val_groups.values()), "full_protocol_train_frame_count": len(train.samples), "full_protocol_val_frame_count": len(val.samples), "quick_subset": any((TRAIN_SEQUENCE_LIMIT, VAL_SEQUENCE_LIMIT, FRAMES_PER_SEQUENCE_LIMIT))},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "gates": gate,
         "history": history,

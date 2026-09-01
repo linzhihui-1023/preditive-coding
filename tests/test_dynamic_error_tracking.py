@@ -1,3 +1,4 @@
+import pytest
 import torch
 from torch import nn
 
@@ -13,6 +14,8 @@ from predify2021.mce_scores.semantic_temporal_error_step import (
 from predify2021.model_factory.deeplabv3plus_resnet50 import UnifiedFeatures
 from predify2021.model_factory.deeplabv3plus_resnet50.semantic_temporal_error_correction import (
     SemanticTemporalErrorCorrection,
+    apply_semantic_temporal_corrections,
+    build_semantic_temporal_corrections,
 )
 from predify2021.model_factory.targetflow.core import (
     build_temporal_prediction_error_state,
@@ -124,3 +127,101 @@ def test_dynamic_error_state_detaches_with_correction_state():
     assert isinstance(detached, SemanticTemporalState)
     assert all(value.grad_fn is None for value in detached.hidden)
     assert all(value.grad_fn is None for value in detached.dynamic_error)
+
+
+def test_dynamic_branch_uses_previous_state_and_exposes_bounded_gate_evidence():
+    torch.manual_seed(3)
+    channels = 4
+    corrections = nn.ModuleList(
+        [
+            SemanticTemporalErrorCorrection(
+                channels, use_dynamic_error=True, dynamic_gate_limit=0.2
+            ),
+            SemanticTemporalErrorCorrection(
+                channels, use_dynamic_error=True, dynamic_gate_limit=0.2
+            ),
+        ]
+    )
+    observation_tensor = torch.randn(1, channels, 5, 6)
+    prediction_tensor = torch.randn_like(observation_tensor)
+    semantic_tensor = torch.randn_like(observation_tensor)
+    observation = unified(observation_tensor)
+    prediction = unified(prediction_tensor)
+    semantic = unified(semantic_tensor)
+    previous_dynamic = tuple(torch.randn_like(observation_tensor) for _ in range(2))
+    hidden = (torch.zeros_like(observation_tensor), torch.zeros_like(observation_tensor))
+
+    _, _, values = apply_semantic_temporal_corrections(
+        corrections,
+        observation,
+        prediction,
+        semantic,
+        hidden,
+        previous_dynamic_error=previous_dynamic,
+    )
+
+    expected_historical = previous_dynamic[0]
+    expected_residual = observation_tensor - prediction_tensor - expected_historical
+    assert torch.allclose(values["historical_dynamic_component_z1"], expected_historical)
+    assert torch.allclose(values["first_order_model_residual_z1"], expected_residual)
+    assert values["gate_modulation_z1"].abs().max() <= 0.2
+    assert "predicted_next_error_z1" in values
+    assert "predicted_next_error_z4" in values
+
+
+def test_zero_initialized_dynamic_branch_matches_original_transition_exactly():
+    torch.manual_seed(4)
+    channels = 4
+    original = SemanticTemporalErrorCorrection(channels)
+    dynamic = SemanticTemporalErrorCorrection(channels, use_dynamic_error=True)
+    dynamic.load_state_dict(original.state_dict(), strict=False)
+    observation = torch.randn(1, channels, 5, 6)
+    prediction = torch.randn_like(observation)
+    semantic = torch.randn_like(observation)
+    hidden = torch.randn_like(observation)
+
+    original_values = original(observation, prediction, semantic, hidden)
+    dynamic_values = dynamic(
+        observation,
+        prediction,
+        semantic,
+        hidden,
+        previous_dynamic_error=torch.randn_like(observation),
+    )
+
+    assert torch.equal(original_values[3], dynamic_values[3])
+    assert torch.equal(original_values[4], dynamic_values[4])
+    assert torch.count_nonzero(dynamic.last_dynamic_values["gate_modulation"]) == 0
+    assert torch.count_nonzero(dynamic.last_dynamic_values["update_gate_delta"]) == 0
+    assert torch.count_nonzero(dynamic.last_dynamic_values["reset_gate_delta"]) == 0
+
+
+def test_temporal_prediction_baseline_does_not_enable_dynamic_modulation():
+    torch.manual_seed(5)
+    channels = 4
+    correction = SemanticTemporalErrorCorrection(
+        channels,
+        use_dynamic_error=False,
+        use_temporal_prediction=True,
+    )
+    observation = torch.randn(1, channels, 5, 6)
+
+    correction(
+        observation,
+        torch.randn_like(observation),
+        torch.randn_like(observation),
+        torch.zeros_like(observation),
+    )
+
+    assert correction.dynamic_encoder is None
+    assert "predicted_next_error" in correction.last_dynamic_values
+    assert "gate_modulation" not in correction.last_dynamic_values
+
+
+def test_dynamic_branch_rejects_non_monotonic_euler_q(monkeypatch):
+    monkeypatch.setenv("PREDIFY_DYNAMIC_ERROR_SAMPLE_TIME", "0.6")
+    monkeypatch.setenv("PREDIFY_DYNAMIC_ERROR_TIME_CONSTANT", "0.5")
+    monkeypatch.setenv("PREDIFY_DYNAMIC_ERROR_GAIN", "1.0")
+
+    with pytest.raises(ValueError, match="0 < Ts \\* K_e / tau_e <= 1"):
+        build_semantic_temporal_corrections(use_dynamic_error=True)
