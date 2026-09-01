@@ -1,0 +1,35 @@
+{
+  "git_revision": "8726b56c50dfa6b34a4ce0de9a3358e8546f00bc",
+  "execution": {
+    "frozen_encode_batch_size": 8,
+    "loader_workers": 8,
+    "pin_memory": true,
+    "persistent_workers": true,
+    "prefetch_factor": 2,
+    "non_blocking_device_transfer": true,
+    "writeback_decode_batch_size": 4
+  },
+  "train_one_epoch": {
+    "effective_frames": 4531,
+    "seconds": 270.9557841910282,
+    "frames_per_second": 16.722285569683748,
+    "finite": true,
+    "segmentation_cross_entropy": 0.2853844684103261,
+    "distillation_kl": 0.2013479084190852,
+    "total_loss": 0.386058207090736
+  },
+  "validation": {
+    "checkpoint": "/home/lin/experiments/kitti_step_semantic_temporal_error_correction_10epoch_ffb1a74/best_semantic_temporal_error_correction.pt",
+    "effective_frames": 2686,
+    "seconds": 152.32635297207162,
+    "frames_per_second": 17.633193125109068,
+    "finite": true,
+    "segmentation_cross_entropy": 0.377011592407681,
+    "distillation_kl": 0.2166352204573483,
+    "total_loss": 0.48532933897698716,
+    "miou": 0.46609468586415714,
+    "wiou": 0.7952368977867239,
+    "mvc8": 0.9100646797052667,
+    "mvc16": 0.893213135647587
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "checkpoint": "/home/lin/experiments/kitti_step_semantic_temporal_error_correction_10epoch_ffb1a74/best_semantic_temporal_error_correction.pt",
+  "protocol_match": {
+    "sequence_count": true,
+    "effective_frame_count": true,
+    "warmup": true,
+    "persistent_blur": true,
+    "seed": true
+  },
+  "metric_tolerance": 1e-05,
+  "deltas_fast_minus_old": {
+    "miou": -1.4782810168753e-05,
+    "wiou": -1.1979677823065e-05,
+    "mvc8": -1.5650768223816e-05,
+    "mvc16": -2.6550777454335e-05
+  },
+  "metric_equivalence_passed": false,
+  "reason": "The cuDNN FP32 convolution path uses different reduction order for batch=1 and batch=8 frozen Host forwards."
+}

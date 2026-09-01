@@ -1,0 +1,29 @@
+{
+  "git_revision": "eeb9a731355e42468499fb9481c30db0bab0d73e",
+  "protocol": {
+    "train_effective_frames": 4531,
+    "val_effective_frames": 2686,
+    "val_sequence_count": 9,
+    "truncated_bptt": 4,
+    "persistent_blur": true,
+    "precision": "fp32"
+  },
+  "train_one_epoch": {
+    "seconds": 293.42688820301555,
+    "frames_per_second": 15.441665989604545,
+    "finite": true
+  },
+  "validation": {
+    "checkpoint": "/home/lin/experiments/kitti_step_semantic_temporal_error_correction_10epoch_ffb1a74/best_semantic_temporal_error_correction.pt",
+    "seconds": 178.69617147999816,
+    "frames_per_second": 15.0310998705457,
+    "finite": true,
+    "segmentation_cross_entropy": 0.3770013080961165,
+    "distillation_kl": 0.2166271046669467,
+    "total_loss": 0.48531486003847596,
+    "miou": 0.4661094686743259,
+    "wiou": 0.795248877464547,
+    "mvc8": 0.9100803304734905,
+    "mvc16": 0.8932396864250411
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "experiment": "kitti_step_semantic_temporal_speedup",
+  "base_revision": "eeb9a731355e42468499fb9481c30db0bab0d73e",
+  "code_revision": "8726b56c50dfa6b34a4ce0de9a3358e8546f00bc",
+  "train_speedup": 1.082932734133,
+  "val_speedup": 1.173113962183,
+  "equivalence_passed": false,
+  "speed_gate": {
+    "minimum_train_speedup": 1.5,
+    "target_train_speedup": 2.0,
+    "minimum_val_speedup": 1.5,
+    "passed": false
+  },
+  "coarse_profile_seconds_per_8_frames": {
+    "persistent_blur": 0.0011255502002313733,
+    "frozen_host_encode_clean_and_corrupted_batch8_plus_teacher_decode": 0.16293230920564383,
+    "writeback_and_decoder_batch8": 0.053129058610647914
+  },
+  "health_checks": {
+    "python_compile": true,
+    "existing_gate_passed": true,
+    "all_measured_tensors_finite": true
+  },
+  "decision": "NO-GO",
+  "decision_reason": "The batch path improves throughput modestly but misses both the 1.5x speed gate and the required 1e-5 full-validation equivalence tolerance."
+}
