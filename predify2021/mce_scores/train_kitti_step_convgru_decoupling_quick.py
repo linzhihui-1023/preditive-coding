@@ -101,11 +101,11 @@ def _run(model, predictor, corrections, groups, kind, optimizer=None, severity=1
                 loss = F.cross_entropy(logits, mask.unsqueeze(0), ignore_index=255) + DISTILL_WEIGHT * F.kl_div(F.log_softmax(logits, 1), F.softmax(clean_logits.detach(), 1), reduction="none").sum(1).mean()
                 if kind == "full":
                     loss = loss + F.smooth_l1_loss(values["z1"]["predicted_next_task_error"], error.z1.detach())
-                pending_prediction = (
-                    values["z1"]["predicted_next_task_error"],
-                    values["z4"]["predicted_next_task_error"],
-                )
-                gate_sum += values["z1"]["gate"].mean().item(); delta_sum += values["z1"]["delta"].abs().mean().item()
+                    pending_prediction = (
+                        values["z1"]["predicted_next_task_error"],
+                        values["z4"]["predicted_next_task_error"],
+                    )
+                    gate_sum += values["z1"]["gate"].mean().item(); delta_sum += values["z1"]["delta"].abs().mean().item()
             if train:
                 chunk.append(loss)
                 if len(chunk) == BPTT:
