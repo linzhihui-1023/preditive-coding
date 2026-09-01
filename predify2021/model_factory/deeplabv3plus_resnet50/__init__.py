@@ -10,7 +10,14 @@ from .host import (
     HostFeature,
     build_deeplabv3plus_resnet50_host,
 )
-from .semantic_recurrent_predictor import RoleSeparatedRecurrentPredictor, SemanticRecurrentPredictor
+from .semantic_recurrent_predictor import (
+    ErrorGuidedSemanticRecurrentCell,
+    ErrorGuidedSemanticRestorationPredictor,
+    RoleSeparatedRecurrentPredictor,
+    SemanticPredictionErrorEncoder,
+    SemanticRecurrentPredictor,
+    SemanticRestorationHead,
+)
 from .adapters import (
     HOST_STAGE_CHANNELS,
     UNIFIED_STATE_CHANNELS,
@@ -71,6 +78,11 @@ __all__ = [
     "ErrorInterpreter",
     "ReliabilityGate",
     "RoleSeparatedRecurrentPredictor",
+    "SemanticRecurrentPredictor",
+    "SemanticPredictionErrorEncoder",
+    "ErrorGuidedSemanticRecurrentCell",
+    "SemanticRestorationHead",
+    "ErrorGuidedSemanticRestorationPredictor",
     "DecoupledLocalFeatureCorrelation",
     "DecoupledTemporalErrorEncoder",
     "LocalFeatureCorrelation",
