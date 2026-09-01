@@ -177,20 +177,22 @@ def main():
         line = f"{time.strftime('%F %T')} {message}"; print(line, flush=True); log_file.write(line + "\n"); log_file.flush()
     best = {kind: {"mIoU": float("-inf"), "epoch": 0} for kind in KINDS}; progress = []
     for epoch in range(1, args.epochs + 1):
-        train_result = run_shared(model, predictor, modules, train, True, optimizers, bf16=args.fast_bf16, log=log); val_result = run_shared(model, predictor, modules, val, False, condition="Clean", log=log)
+        train_result = run_shared(model, predictor, modules, train, True, optimizers, bf16=args.fast_bf16, log=log); val_result = run_shared(model, predictor, modules, val, False, condition="Clean", bf16=args.fast_bf16, log=log)
         for kind in KINDS:
             if val_result[kind]["mIoU"] > best[kind]["mIoU"]: best[kind] = {"mIoU": val_result[kind]["mIoU"], "epoch": epoch}; torch.save(modules[kind].state_dict(), out / {"old": "old.pt", "semantic-only": "semantic_only.pt", "full": "full.pt"}[kind])
         progress.append({"epoch": epoch, "train": train_result, "val": val_result, "best": best}); (out / "progress.json").write_text(json.dumps(progress, indent=2)); log(f"epoch={epoch} best_val_mIoU=" + json.dumps({k: v["mIoU"] for k, v in best.items()}))
     for kind in KINDS: modules[kind].load_state_dict(torch.load(out / {"old": "old.pt", "semantic-only": "semantic_only.pt", "full": "full.pt"}[kind], map_location="cuda", weights_only=True))
     rows = []
     for condition in ("Clean", "Blur-Mid", "Blur-Max"):
-        evaluated = run_shared(model, predictor, modules, val, False, condition=condition, log=log)
+        evaluated = run_shared(model, predictor, modules, val, False, condition=condition, bf16=args.fast_bf16, log=log)
         rows.extend({"model": kind, "condition": condition, **evaluated[kind]} for kind in KINDS)
     by = {(row["model"], row["condition"]): row for row in rows}; comparisons = {}
     for other in ("semantic-only", "old"):
         comparisons[f"Full - {other}"] = {f"{condition} ΔmIoU": by[("full", condition)]["mIoU"] - by[(other, condition)]["mIoU"] for condition in ("Clean", "Blur-Mid", "Blur-Max")}; comparisons[f"Full - {other}"].update({f"{condition} ΔmVC16": by[("full", condition)]["mVC16"] - by[(other, condition)]["mVC16"] for condition in ("Blur-Mid", "Blur-Max")})
     with (out / "comparison.csv").open("w", newline="") as stream: writer = csv.DictWriter(stream, fieldnames=sorted({key for row in rows for key in row})); writer.writeheader(); writer.writerows(rows)
-    summary = {"config": {"seed": SEED, "epochs": args.epochs, "patience": PATIENCE, "lr": LR, "weight_decay": WEIGHT_DECAY, "distill_weight": DISTILL_WEIGHT, "bptt": BPTT, "precision": "bf16" if args.fast_bf16 else "fp32", "conditions": {"Clean": "none", "Blur-Mid": "sigma=2.25", "Blur-Max": "sigma=3.0"}}, "train_sequences": list(train), "val_sequences": list(val), "best": best, "results": rows, "comparisons": comparisons}; (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str) + "\n"); (out / "README.md").write_text("# Quick ConvGRU decoupling screening\n\nBlur-Mid/Blur-Max are diagnostic pressure conditions, not formal corruption severities.\n\n" + json.dumps(comparisons, indent=2) + "\n"); log_file.close()
+    temporal_state = "GO" if ((comparisons["Full - semantic-only"]["Blur-Mid ΔmIoU"] + comparisons["Full - semantic-only"]["Blur-Max ΔmIoU"]) / 2 >= 0.005 or (comparisons["Full - semantic-only"]["Blur-Mid ΔmVC16"] + comparisons["Full - semantic-only"]["Blur-Max ΔmVC16"]) / 2 >= 0.01) else "NO-GO"
+    decoupled = "GO" if ((comparisons["Full - old"]["Blur-Mid ΔmIoU"] + comparisons["Full - old"]["Blur-Max ΔmIoU"]) / 2 >= 0.005 or (comparisons["Full - old"]["Blur-Mid ΔmVC16"] + comparisons["Full - old"]["Blur-Max ΔmVC16"]) / 2 >= 0.01) and all(by[("full", condition)]["mIoU"] - by[("old", condition)]["mIoU"] > -0.005 for condition in ("Clean",)) else "NO-GO"
+    summary.update({"judgement": {"TEMPORAL STATE": temporal_state, "DECOUPLED ARCHITECTURE": decoupled}}); (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str) + "\n"); (out / "README.md").write_text("# Quick ConvGRU decoupling screening\n\nBlur-Mid/Blur-Max are diagnostic pressure conditions, not formal corruption severities.\n\n" + json.dumps(comparisons, indent=2) + f"\n\nTEMPORAL STATE: {temporal_state}\nDECOUPLED ARCHITECTURE: {decoupled}\n"); log_file.close()
 
 
 if __name__ == "__main__": main()
