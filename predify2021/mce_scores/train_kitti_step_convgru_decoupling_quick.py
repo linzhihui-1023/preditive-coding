@@ -29,6 +29,10 @@ SEED, EPOCHS, PATIENCE, LR, WEIGHT_DECAY, DISTILL_WEIGHT, BPTT = 0, 3, 2, 1e-4, 
 KINDS = ("old", "semantic-only", "full")
 
 
+def is_temporal_kind(kind):
+    return kind.startswith("full")
+
+
 def first_groups(dataset, count):
     groups = sequence_groups(dataset)
     return {key: groups[key] for key in sorted(groups)[:count]}
@@ -103,7 +107,7 @@ def run_shared(model, predictor, modules, cached, train=False, optimizers=None, 
     states = {kind: {"hidden": None, "pending": None, "predictor_hidden": predictor.initial_state(), "pending_dynamics": None, "pending_semantic": None, "chunk": []} for kind in KINDS}
     confusion = {kind: torch.zeros((19, 19), dtype=torch.int64) for kind in KINDS} if not train else None
     vcs = {kind: VideoConsistency(("model",)) for kind in KINDS} if not train else None
-    sums = {kind: {name: torch.zeros((), device="cuda") for name in ("loss", "temporal_loss", "gate", "delta")} for kind in KINDS}
+    sums = {kind: {name: torch.zeros((), device="cuda") for name in ("loss", "temporal_loss", "gate", "delta", "gate_channel_std", "gate_spatial_std")} for kind in KINDS}
     counts = {kind: {name: 0 for name in ("effective_frames", "loss_frames", "metric_frames", "gate_frames")} for kind in KINDS}
     total_sequence_frames = 0; started = time.perf_counter()
     for sequence, frames in cached.items():
@@ -121,7 +125,10 @@ def run_shared(model, predictor, modules, cached, train=False, optimizers=None, 
                 if train:
                     clean_raw = model.extract_backbone_features(image)
                     clean_logits = model.decode_from_host_feature(HostFeature(clean_raw.c4, clean_raw.c1, tuple(image.shape[-2:])))
-                shared = states["full"]
+                # All variants share the frozen predictor state; use the first
+                # configured variant so custom variant sets do not require a
+                # literal ``full`` key.
+                shared = states[KINDS[0]]
                 if frame == 0:
                     dyn, sem, *ph = next_role_prediction(predictor, observation, zero_state(observation), shared["predictor_hidden"])
                     for kind in KINDS: states[kind].update(pending_dynamics=dyn, pending_semantic=sem, predictor_hidden=ph)
@@ -134,10 +141,10 @@ def run_shared(model, predictor, modules, cached, train=False, optimizers=None, 
                 effective = frame >= warmup_frame_count(len(frames))
                 for kind in KINDS:
                     state = states[kind]
-                    previous_pending = state["pending"] if kind == "full" else None
+                    previous_pending = state["pending"] if is_temporal_kind(kind) else None
                     posterior, state["hidden"], values = correction_step(kind, modules[kind], observation, state["pending_dynamics"], state["pending_semantic"], state["hidden"])
                     current_prediction = None
-                    if kind == "full":
+                    if is_temporal_kind(kind):
                         current_prediction = (
                             values["z1"]["predicted_next_task_error"],
                             values["z4"]["predicted_next_task_error"],
@@ -153,7 +160,7 @@ def run_shared(model, predictor, modules, cached, train=False, optimizers=None, 
                     if train:
                         segmentation = F.cross_entropy(logits, mask.unsqueeze(0), ignore_index=255) + DISTILL_WEIGHT * F.kl_div(F.log_softmax(logits, 1), F.softmax(clean_logits.detach(), 1), reduction="none").sum(1).mean()
                         temporal = torch.zeros((), device="cuda")
-                        if kind == "full":
+                        if is_temporal_kind(kind):
                             current_task = (values["z1"]["task_error"], values["z4"]["task_error"])
                             if previous_pending is not None:
                                 temporal = (
@@ -161,13 +168,17 @@ def run_shared(model, predictor, modules, cached, train=False, optimizers=None, 
                                     + F.smooth_l1_loss(previous_pending[1], current_task[1].detach())
                                 )
                             state["pending"] = current_prediction
-                            sums[kind]["temporal_loss"] += temporal.detach(); sums[kind]["gate"] += values["z1"]["gate"].mean().detach(); sums[kind]["delta"] += values["z1"]["delta"].abs().mean().detach(); counts[kind]["gate_frames"] += 1
+                            gate = values["z1"]["gate"]
+                            sums[kind]["temporal_loss"] += temporal.detach(); sums[kind]["gate"] += gate.mean().detach(); sums[kind]["delta"] += values["z1"]["delta"].abs().mean().detach()
+                            sums[kind]["gate_channel_std"] += gate.flatten(2).mean(dim=2).std(dim=1, unbiased=False).mean().detach()
+                            sums[kind]["gate_spatial_std"] += gate.flatten(2).std(dim=2, unbiased=False).mean().detach(); counts[kind]["gate_frames"] += 1
                         loss = segmentation + temporal; state["chunk"].append(loss); sums[kind]["loss"] += loss.detach(); counts[kind]["loss_frames"] += 1
                         if len(state["chunk"]) == BPTT: flush(states, optimizers, [kind])
                     else:
                         prediction = logits.argmax(1).squeeze(0).cpu(); update_confusion_matrix(confusion[kind], prediction, mask.cpu()); vcs[kind].append(mask.cpu(), {"model": prediction}); counts[kind]["metric_frames"] += 1
-                        if kind == "full":
-                            sums[kind]["gate"] += values["z1"]["gate"].mean(); sums[kind]["delta"] += values["z1"]["delta"].abs().mean(); counts[kind]["gate_frames"] += 1
+                        if is_temporal_kind(kind):
+                            gate = values["z1"]["gate"]
+                            sums[kind]["gate"] += gate.mean(); sums[kind]["delta"] += values["z1"]["delta"].abs().mean(); sums[kind]["gate_channel_std"] += gate.flatten(2).mean(dim=2).std(dim=1, unbiased=False).mean(); sums[kind]["gate_spatial_std"] += gate.flatten(2).std(dim=2, unbiased=False).mean(); counts[kind]["gate_frames"] += 1
                             state["pending"] = tuple(value.detach() for value in current_prediction)
                         state["hidden"] = tuple(value.detach() for value in state["hidden"]) if state["hidden"] is not None else None
                 dyn, sem, *ph = next_role_prediction(predictor, observation, current_error, shared["predictor_hidden"])
@@ -178,7 +189,10 @@ def run_shared(model, predictor, modules, cached, train=False, optimizers=None, 
     result = {kind: {"total_sequence_frames": total_sequence_frames, **counts[kind], "fps": total_sequence_frames / elapsed, "finite": bool(torch.isfinite(sums[kind]["loss"]).item()), "mean_loss": float((sums[kind]["loss"] / max(counts[kind]["loss_frames"], 1)).item()), "mean_temporal_loss": float((sums[kind]["temporal_loss"] / max(counts[kind]["gate_frames"], 1)).item())} for kind in KINDS}
     if not train:
         for kind in KINDS: result[kind].update({"mIoU": float(torch.nanmean(compute_iou(confusion[kind])).item()), "wIoU": weighted_iou(confusion[kind]), "mVC8": vcs[kind].means()[8]["model"], "mVC16": vcs[kind].means()[16]["model"]})
-    result["full"].update({"mean_gate": float((sums["full"]["gate"] / max(counts["full"]["gate_frames"], 1)).item()), "mean_abs_delta": float((sums["full"]["delta"] / max(counts["full"]["gate_frames"], 1)).item())})
+    for kind in KINDS:
+        if is_temporal_kind(kind):
+            denominator = max(counts[kind]["gate_frames"], 1)
+            result[kind].update({"mean_gate": float((sums[kind]["gate"] / denominator).item()), "mean_abs_delta": float((sums[kind]["delta"] / denominator).item()), "mean_gate_channel_std": float((sums[kind]["gate_channel_std"] / denominator).item()), "mean_gate_spatial_std": float((sums[kind]["gate_spatial_std"] / denominator).item())})
     return result
 
 

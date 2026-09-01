@@ -40,6 +40,7 @@ from .semantic_temporal_error_correction import (
     SemanticTemporalErrorEncoder,
     TemporalErrorGate,
     TemporalErrorPredictionHead,
+    TemporalConditionedSemanticCorrection,
     apply_decoupled_semantic_temporal_corrections,
     build_decoupled_semantic_temporal_corrections,
 )
@@ -79,6 +80,7 @@ __all__ = [
     "SemanticTemporalErrorCorrection",
     "TemporalErrorGate",
     "ExplicitSemanticCorrection",
+    "TemporalConditionedSemanticCorrection",
     "TemporalErrorPredictionHead",
     "DecoupledSemanticTemporalErrorCorrection",
     "build_decoupled_semantic_temporal_corrections",

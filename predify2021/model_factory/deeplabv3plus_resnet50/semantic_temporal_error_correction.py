@@ -116,11 +116,12 @@ class DecoupledTemporalErrorEncoder(nn.Module):
 
 
 class TemporalErrorGate(nn.Module):
-    """A single-channel correction magnitude map from detached temporal state."""
+    """Scalar or channel-wise correction magnitude from detached temporal state."""
 
-    def __init__(self, channels=128):
+    def __init__(self, channels=128, gate_channels=1):
         super().__init__()
-        self.gate_head = nn.Conv2d(channels, 1, kernel_size=1)
+        self.gate_channels = gate_channels
+        self.gate_head = nn.Conv2d(channels, gate_channels, kernel_size=1)
 
     def forward(self, hidden):
         detached_hidden = hidden.detach()
@@ -154,6 +155,44 @@ class ExplicitSemanticCorrection(nn.Module):
         }
 
 
+class TemporalConditionedSemanticCorrection(nn.Module):
+    """Semantic residual correction conditioned on detached temporal state."""
+
+    def __init__(self, channels=128, baseline=None):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Conv2d(channels * 4, channels, 1),
+            nn.GELU(),
+            nn.Conv2d(channels, channels, 3, padding=1),
+        )
+        if baseline is not None:
+            self.initialize_from_baseline(baseline)
+
+    @torch.no_grad()
+    def initialize_from_baseline(self, baseline):
+        source_first = baseline.network[0]
+        target_first = self.network[0]
+        target_first.weight.zero_()
+        target_first.weight[:, : source_first.in_channels].copy_(source_first.weight)
+        if target_first.bias is not None:
+            target_first.bias.copy_(source_first.bias)
+        self.network[2].load_state_dict(baseline.network[2].state_dict())
+
+    def forward(self, observation, semantic_reference, hidden):
+        temporal_state = hidden.detach()
+        return self.network(
+            torch.cat(
+                (
+                    observation,
+                    semantic_reference,
+                    semantic_reference - observation,
+                    temporal_state,
+                ),
+                dim=1,
+            )
+        )
+
+
 class TemporalErrorPredictionHead(nn.Module):
     """Predict the next temporal error state for a future auxiliary loss."""
 
@@ -168,13 +207,13 @@ class TemporalErrorPredictionHead(nn.Module):
 class DecoupledSemanticTemporalErrorCorrection(nn.Module):
     """Separate temporal error modelling from semantic residual recovery."""
 
-    def __init__(self, channels=128, projection_channels=32):
+    def __init__(self, channels=128, projection_channels=32, gate_channels=1, semantic_correction=None):
         super().__init__()
         self.correlation = DecoupledLocalFeatureCorrelation(channels, projection_channels)
         self.encoder = DecoupledTemporalErrorEncoder(channels, projection_channels)
         self.error_state = ErrorStateConvGRU(channels)
-        self.gate = TemporalErrorGate(channels)
-        self.semantic_correction = ExplicitSemanticCorrection(channels)
+        self.gate = TemporalErrorGate(channels, gate_channels)
+        self.semantic_correction = semantic_correction or ExplicitSemanticCorrection(channels)
         self.temporal_prediction = TemporalErrorPredictionHead(channels)
 
     def forward(self, observation, predicted, semantic_reference, hidden=None):
@@ -183,7 +222,10 @@ class DecoupledSemanticTemporalErrorCorrection(nn.Module):
         task_error = self.encoder(raw_error, aligned_error)
         new_hidden = self.error_state(task_error, hidden)
         gate = self.gate(new_hidden)
-        semantic_residual = self.semantic_correction(observation, semantic_reference)
+        if isinstance(self.semantic_correction, TemporalConditionedSemanticCorrection):
+            semantic_residual = self.semantic_correction(observation, semantic_reference, new_hidden)
+        else:
+            semantic_residual = self.semantic_correction(observation, semantic_reference)
         delta = gate * semantic_residual
         posterior = observation + delta
         predicted_next_task_error = self.temporal_prediction(new_hidden)
