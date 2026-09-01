@@ -170,12 +170,12 @@ class DecoupledSemanticTemporalErrorCorrection(nn.Module):
         self.semantic_correction = ExplicitSemanticCorrection(channels)
         self.temporal_prediction = TemporalErrorPredictionHead(channels)
 
-    def forward(self, observation, predicted, semantic_reference, hidden=None, force_gate_one=False):
+    def forward(self, observation, predicted, semantic_reference, hidden=None):
         raw_error = observation - predicted
         aligned_error = self.correlation(observation, predicted)
         task_error = self.encoder(raw_error, aligned_error)
         new_hidden = self.error_state(task_error, hidden)
-        gate = torch.ones_like(new_hidden[:, :1]) if force_gate_one else self.gate(new_hidden)
+        gate = self.gate(new_hidden)
         semantic_residual = self.semantic_correction(observation, semantic_reference)
         delta = gate * semantic_residual
         posterior = observation + delta
@@ -335,14 +335,14 @@ def build_decoupled_semantic_temporal_corrections():
 
 
 def apply_decoupled_semantic_temporal_corrections(
-    corrections, observation, predicted, pending_semantic, hidden, force_gate_one=False
+    corrections, observation, predicted, pending_semantic, hidden
 ):
     """Apply decoupled correction to Z1/Z4 while preserving Z2/Z3 observations."""
     posterior1, hidden1, values1 = corrections[0](
-        observation.z1, predicted.z1, pending_semantic.z1, hidden[0], force_gate_one
+        observation.z1, predicted.z1, pending_semantic.z1, hidden[0]
     )
     posterior4, hidden4, values4 = corrections[1](
-        observation.z4, predicted.z4, pending_semantic.z4, hidden[1], force_gate_one
+        observation.z4, predicted.z4, pending_semantic.z4, hidden[1]
     )
     posterior = UnifiedFeatures(posterior1, observation.z2, observation.z3, posterior4)
     values = {f"{name}_z1": value for name, value in values1.items()}
