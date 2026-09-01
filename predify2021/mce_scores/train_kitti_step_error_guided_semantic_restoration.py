@@ -262,6 +262,7 @@ def evaluate_condition(model, predictor, groups, condition, max_effective_frames
     restored_confusion = torch.zeros((19, 19), dtype=torch.int64)
     observation_sse = 0.0
     restored_sse = 0.0
+    smooth_l1_sum = 0.0
     element_count = 0
     effective_frames = 0
 
@@ -311,6 +312,9 @@ def evaluate_condition(model, predictor, groups, condition, max_effective_frames
                     restored_error = restored.z4.float() - clean_state.z4.float()
                     observation_sse += float(obs_error.square().sum().item())
                     restored_sse += float(restored_error.square().sum().item())
+                    smooth_l1_sum += float(
+                        F.smooth_l1_loss(restored.z4, clean_state.z4).item()
+                    )
                     element_count += obs_error.numel()
 
                     mask = semantic_mask_from_panoptic_png(sample["mask_path"])
@@ -356,6 +360,7 @@ def evaluate_condition(model, predictor, groups, condition, max_effective_frames
         "effective_frame_count": effective_frames,
         "observation_mse_to_clean_z4": observation_mse,
         "restored_mse_to_clean_z4": restored_mse,
+        "restored_z4_smooth_l1": smooth_l1_sum / max(effective_frames, 1),
         "feature_recovery_fraction": feature_recovery,
         "blur_host_mIoU": blur_miou,
         "restored_mIoU_fixed_writeback": restored_miou,
@@ -382,6 +387,9 @@ def evaluate(model, predictor, groups, max_effective_frames=0):
         "mean_restored_mIoU": sum(
             result["restored_mIoU_fixed_writeback"] for result in by_condition.values()
         ) / len(by_condition),
+        "mean_z4_smooth_l1": sum(
+            result["restored_z4_smooth_l1"] for result in by_condition.values()
+        ) / len(by_condition),
         "mean_mIoU_gain_vs_blur": sum(
             result["mIoU_gain_vs_blur"] for result in by_condition.values()
         ) / len(by_condition),
@@ -391,11 +399,11 @@ def evaluate(model, predictor, groups, max_effective_frames=0):
 def is_better(validation, best):
     if best is None:
         return True
-    if validation["mean_feature_recovery"] > best["val"]["mean_feature_recovery"]:
+    if validation["mean_restored_mIoU"] > best["val"]["mean_restored_mIoU"]:
         return True
     return (
-        validation["mean_feature_recovery"] == best["val"]["mean_feature_recovery"]
-        and validation["mean_restored_mIoU"] > best["val"]["mean_restored_mIoU"]
+        validation["mean_restored_mIoU"] == best["val"]["mean_restored_mIoU"]
+        and validation["mean_z4_smooth_l1"] < best["val"]["mean_z4_smooth_l1"]
     )
 
 
@@ -551,7 +559,7 @@ def main():
                 "Blur-Max": "sigma=3.0",
             },
             "validation": "persistent diagnostic Blur-Mid/Blur-Max, post-warmup frames",
-            "selection": "highest mean feature recovery; mean fixed-writeback mIoU breaks exact ties",
+            "selection": "highest mean fixed-writeback Val mIoU; lower mean Val Z4 SmoothL1 breaks exact ties",
         },
         "smoke_checks": smoke_checks,
         "history": history,
