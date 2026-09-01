@@ -1,0 +1,220 @@
+{
+  "config": {
+    "seed": 0,
+    "epochs": 0,
+    "patience": 2,
+    "lr": 0.0001,
+    "weight_decay": 0.01,
+    "distill_weight": 0.5,
+    "bptt": 4,
+    "precision": "fp32",
+    "conditions": {
+      "Clean": "none",
+      "Blur-Mid": "sigma=2.25",
+      "Blur-Max": "sigma=3.0"
+    }
+  },
+  "train_sequences": [
+    "0000",
+    "0001"
+  ],
+  "val_sequences": [
+    "0002",
+    "0006"
+  ],
+  "best": {
+    "old": {
+      "mIoU": 0.5459461064125445,
+      "epoch": 1
+    },
+    "semantic-only": {
+      "mIoU": 0.5185437216026121,
+      "epoch": 3
+    },
+    "full": {
+      "mIoU": 0.5492830914599982,
+      "epoch": 3
+    }
+  },
+  "results": [
+    {
+      "model": "old",
+      "condition": "Clean",
+      "total_sequence_frames": 503,
+      "effective_frames": 453,
+      "loss_frames": 0,
+      "metric_frames": 453,
+      "gate_frames": 0,
+      "fps": 11.49184700191336,
+      "finite": true,
+      "mean_loss": 0.0,
+      "mean_temporal_loss": 0.0,
+      "mIoU": 0.5459461064125445,
+      "wIoU": 0.8714962709230233,
+      "mVC8": 0.9538029393747947,
+      "mVC16": 0.9538530183912798
+    },
+    {
+      "model": "semantic-only",
+      "condition": "Clean",
+      "total_sequence_frames": 503,
+      "effective_frames": 453,
+      "loss_frames": 0,
+      "metric_frames": 453,
+      "gate_frames": 0,
+      "fps": 11.49184700191336,
+      "finite": true,
+      "mean_loss": 0.0,
+      "mean_temporal_loss": 0.0,
+      "mIoU": 0.5185437216026121,
+      "wIoU": 0.8529782841400093,
+      "mVC8": 0.9430188337873932,
+      "mVC16": 0.937799224489135
+    },
+    {
+      "model": "full",
+      "condition": "Clean",
+      "total_sequence_frames": 503,
+      "effective_frames": 453,
+      "loss_frames": 0,
+      "metric_frames": 453,
+      "gate_frames": 453,
+      "fps": 11.49184700191336,
+      "finite": true,
+      "mean_loss": 0.0,
+      "mean_temporal_loss": 0.0,
+      "mIoU": 0.5492830914599982,
+      "wIoU": 0.8710211197103584,
+      "mVC8": 0.9549423471288576,
+      "mVC16": 0.9555393039584752,
+      "mean_gate": 0.002362384693697095,
+      "mean_abs_delta": 0.0012082929024472833
+    },
+    {
+      "model": "old",
+      "condition": "Blur-Mid",
+      "total_sequence_frames": 503,
+      "effective_frames": 453,
+      "loss_frames": 0,
+      "metric_frames": 453,
+      "gate_frames": 0,
+      "fps": 11.45503529211381,
+      "finite": true,
+      "mean_loss": 0.0,
+      "mean_temporal_loss": 0.0,
+      "mIoU": 0.48276988048155645,
+      "wIoU": 0.8284248665370915,
+      "mVC8": 0.9154548137934103,
+      "mVC16": 0.8908403791338936
+    },
+    {
+      "model": "semantic-only",
+      "condition": "Blur-Mid",
+      "total_sequence_frames": 503,
+      "effective_frames": 453,
+      "loss_frames": 0,
+      "metric_frames": 453,
+      "gate_frames": 0,
+      "fps": 11.45503529211381,
+      "finite": true,
+      "mean_loss": 0.0,
+      "mean_temporal_loss": 0.0,
+      "mIoU": 0.4436403709010125,
+      "wIoU": 0.8103785117205468,
+      "mVC8": 0.9098501724917597,
+      "mVC16": 0.8815277778722456
+    },
+    {
+      "model": "full",
+      "condition": "Blur-Mid",
+      "total_sequence_frames": 503,
+      "effective_frames": 453,
+      "loss_frames": 0,
+      "metric_frames": 453,
+      "gate_frames": 453,
+      "fps": 11.45503529211381,
+      "finite": true,
+      "mean_loss": 0.0,
+      "mean_temporal_loss": 0.0,
+      "mIoU": 0.47682215972744557,
+      "wIoU": 0.8321974175678926,
+      "mVC8": 0.9277335503131908,
+      "mVC16": 0.9133312885345236,
+      "mean_gate": 0.0038959805388003588,
+      "mean_abs_delta": 0.001997606363147497
+    },
+    {
+      "model": "old",
+      "condition": "Blur-Max",
+      "total_sequence_frames": 503,
+      "effective_frames": 453,
+      "loss_frames": 0,
+      "metric_frames": 453,
+      "gate_frames": 0,
+      "fps": 11.12614334477047,
+      "finite": true,
+      "mean_loss": 0.0,
+      "mean_temporal_loss": 0.0,
+      "mIoU": 0.43421977022440267,
+      "wIoU": 0.7727339125564049,
+      "mVC8": 0.8590363615620157,
+      "mVC16": 0.8066117326397126
+    },
+    {
+      "model": "semantic-only",
+      "condition": "Blur-Max",
+      "total_sequence_frames": 503,
+      "effective_frames": 453,
+      "loss_frames": 0,
+      "metric_frames": 453,
+      "gate_frames": 0,
+      "fps": 11.12614334477047,
+      "finite": true,
+      "mean_loss": 0.0,
+      "mean_temporal_loss": 0.0,
+      "mIoU": 0.4037960760420592,
+      "wIoU": 0.7539640000694223,
+      "mVC8": 0.8628573194087201,
+      "mVC16": 0.8158756678074565
+    },
+    {
+      "model": "full",
+      "condition": "Blur-Max",
+      "total_sequence_frames": 503,
+      "effective_frames": 453,
+      "loss_frames": 0,
+      "metric_frames": 453,
+      "gate_frames": 453,
+      "fps": 11.12614334477047,
+      "finite": true,
+      "mean_loss": 0.0,
+      "mean_temporal_loss": 0.0,
+      "mIoU": 0.432093395335352,
+      "wIoU": 0.7926676632548741,
+      "mVC8": 0.891965407940912,
+      "mVC16": 0.8571043533968279,
+      "mean_gate": 0.0041072312742471695,
+      "mean_abs_delta": 0.002106370870023966
+    }
+  ],
+  "comparisons": {
+    "Full - semantic-only": {
+      "Clean \u0394mIoU": 0.030739369857386123,
+      "Blur-Mid \u0394mIoU": 0.03318178882643308,
+      "Blur-Max \u0394mIoU": 0.028297319293292822,
+      "Blur-Mid \u0394mVC16": 0.031803510662278045,
+      "Blur-Max \u0394mVC16": 0.04122868558937143
+    },
+    "Full - old": {
+      "Clean \u0394mIoU": 0.003336985047453722,
+      "Blur-Mid \u0394mIoU": -0.0059477207541108745,
+      "Blur-Max \u0394mIoU": -0.002126374889050653,
+      "Blur-Mid \u0394mVC16": 0.022490909400630033,
+      "Blur-Max \u0394mVC16": 0.05049262075711525
+    }
+  },
+  "judgement": {
+    "TEMPORAL STATE": "GO",
+    "DECOUPLED ARCHITECTURE": "GO"
+  }
+}

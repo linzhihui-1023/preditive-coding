@@ -1,0 +1,311 @@
+[
+  {
+    "epoch": 1,
+    "train": {
+      "old": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 0,
+        "fps": 10.313580652814403,
+        "finite": true,
+        "mean_loss": 0.5324565172195435,
+        "mean_temporal_loss": 0.0
+      },
+      "semantic-only": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 0,
+        "fps": 10.313580652814403,
+        "finite": true,
+        "mean_loss": 0.4983065724372864,
+        "mean_temporal_loss": 0.0
+      },
+      "full": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 10.313580652814403,
+        "finite": true,
+        "mean_loss": 0.8905881643295288,
+        "mean_temporal_loss": 0.0042869290336966515,
+        "mean_gate": 0.00298354122787714,
+        "mean_abs_delta": 0.0014890528982505202
+      }
+    },
+    "val": {
+      "old": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 0,
+        "fps": 11.19014138405688,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5459461064125445,
+        "wIoU": 0.8714962709230233,
+        "mVC8": 0.9538029393747947,
+        "mVC16": 0.9538530183912798
+      },
+      "semantic-only": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 0,
+        "fps": 11.19014138405688,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5070419516482821,
+        "wIoU": 0.8419486003150635,
+        "mVC8": 0.9432030097415255,
+        "mVC16": 0.9385303916710914
+      },
+      "full": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 11.19014138405688,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5481144681529942,
+        "wIoU": 0.8715509047241395,
+        "mVC8": 0.9556954681368901,
+        "mVC16": 0.956600232542917,
+        "mean_gate": 0.001565658487379551,
+        "mean_abs_delta": 0.0009637892944738269
+      }
+    },
+    "best": {
+      "old": {
+        "mIoU": 0.5459461064125445,
+        "epoch": 1
+      },
+      "semantic-only": {
+        "mIoU": 0.5185437216026121,
+        "epoch": 3
+      },
+      "full": {
+        "mIoU": 0.5492830914599982,
+        "epoch": 3
+      }
+    }
+  },
+  {
+    "epoch": 2,
+    "train": {
+      "old": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 0,
+        "fps": 10.363727482467834,
+        "finite": true,
+        "mean_loss": 0.442746639251709,
+        "mean_temporal_loss": 0.0
+      },
+      "semantic-only": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 0,
+        "fps": 10.363727482467834,
+        "finite": true,
+        "mean_loss": 0.44039055705070496,
+        "mean_temporal_loss": 0.0
+      },
+      "full": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 10.363727482467834,
+        "finite": true,
+        "mean_loss": 0.5203848481178284,
+        "mean_temporal_loss": 0.0003016302944160998,
+        "mean_gate": 0.00557746971026063,
+        "mean_abs_delta": 0.0034214418847113848
+      }
+    },
+    "val": {
+      "old": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 0,
+        "fps": 10.968813105759548,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.544018811275757,
+        "wIoU": 0.8714858308153096,
+        "mVC8": 0.9547560125055105,
+        "mVC16": 0.9539195956937102
+      },
+      "semantic-only": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 0,
+        "fps": 10.968813105759548,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5161820140494864,
+        "wIoU": 0.8450602998390488,
+        "mVC8": 0.941872217292419,
+        "mVC16": 0.935782979584539
+      },
+      "full": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 10.968813105759548,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5427222486945058,
+        "wIoU": 0.8697276699815412,
+        "mVC8": 0.9547596640925035,
+        "mVC16": 0.9554027901128782,
+        "mean_gate": 0.00297413463704288,
+        "mean_abs_delta": 0.0016756211407482624
+      }
+    },
+    "best": {
+      "old": {
+        "mIoU": 0.5459461064125445,
+        "epoch": 1
+      },
+      "semantic-only": {
+        "mIoU": 0.5185437216026121,
+        "epoch": 3
+      },
+      "full": {
+        "mIoU": 0.5492830914599982,
+        "epoch": 3
+      }
+    }
+  },
+  {
+    "epoch": 3,
+    "train": {
+      "old": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 0,
+        "fps": 10.36754547966378,
+        "finite": true,
+        "mean_loss": 0.43706777691841125,
+        "mean_temporal_loss": 0.0
+      },
+      "semantic-only": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 0,
+        "fps": 10.36754547966378,
+        "finite": true,
+        "mean_loss": 0.4219244420528412,
+        "mean_temporal_loss": 0.0
+      },
+      "full": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 10.36754547966378,
+        "finite": true,
+        "mean_loss": 0.4930737018585205,
+        "mean_temporal_loss": 7.601694960612804e-05,
+        "mean_gate": 0.004671110771596432,
+        "mean_abs_delta": 0.0025530881248414516
+      }
+    },
+    "val": {
+      "old": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 0,
+        "fps": 11.011170057612235,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5346577243809276,
+        "wIoU": 0.8690395426405862,
+        "mVC8": 0.9543184955894453,
+        "mVC16": 0.9531205429290039
+      },
+      "semantic-only": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 0,
+        "fps": 11.011170057612235,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5185437216026121,
+        "wIoU": 0.8529782841400093,
+        "mVC8": 0.9430188337873932,
+        "mVC16": 0.937799224489135
+      },
+      "full": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 11.011170057612235,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5492830914599982,
+        "wIoU": 0.8710211197103584,
+        "mVC8": 0.9549423471288576,
+        "mVC16": 0.9555393039584752,
+        "mean_gate": 0.002362384693697095,
+        "mean_abs_delta": 0.0012082929024472833
+      }
+    },
+    "best": {
+      "old": {
+        "mIoU": 0.5459461064125445,
+        "epoch": 1
+      },
+      "semantic-only": {
+        "mIoU": 0.5185437216026121,
+        "epoch": 3
+      },
+      "full": {
+        "mIoU": 0.5492830914599982,
+        "epoch": 3
+      }
+    }
+  }
+]
