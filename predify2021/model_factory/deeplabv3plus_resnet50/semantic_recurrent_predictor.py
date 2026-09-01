@@ -140,7 +140,12 @@ class ErrorGuidedSemanticRecurrentCell(nn.Module):
         error_drive = torch.tanh(self.error_drive(error_innovation))
         modulation = torch.tanh(self.context_modulation(context))
         state_innovation = gain * error_drive * (1.0 + modulation)
-        return hidden + state_innovation, gain, state_innovation
+        return hidden + state_innovation, {
+            "update_gain": gain,
+            "error_drive": error_drive,
+            "context_modulation": modulation,
+            "state_innovation": state_innovation,
+        }
 
 
 class SemanticRestorationHead(nn.Module):
@@ -228,7 +233,7 @@ class ErrorGuidedSemanticRestorationPredictor(nn.Module):
     def restore_current(self, observation, current_prediction, semantic_hidden=None):
         prediction_error_z4 = observation.z4 - current_prediction.z4
         error_innovation = self.semantic_error_encoder(prediction_error_z4)
-        semantic_hidden, update_gain, state_innovation = self.semantic_recurrent(
+        semantic_hidden, recurrent_diagnostics = self.semantic_recurrent(
             observation.z4,
             error_innovation,
             semantic_hidden,
@@ -246,8 +251,7 @@ class ErrorGuidedSemanticRestorationPredictor(nn.Module):
         diagnostics = {
             "prediction_error_z4": prediction_error_z4,
             "error_innovation": error_innovation,
-            "update_gain": update_gain,
-            "state_innovation": state_innovation,
+            **recurrent_diagnostics,
             "restoration_delta_z4": restoration_delta_z4,
         }
         return restored, semantic_hidden, diagnostics
