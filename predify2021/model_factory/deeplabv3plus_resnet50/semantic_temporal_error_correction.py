@@ -64,14 +64,22 @@ class DynamicsGateEncoder(nn.Module):
     become another recurrent state or read a post-correction feature.
     """
 
-    def __init__(self, channels=128, scale=1.0, gate_limit=0.25):
+    VALID_MODES = {"error_only", "historical_only", "historical_residual"}
+
+    def __init__(self, channels=128, scale=1.0, gate_limit=0.25, mode="historical_residual"):
         super().__init__()
+        if mode not in self.VALID_MODES:
+            raise ValueError(
+                f"Unknown dynamics input mode {mode!r}; expected one of "
+                f"{sorted(self.VALID_MODES)}"
+            )
         if scale <= 0:
             raise ValueError("Dynamics normalization scale must be positive")
         if gate_limit <= 0:
             raise ValueError("Dynamics gate limit must be positive")
         self.register_buffer("normalization_scale", torch.tensor(float(scale)))
         self.register_buffer("gate_limit", torch.tensor(float(gate_limit)))
+        self.mode = mode
         self.projection = nn.Sequential(
             nn.Conv2d(2 * channels, channels, 1),
             nn.GELU(),
@@ -97,10 +105,16 @@ class DynamicsGateEncoder(nn.Module):
         )
         historical = error_gain * previous_dynamic_error
         residual = error - historical
+        if self.mode == "error_only":
+            encoder_left, encoder_right = error, torch.zeros_like(error)
+        elif self.mode == "historical_only":
+            encoder_left, encoder_right = historical, torch.zeros_like(historical)
+        else:
+            encoder_left, encoder_right = historical, residual
         features = torch.cat(
             (
-                historical / self.normalization_scale,
-                residual / self.normalization_scale,
+                encoder_left / self.normalization_scale,
+                encoder_right / self.normalization_scale,
             ),
             dim=1,
         )
@@ -178,6 +192,7 @@ class SemanticTemporalErrorCorrection(nn.Module):
         use_temporal_prediction=False,
         dynamic_sample_time=0.1035,
         dynamic_time_constant=0.5,
+        dynamic_input_mode="historical_residual",
     ):
         super().__init__()
         self.correlation = LocalFeatureCorrelation(channels)
@@ -188,6 +203,7 @@ class SemanticTemporalErrorCorrection(nn.Module):
         self.use_temporal_prediction = bool(
             use_temporal_prediction or use_dynamic_error
         )
+        self.temporal_prediction_scale = float(dynamic_scale)
         if self.use_dynamic_error:
             self.register_buffer(
                 "dynamic_error_gain", torch.tensor(float(dynamic_error_gain))
@@ -203,7 +219,12 @@ class SemanticTemporalErrorCorrection(nn.Module):
             self.dynamic_sample_time = None
             self.dynamic_time_constant = None
         self.dynamic_encoder = (
-            DynamicsGateEncoder(channels, dynamic_scale, dynamic_gate_limit)
+            DynamicsGateEncoder(
+                channels,
+                dynamic_scale,
+                dynamic_gate_limit,
+                mode=dynamic_input_mode,
+            )
             if self.use_dynamic_error
             else None
         )
@@ -353,6 +374,13 @@ def _env_float(name, default):
 def build_semantic_temporal_corrections(
     use_dynamic_error=None,
     use_temporal_prediction=None,
+    dynamic_input_mode=None,
+    dynamic_scale_z1=None,
+    dynamic_scale_z4=None,
+    dynamic_gate_limit=None,
+    dynamic_gain=None,
+    dynamic_sample_time=None,
+    dynamic_time_constant=None,
 ):
     """Build the existing correction path, optionally with dynamics gates.
 
@@ -366,12 +394,24 @@ def build_semantic_temporal_corrections(
         use_temporal_prediction = (
             os.environ.get("PREDIFY_ENABLE_TEMPORAL_PREDICTION", "0") == "1"
         )
-    dynamic_scale_z1 = _env_float("PREDIFY_DYNAMIC_ERROR_SCALE_Z1", 1.0)
-    dynamic_scale_z4 = _env_float("PREDIFY_DYNAMIC_ERROR_SCALE_Z4", 1.0)
-    dynamic_gate_limit = _env_float("PREDIFY_DYNAMIC_ERROR_GATE_LIMIT", 0.25)
-    dynamic_gain = _env_float("PREDIFY_DYNAMIC_ERROR_GAIN", 1.0)
-    sample_time = _env_float("PREDIFY_DYNAMIC_ERROR_SAMPLE_TIME", 0.1035)
-    time_constant = _env_float("PREDIFY_DYNAMIC_ERROR_TIME_CONSTANT", 0.5)
+    if dynamic_input_mode is None:
+        dynamic_input_mode = os.environ.get(
+            "PREDIFY_DYNAMIC_ERROR_INPUT_MODE", "historical_residual"
+        )
+    if dynamic_scale_z1 is None:
+        dynamic_scale_z1 = _env_float("PREDIFY_DYNAMIC_ERROR_SCALE_Z1", 1.0)
+    if dynamic_scale_z4 is None:
+        dynamic_scale_z4 = _env_float("PREDIFY_DYNAMIC_ERROR_SCALE_Z4", 1.0)
+    if dynamic_gate_limit is None:
+        dynamic_gate_limit = _env_float("PREDIFY_DYNAMIC_ERROR_GATE_LIMIT", 0.25)
+    if dynamic_gain is None:
+        dynamic_gain = _env_float("PREDIFY_DYNAMIC_ERROR_GAIN", 1.0)
+    if dynamic_sample_time is None:
+        dynamic_sample_time = _env_float("PREDIFY_DYNAMIC_ERROR_SAMPLE_TIME", 0.1035)
+    if dynamic_time_constant is None:
+        dynamic_time_constant = _env_float("PREDIFY_DYNAMIC_ERROR_TIME_CONSTANT", 0.5)
+    sample_time = dynamic_sample_time
+    time_constant = dynamic_time_constant
     if use_dynamic_error:
         if time_constant <= 0:
             raise ValueError("Dynamics time constant must be positive")
@@ -392,6 +432,7 @@ def build_semantic_temporal_corrections(
                 use_temporal_prediction=use_temporal_prediction,
                 dynamic_sample_time=sample_time,
                 dynamic_time_constant=time_constant,
+                dynamic_input_mode=dynamic_input_mode,
             ),
             SemanticTemporalErrorCorrection(
                 use_dynamic_error=use_dynamic_error,
@@ -401,6 +442,7 @@ def build_semantic_temporal_corrections(
                 use_temporal_prediction=use_temporal_prediction,
                 dynamic_sample_time=sample_time,
                 dynamic_time_constant=time_constant,
+                dynamic_input_mode=dynamic_input_mode,
             ),
         ]
     ).cuda()

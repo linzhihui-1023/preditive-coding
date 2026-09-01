@@ -288,6 +288,7 @@ def flush_bptt_batch(
     confusion,
     video_consistency,
     collect_video_metrics,
+    temporal_scales=(1.0, 1.0),
 ):
     raw_features = stack_backbone_features([record["raw"] for record in records])
     observation = stack_unified_features([record["observation"] for record in records])
@@ -313,15 +314,21 @@ def flush_bptt_batch(
         if record.get("temporal_prediction") is not None
     ]
     if temporal_predictions:
-        target_z1 = torch.cat([value[0] for value in temporal_targets], dim=0).detach()
-        target_z4 = torch.cat([value[1] for value in temporal_targets], dim=0).detach()
+        scale_z1 = torch.as_tensor(temporal_scales[0], device=records[0]["prediction_error"].z1.device, dtype=records[0]["prediction_error"].z1.dtype)
+        scale_z4 = torch.as_tensor(temporal_scales[1], device=records[0]["prediction_error"].z4.device, dtype=records[0]["prediction_error"].z4.dtype)
+        target_z1 = torch.cat([value[0] for value in temporal_targets], dim=0).detach() / scale_z1
+        target_z4 = torch.cat([value[1] for value in temporal_targets], dim=0).detach() / scale_z4
+        prediction_z1 = torch.cat([value[0] for value in temporal_predictions], dim=0) / scale_z1
+        prediction_z4 = torch.cat([value[1] for value in temporal_predictions], dim=0) / scale_z4
+        persistence_z1 = torch.cat([value[0] for value in persistence_predictions], dim=0) / scale_z1
+        persistence_z4 = torch.cat([value[1] for value in persistence_predictions], dim=0) / scale_z4
         temporal_loss = 0.5 * (
             F.smooth_l1_loss(
-                torch.cat([value[0] for value in temporal_predictions], dim=0),
+                prediction_z1,
                 target_z1,
             )
             + F.smooth_l1_loss(
-                torch.cat([value[1] for value in temporal_predictions], dim=0),
+                prediction_z4,
                 target_z4,
             )
         )
@@ -331,11 +338,11 @@ def flush_bptt_batch(
         )
         persistence_temporal_loss = 0.5 * (
             F.smooth_l1_loss(
-                torch.cat([value[0] for value in persistence_predictions], dim=0),
+                persistence_z1,
                 target_z1,
             )
             + F.smooth_l1_loss(
-                torch.cat([value[1] for value in persistence_predictions], dim=0),
+                persistence_z4,
                 target_z4,
             )
         )
@@ -480,6 +487,14 @@ def run_epoch(
     previous_temporal_prediction = None
     previous_prediction_error = None
     records = []
+    temporal_scales = (
+        corrections[0].dynamic_encoder.normalization_scale
+        if corrections[0].dynamic_encoder is not None
+        else corrections[0].temporal_prediction_scale,
+        corrections[1].dynamic_encoder.normalization_scale
+        if corrections[1].dynamic_encoder is not None
+        else corrections[1].temporal_prediction_scale,
+    )
     for chunk in sequence_loader:
         sequence_id = chunk["sequence_id"]
         start = chunk["start"]
@@ -572,7 +587,7 @@ def run_epoch(
                 )
             if len(records) == TRUNCATED_BPTT:
                 finite = flush_bptt_batch(
-                    model, records, output_size, optimizer, totals, confusion, video_consistency, collect_video_metrics
+                    model, records, output_size, optimizer, totals, confusion, video_consistency, collect_video_metrics, temporal_scales
                 ) and finite
                 records.clear()
                 hidden = detach_error_state(hidden)
@@ -582,7 +597,7 @@ def run_epoch(
                 hidden = detach_error_state(hidden)
         if start + len(clean_images) == total_frames and records:
             finite = flush_bptt_batch(
-                model, records, output_size, optimizer, totals, confusion, video_consistency, collect_video_metrics
+                model, records, output_size, optimizer, totals, confusion, video_consistency, collect_video_metrics, temporal_scales
             ) and finite
             records.clear()
             hidden = detach_error_state(hidden)
@@ -716,6 +731,44 @@ def main():
     predictor.requires_grad_(False)
     corrections.requires_grad_(True)
     optimizer = torch.optim.AdamW(corrections.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    dynamics_config = {
+        "enabled": corrections[0].use_dynamic_error,
+        "input_mode": (
+            corrections[0].dynamic_encoder.mode
+            if corrections[0].dynamic_encoder is not None
+            else "historical_residual"
+        ),
+        "scale_z1": (
+            float(corrections[0].dynamic_encoder.normalization_scale.item())
+            if corrections[0].dynamic_encoder is not None
+            else 1.0
+        ),
+        "scale_z4": (
+            float(corrections[1].dynamic_encoder.normalization_scale.item())
+            if corrections[1].dynamic_encoder is not None
+            else 1.0
+        ),
+        "gate_limit": (
+            float(corrections[0].dynamic_encoder.gate_limit.item())
+            if corrections[0].dynamic_encoder is not None
+            else 0.25
+        ),
+        "gain": (
+            float(corrections[0].dynamic_error_gain.item())
+            if corrections[0].dynamic_error_gain is not None
+            else DYNAMIC_ERROR_GAIN
+        ),
+        "sample_time": (
+            float(corrections[0].dynamic_sample_time.item())
+            if corrections[0].dynamic_sample_time is not None
+            else DYNAMIC_ERROR_SAMPLE_TIME
+        ),
+        "time_constant": (
+            float(corrections[0].dynamic_time_constant.item())
+            if corrections[0].dynamic_time_constant is not None
+            else DYNAMIC_ERROR_TIME_CONSTANT
+        ),
+    }
     parameter_efficiency = parameter_efficiency_metrics(model, predictor, corrections)
     train = KITTISTEPSegmentationDataset.from_kitti_step_root(root, "train")
     val = KITTISTEPSegmentationDataset.from_kitti_step_root(root, "val")
@@ -799,6 +852,7 @@ def main():
             torch.save(
                 {
                     "corrections": corrections.state_dict(),
+                    "dynamics_config": dynamics_config,
                     "epoch": epoch,
                     "selection_metric": "val_miou",
                     "val_metrics": val_metrics,
@@ -856,7 +910,7 @@ def main():
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
         "checkpoint": str(output / "best_semantic_temporal_error_correction.pt"),
         "parameter_efficiency": parameter_efficiency,
-        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "early_stopping_min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "frozen_encode_batch_size": FROZEN_ENCODE_BATCH_SIZE, "loader_workers": LOADER_WORKERS, "loader_prefetch_factor": LOADER_PREFETCH_FACTOR, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "temporal_prediction_loss_weight": TEMPORAL_PREDICTION_LOSS_WEIGHT, "temporal_prediction_enabled": corrections[0].temporal_prediction is not None, "temporal_baselines": ["zero", "persistence"], "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=epsilon_(t-1)+(Ts/tau_e)*(e_t-K_e*epsilon_(t-1))", "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME, "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_gain": DYNAMIC_ERROR_GAIN, "dynamic_error_effective_q": DYNAMIC_ERROR_SAMPLE_TIME * DYNAMIC_ERROR_GAIN / DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_enabled": corrections[0].use_dynamic_error, "dynamic_error_usage": "gate_modulation_and_H_next_error_prediction" if corrections[0].use_dynamic_error else "tracked_only_not_connected_to_correction"},
+        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "early_stopping_min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "frozen_encode_batch_size": FROZEN_ENCODE_BATCH_SIZE, "loader_workers": LOADER_WORKERS, "loader_prefetch_factor": LOADER_PREFETCH_FACTOR, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "temporal_prediction_loss_weight": TEMPORAL_PREDICTION_LOSS_WEIGHT, "temporal_prediction_enabled": corrections[0].temporal_prediction is not None, "temporal_baselines": ["zero", "persistence"], "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=epsilon_(t-1)+(Ts/tau_e)*(e_t-K_e*epsilon_(t-1))", "dynamic_error_parameters": dynamics_config, "dynamic_error_effective_q": dynamics_config["sample_time"] * dynamics_config["gain"] / dynamics_config["time_constant"], "dynamic_error_enabled": corrections[0].use_dynamic_error, "dynamic_error_usage": "gate_modulation_and_H_next_error_prediction" if corrections[0].use_dynamic_error else "tracked_only_not_connected_to_correction"},
         "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": sum(len(samples) for samples in train_groups.values()), "val_sequence_count": len(val_groups), "val_frame_count": sum(len(samples) for samples in val_groups.values()), "full_protocol_train_frame_count": len(train.samples), "full_protocol_val_frame_count": len(val.samples), "quick_subset": any((TRAIN_SEQUENCE_LIMIT, VAL_SEQUENCE_LIMIT, FRAMES_PER_SEQUENCE_LIMIT))},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "gates": gate,

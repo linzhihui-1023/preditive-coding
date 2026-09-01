@@ -30,6 +30,21 @@ class SemanticTemporalState(NamedTuple):
     dynamic_error: tuple
 
 
+def _dynamic_law_parameters(correction):
+    """Use the same fixed law parameters for gate evidence and state update."""
+    if getattr(correction, "use_dynamic_error", False):
+        return (
+            correction.dynamic_sample_time,
+            correction.dynamic_time_constant,
+            correction.dynamic_error_gain,
+        )
+    return (
+        DYNAMIC_ERROR_SAMPLE_TIME,
+        DYNAMIC_ERROR_TIME_CONSTANT,
+        DYNAMIC_ERROR_GAIN,
+    )
+
+
 def semantic_temporal_error_step(
     corrections,
     observation,
@@ -50,20 +65,22 @@ def semantic_temporal_error_step(
         state.hidden,
         previous_dynamic_error=state.dynamic_error,
     )
+    sample_time_z1, time_constant_z1, error_gain_z1 = _dynamic_law_parameters(corrections[0])
+    sample_time_z4, time_constant_z4, error_gain_z4 = _dynamic_law_parameters(corrections[1])
     dynamic_error = (
         build_temporal_prediction_error_state(
             values["error_z1"],
             state.dynamic_error[0],
-            sample_time=DYNAMIC_ERROR_SAMPLE_TIME,
-            time_constant=DYNAMIC_ERROR_TIME_CONSTANT,
-            error_gain=DYNAMIC_ERROR_GAIN,
+            sample_time=sample_time_z1,
+            time_constant=time_constant_z1,
+            error_gain=error_gain_z1,
         ).detach(),
         build_temporal_prediction_error_state(
             values["error_z4"],
             state.dynamic_error[1],
-            sample_time=DYNAMIC_ERROR_SAMPLE_TIME,
-            time_constant=DYNAMIC_ERROR_TIME_CONSTANT,
-            error_gain=DYNAMIC_ERROR_GAIN,
+            sample_time=sample_time_z4,
+            time_constant=time_constant_z4,
+            error_gain=error_gain_z4,
         ).detach(),
     )
     values = {

@@ -17,12 +17,14 @@ mkdir -p "$OUTPUT_ROOT"
 run_case() {
     local case_name="$1"
     local dynamics_enabled="$2"
+    local input_mode="$3"
     local output_dir="$OUTPUT_ROOT/$case_name"
 
     env \
         PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
         PREDIFY_ENABLE_DYNAMICS_ERROR="$dynamics_enabled" \
         PREDIFY_ENABLE_TEMPORAL_PREDICTION=1 \
+        PREDIFY_DYNAMIC_ERROR_INPUT_MODE="$input_mode" \
         PREDIFY_EPOCHS="${PREDIFY_QUICK_EPOCHS:-1}" \
         PREDIFY_EARLY_STOPPING_PATIENCE="${PREDIFY_QUICK_PATIENCE:-1}" \
         PREDIFY_TRAIN_SEQUENCE_LIMIT="${PREDIFY_QUICK_TRAIN_SEQUENCES:-1}" \
@@ -37,8 +39,9 @@ run_case() {
         2>&1 | tee "$OUTPUT_ROOT/${case_name}.log"
 }
 
-run_case temporal_head_baseline 0
-run_case dynamic_aware 1
+run_case temporal_head_baseline 0 historical_residual
+run_case parameter_matched_error_only 1 error_only
+run_case dynamic_aware 1 historical_residual
 
 "$PYTHON_BIN" - "$OUTPUT_ROOT" <<'PY'
 import json
@@ -47,6 +50,7 @@ from pathlib import Path
 
 root = Path(sys.argv[1])
 baseline = json.loads((root / "temporal_head_baseline" / "summary.json").read_text())
+matched = json.loads((root / "parameter_matched_error_only" / "summary.json").read_text())
 dynamics = json.loads((root / "dynamic_aware" / "summary.json").read_text())
 
 def metrics(summary):
@@ -57,10 +61,16 @@ dyn = metrics(dynamics)
 comparison = {
     "baseline": base,
     "dynamic_aware": dyn,
+    "parameter_matched_error_only": metrics(matched),
     "dynamic_minus_baseline": {
         key: dyn[key] - base[key]
         for key in ("miou", "mvc8", "mvc16", "temporal_prediction_loss")
         if key in base and key in dyn
+    },
+    "dynamic_minus_parameter_matched": {
+        key: dyn[key] - metrics(matched)[key]
+        for key in ("miou", "mvc8", "mvc16", "temporal_prediction_loss")
+        if key in metrics(matched) and key in dyn
     },
     "quick_screen_only": True,
     "go_screen": bool(
@@ -68,6 +78,10 @@ comparison = {
         and dyn.get("mvc16", float("-inf")) > base.get("mvc16", float("inf"))
         and dyn.get("temporal_prediction_loss", float("inf"))
         < base.get("temporal_prediction_loss", float("-inf"))
+        and dyn.get("mvc8", float("-inf"))
+        > metrics(matched).get("mvc8", float("inf"))
+        and dyn.get("mvc16", float("-inf"))
+        > metrics(matched).get("mvc16", float("inf"))
         and dyn.get("miou", float("-inf")) >= base.get("miou", float("inf")) - 0.002
         and dyn.get("temporal_prediction_loss", float("inf"))
         < dyn.get("persistence_temporal_loss", float("-inf"))

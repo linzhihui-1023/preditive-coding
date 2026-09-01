@@ -29,9 +29,17 @@ def load_new(path):
     temporal_prediction_enabled = any(
         key.startswith("0.temporal_prediction.") for key in payload["corrections"]
     )
+    dynamics_config = payload.get("dynamics_config", {})
     corrections = build_semantic_temporal_corrections(
         use_dynamic_error=dynamic_enabled,
         use_temporal_prediction=temporal_prediction_enabled,
+        dynamic_input_mode=dynamics_config.get("input_mode"),
+        dynamic_scale_z1=dynamics_config.get("scale_z1"),
+        dynamic_scale_z4=dynamics_config.get("scale_z4"),
+        dynamic_gate_limit=dynamics_config.get("gate_limit"),
+        dynamic_gain=dynamics_config.get("gain"),
+        dynamic_sample_time=dynamics_config.get("sample_time"),
+        dynamic_time_constant=dynamics_config.get("time_constant"),
     )
     corrections.load_state_dict(payload["corrections"], strict=True)
     corrections.requires_grad_(False)

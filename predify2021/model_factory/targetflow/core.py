@@ -284,9 +284,17 @@ def build_temporal_prediction_error_state(
     if previous_state is None:
         previous_state = torch.zeros_like(prediction_error)
 
-    sample_time_tensor = prediction_error.new_tensor(float(sample_time))
-    time_constant_tensor = prediction_error.new_tensor(float(time_constant))
-    error_gain_tensor = prediction_error.new_tensor(float(error_gain))
+    # Accept scalar tensors as well as Python numbers so a checkpointed law
+    # configuration can be used without copying its values through the CPU.
+    sample_time_tensor = torch.as_tensor(
+        sample_time, device=prediction_error.device, dtype=prediction_error.dtype
+    )
+    time_constant_tensor = torch.as_tensor(
+        time_constant, device=prediction_error.device, dtype=prediction_error.dtype
+    )
+    error_gain_tensor = torch.as_tensor(
+        error_gain, device=prediction_error.device, dtype=prediction_error.dtype
+    )
 
     if not torch.isfinite(sample_time_tensor) or sample_time_tensor <= 0:
         raise ValueError(
