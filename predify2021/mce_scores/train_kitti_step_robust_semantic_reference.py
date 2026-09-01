@@ -4,16 +4,22 @@ import math
 import random
 from pathlib import Path
 
+import numpy as np
 import torch
+from PIL import Image
 from torch.nn import functional as F
 
-from predify2021.datasets.kitti_step import KITTISTEPSegmentationDataset, semantic_mask_from_panoptic_png
+from predify2021.datasets.kitti_step import (
+    KITTISTEPSegmentationDataset,
+    pil_rgb_to_unit_tensor,
+    semantic_mask_from_panoptic_png,
+)
 from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import load_image, sequence_groups
 from predify2021.mce_scores.evaluate_kitti_step_static_baseline import compute_iou, update_confusion_matrix
 from predify2021.mce_scores.kitti_step_cityscapes_c import (
     CITYSCAPES_C_COMMON_CORRUPTIONS,
     CITYSCAPES_C_SEVERITIES,
-    apply_cityscapes_c_corruption,
+    apply_cityscapes_c_corruption_uint8,
     corruption_seed,
 )
 from predify2021.mce_scores.role_separated_dynamic_error_correction import (
@@ -34,6 +40,9 @@ MAX_EPOCHS = 15
 PATIENCE = 3
 TBPTT_STEPS = 8
 CALIBRATION_CHUNKS = 32
+TRAIN_CORRUPTIONS = tuple(
+    name for name in CITYSCAPES_C_COMMON_CORRUPTIONS if name != "glass_blur"
+)
 SEMANTIC_MODULES = ("z4_sem_recurrent", "z4_sem_delta", "z1_sem_recurrent", "z1_sem_delta")
 DYNAMICS_MODULES = ("z4_dyn_recurrent", "z4_dyn_delta", "z1_dyn_recurrent", "z1_dyn_delta")
 
@@ -65,12 +74,31 @@ def grad_norm(grads):
 
 def sequence_condition(seed, epoch, sequence_index):
     rng = random.Random(seed + 1000003 * epoch + 7919 * sequence_index)
-    return rng.choice(CITYSCAPES_C_COMMON_CORRUPTIONS), rng.choice(CITYSCAPES_C_SEVERITIES)
+    return rng.choice(TRAIN_CORRUPTIONS), rng.choice(CITYSCAPES_C_SEVERITIES)
+
+
+def load_clean_and_corrupted(sample, corruption, severity, seed):
+    with Image.open(Path(sample["image_path"])) as opened:
+        rgb = opened.convert("RGB")
+        clean = pil_rgb_to_unit_tensor(rgb).unsqueeze(0).cuda()
+        source = np.asarray(rgb, dtype=np.uint8)
+    corrupted = apply_cityscapes_c_corruption_uint8(
+        source, corruption, severity, seed=seed
+    )
+    noisy = (
+        torch.from_numpy(corrupted)
+        .permute(2, 0, 1)
+        .to(device=clean.device, dtype=clean.dtype)
+        .div(255.0)
+        .unsqueeze(0)
+    )
+    return clean, noisy
 
 
 def encode_pair(model, sample, corruption, severity, seed):
-    clean = load_image(sample)
-    noisy = apply_cityscapes_c_corruption(clean, corruption, severity, seed=seed)
+    clean, noisy = load_clean_and_corrupted(
+        sample, corruption, severity, seed
+    )
     images = torch.cat((clean, noisy), dim=0)
     size = tuple(clean.shape[-2:])
     with torch.no_grad():
@@ -157,6 +185,7 @@ def calibrate_lambda(model, predictor, groups, semantic_parameters, chunks, tbpt
 def run_sequence(
     model, predictor, samples, sequence_index, condition_epoch, lambda_ref, tbptt_steps,
     seed, optimizer=None, confusion=None, max_steps=0, check_dynamics_grad=False,
+    smoke_probe=None,
 ):
     if len(samples) < 2:
         return 0, 0.0, 0.0, 0.0, check_dynamics_grad
@@ -211,13 +240,32 @@ def run_sequence(
 
         # TBPTT detaches every 8 prediction steps; state values are never reset inside a sequence.
         if (t + 1) % tbptt_steps == 0 or t + 1 == steps:
+            before_detach = hidden
             hidden = detach_hidden(hidden)
             pending = detach_state(pending)
+            if smoke_probe is not None and "state_carry_checked" not in smoke_probe:
+                if before_detach[1] is None or before_detach[3] is None:
+                    raise RuntimeError("Semantic hidden state was reset at TBPTT boundary")
+                max_diff = max(
+                    float((before.detach() - after).abs().max().item())
+                    for before, after in zip(before_detach, hidden)
+                    if before is not None
+                )
+                if max_diff != 0.0:
+                    raise RuntimeError(
+                        f"TBPTT detach changed hidden-state values: max_diff={max_diff}"
+                    )
+                smoke_probe["state_carry_checked"] = True
+                smoke_probe["tbptt_detach_max_abs_diff"] = max_diff
+                smoke_probe["semantic_state_reset_inside_sequence"] = False
 
     return steps, kd_sum, ref_sum, total_sum, check_dynamics_grad
 
 
-def run_epoch(model, predictor, groups, epoch, lambda_ref, tbptt_steps, seed, optimizer=None, validate=False, max_steps=0):
+def run_epoch(
+    model, predictor, groups, epoch, lambda_ref, tbptt_steps, seed,
+    optimizer=None, validate=False, max_steps=0, smoke_probe=None,
+):
     predictor.train(optimizer is not None)
     confusion = torch.zeros((19, 19), dtype=torch.int64) if validate else None
     count = 0; kd_sum = ref_sum = total_sum = 0.0
@@ -225,7 +273,8 @@ def run_epoch(model, predictor, groups, epoch, lambda_ref, tbptt_steps, seed, op
     for sequence_index, samples in enumerate(groups.values()):
         n, kd, ref, total, check_dynamics_grad = run_sequence(
             model, predictor, samples, sequence_index, epoch if optimizer is not None else 0,
-            lambda_ref, tbptt_steps, seed, optimizer, confusion, max_steps, check_dynamics_grad,
+            lambda_ref, tbptt_steps, seed, optimizer, confusion, max_steps,
+            check_dynamics_grad, smoke_probe,
         )
         count += n; kd_sum += kd; ref_sum += ref; total_sum += total
     if count == 0:
@@ -293,11 +342,13 @@ def main():
 
     optimizer = torch.optim.AdamW(semantic_parameters, lr=1e-4, weight_decay=0.01)
     history, best, stale = [], None, 0
+    smoke_probe = {} if args.smoke else None
     checkpoint = output / "best_robust_semantic_reference.pt"
     for epoch in range(1, epochs + 1):
         train_metrics = run_epoch(
             model, predictor, train, epoch, lambda_ref, args.tbptt_steps,
             args.seed, optimizer=optimizer, max_steps=max_steps,
+            smoke_probe=smoke_probe,
         )
         with torch.no_grad():
             val_metrics = run_epoch(
@@ -337,13 +388,17 @@ def main():
             "weight_decay": 0.01,
             "loss": "KD + lambda_ref * SmoothL1(M_sem_t+1, Z_clean_t+1) on z1/z4",
             "target_alignment": "predictor.step(O_t,E_t) -> t+1",
-            "augmentation": "Cityscapes-C-style common corruption augmentation on KITTI-STEP train",
+            "augmentation": "Common corruption augmentation on KITTI-STEP train; not a formal Cityscapes-C benchmark",
             "corruption_scope": "type+severity fixed for each sequence; deterministic realization changes per frame",
-            "corruptions": list(CITYSCAPES_C_COMMON_CORRUPTIONS),
+            "training_corruptions": list(TRAIN_CORRUPTIONS),
+            "excluded_training_corruptions": {
+                "glass_blur": "excluded from online training augmentation because its full-resolution pixel-swap implementation is a known preprocessing bottleneck; it remains in formal robustness evaluation"
+            },
             "severities": list(CITYSCAPES_C_SEVERITIES),
             "validation_selection": "highest decoded mIoU; lower combined loss breaks exact ties",
         },
         "gradient_calibration": calibration,
+        "smoke_checks": smoke_probe,
         "dataset": {"train_sequences": len(train), "val_sequences": len(val), "smoke_max_steps": max_steps},
         "history": history,
         "best": best,
