@@ -201,6 +201,19 @@ def evaluate_condition(model, predictor, groups, condition, reset_period):
 
                 bin_name = position_bin(frame_index)
 
+                if frame_index == 0:
+                    zero = zero_state(observation)
+                    for mode in MODES:
+                        dynamics, semantic, *hidden = predictor.step(
+                            observation, zero, *states[mode]["hidden"]
+                        )
+                        states[mode]["pending_dynamics"] = dynamics
+                        states[mode]["pending_semantic"] = semantic
+                        states[mode]["hidden"] = tuple(hidden)
+                    continue
+
+                # Compare Host and semantic reference on exactly the same
+                # evaluable frames (t >= 1).
                 update_confusion_matrix(
                     host_confusion["clean"]["overall"], clean_prediction, mask
                 )
@@ -213,17 +226,6 @@ def evaluate_condition(model, predictor, groups, condition, reset_period):
                 update_confusion_matrix(
                     host_confusion["corrupted"][bin_name], corrupted_prediction, mask
                 )
-
-                if frame_index == 0:
-                    zero = zero_state(observation)
-                    for mode in MODES:
-                        dynamics, semantic, *hidden = predictor.step(
-                            observation, zero, *states[mode]["hidden"]
-                        )
-                        states[mode]["pending_dynamics"] = dynamics
-                        states[mode]["pending_semantic"] = semantic
-                        states[mode]["hidden"] = tuple(hidden)
-                    continue
 
                 observation_quality = latent_metrics(observation, clean_state)
 
