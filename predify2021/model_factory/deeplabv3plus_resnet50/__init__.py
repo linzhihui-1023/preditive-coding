@@ -29,11 +29,19 @@ from .error_decomposition_correction import (
     ReliabilityGate,
 )
 from .semantic_temporal_error_correction import (
+    DecoupledLocalFeatureCorrelation,
+    DecoupledSemanticTemporalErrorCorrection,
+    DecoupledTemporalErrorEncoder,
     ErrorStateConvGRU,
+    ExplicitSemanticCorrection,
     LocalFeatureCorrelation,
     SemanticTemporalDirectCorrection,
     SemanticTemporalErrorCorrection,
     SemanticTemporalErrorEncoder,
+    TemporalErrorGate,
+    TemporalErrorPredictionHead,
+    apply_decoupled_semantic_temporal_corrections,
+    build_decoupled_semantic_temporal_corrections,
 )
 
 __all__ = [
@@ -62,9 +70,17 @@ __all__ = [
     "ErrorInterpreter",
     "ReliabilityGate",
     "RoleSeparatedRecurrentPredictor",
+    "DecoupledLocalFeatureCorrelation",
+    "DecoupledTemporalErrorEncoder",
     "LocalFeatureCorrelation",
     "SemanticTemporalErrorEncoder",
     "ErrorStateConvGRU",
     "SemanticTemporalDirectCorrection",
     "SemanticTemporalErrorCorrection",
+    "TemporalErrorGate",
+    "ExplicitSemanticCorrection",
+    "TemporalErrorPredictionHead",
+    "DecoupledSemanticTemporalErrorCorrection",
+    "build_decoupled_semantic_temporal_corrections",
+    "apply_decoupled_semantic_temporal_corrections",
 ]

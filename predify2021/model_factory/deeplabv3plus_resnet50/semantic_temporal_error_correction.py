@@ -70,6 +70,124 @@ class ErrorStateConvGRU(nn.Module):
         return (1.0 - update) * hidden + update * candidate
 
 
+class DecoupledLocalFeatureCorrelation(nn.Module):
+    """Align observation and prediction locally without semantic conditioning."""
+
+    def __init__(self, channels=128, projection_channels=32):
+        super().__init__()
+        self.projection_channels = projection_channels
+        self.scale = projection_channels ** -0.5
+        self.query = nn.Conv2d(channels, projection_channels, 1)
+        self.key = nn.Conv2d(channels, projection_channels, 1)
+        self.value = nn.Conv2d(channels, projection_channels, 1)
+
+    def forward(self, observation, predicted):
+        batch, _, height, width = predicted.shape
+        query = self.query(observation)
+        key = F.unfold(self.key(predicted), kernel_size=3, padding=1).view(
+            batch, self.projection_channels, 9, height, width
+        )
+        value_observation = self.value(observation)
+        value_predicted = F.unfold(self.value(predicted), kernel_size=3, padding=1).view(
+            batch, self.projection_channels, 9, height, width
+        )
+        scores = (query.unsqueeze(2) * key).sum(dim=1) * self.scale
+        weights = torch.softmax(scores, dim=1)
+        aligned_prediction = (weights.unsqueeze(1) * value_predicted).sum(dim=2)
+        return value_observation - aligned_prediction
+
+
+class DecoupledTemporalErrorEncoder(nn.Module):
+    """Encode only observation-prediction error and its local alignment."""
+
+    def __init__(self, channels=128, projection_channels=32):
+        super().__init__()
+        self.error_backbone = nn.Sequential(
+            nn.Conv2d(channels, channels, 1, bias=False),
+            nn.GELU(),
+            nn.Conv2d(channels, channels, 3, padding=1, bias=False),
+        )
+        self.alignment_modulation = nn.Conv2d(projection_channels, channels, 1)
+
+    def forward(self, error, aligned_error):
+        error_backbone = self.error_backbone(error)
+        alignment_gain = torch.tanh(self.alignment_modulation(aligned_error))
+        return error_backbone * (1.0 + alignment_gain)
+
+
+class TemporalErrorGate(nn.Module):
+    """A single-channel correction magnitude map from detached temporal state."""
+
+    def __init__(self, channels=128):
+        super().__init__()
+        self.gate_head = nn.Conv2d(channels, 1, kernel_size=1)
+
+    def forward(self, hidden):
+        return torch.sigmoid(self.gate_head(hidden.detach()))
+
+
+class ExplicitSemanticCorrection(nn.Module):
+    """Recover semantic content from the observation and an explicit reference."""
+
+    def __init__(self, channels=128):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Conv2d(channels * 3, channels, 1),
+            nn.GELU(),
+            nn.Conv2d(channels, channels, 3, padding=1),
+        )
+
+    def forward(self, observation, semantic_reference):
+        return self.network(
+            torch.cat((observation, semantic_reference, semantic_reference - observation), dim=1)
+        )
+
+
+class TemporalErrorPredictionHead(nn.Module):
+    """Predict the next temporal error state for a future auxiliary loss."""
+
+    def __init__(self, channels=128):
+        super().__init__()
+        self.head = nn.Conv2d(channels, channels, kernel_size=1)
+
+    def forward(self, hidden):
+        return self.head(hidden)
+
+
+class DecoupledSemanticTemporalErrorCorrection(nn.Module):
+    """Separate temporal error modelling from semantic residual recovery."""
+
+    def __init__(self, channels=128, projection_channels=32):
+        super().__init__()
+        self.correlation = DecoupledLocalFeatureCorrelation(channels, projection_channels)
+        self.encoder = DecoupledTemporalErrorEncoder(channels, projection_channels)
+        self.error_state = ErrorStateConvGRU(channels)
+        self.gate = TemporalErrorGate(channels)
+        self.semantic_correction = ExplicitSemanticCorrection(channels)
+        self.temporal_prediction = TemporalErrorPredictionHead(channels)
+
+    def forward(self, observation, predicted, semantic_reference, hidden=None, force_gate_one=False):
+        raw_error = observation - predicted
+        aligned_error = self.correlation(observation, predicted)
+        task_error = self.encoder(raw_error, aligned_error)
+        new_hidden = self.error_state(task_error, hidden)
+        gate = torch.ones_like(new_hidden[:, :1]) if force_gate_one else self.gate(new_hidden)
+        semantic_residual = self.semantic_correction(observation, semantic_reference)
+        delta = gate * semantic_residual
+        posterior = observation + delta
+        predicted_next_task_error = self.temporal_prediction(new_hidden)
+        return posterior, new_hidden, {
+            "raw_error": raw_error,
+            "aligned_error": aligned_error,
+            "task_error": task_error,
+            "hidden": new_hidden,
+            "gate": gate,
+            "semantic_residual": semantic_residual,
+            "delta": delta,
+            "predicted_next_task_error": predicted_next_task_error,
+        }
+
+
 class SemanticTemporalDirectCorrection(nn.Module):
     def __init__(self, channels=128):
         super().__init__()
@@ -195,6 +313,29 @@ def build_semantic_temporal_corrections():
     return nn.ModuleList(
         [SemanticTemporalErrorCorrection(), SemanticTemporalErrorCorrection()]
     ).cuda()
+
+
+def build_decoupled_semantic_temporal_corrections():
+    """Create independent Z1 and Z4 role-decoupled correction modules."""
+    return nn.ModuleList(
+        [DecoupledSemanticTemporalErrorCorrection(), DecoupledSemanticTemporalErrorCorrection()]
+    ).cuda()
+
+
+def apply_decoupled_semantic_temporal_corrections(
+    corrections, observation, predicted, pending_semantic, hidden, force_gate_one=False
+):
+    """Apply decoupled correction to Z1/Z4 while preserving Z2/Z3 observations."""
+    posterior1, hidden1, values1 = corrections[0](
+        observation.z1, predicted.z1, pending_semantic.z1, hidden[0], force_gate_one
+    )
+    posterior4, hidden4, values4 = corrections[1](
+        observation.z4, predicted.z4, pending_semantic.z4, hidden[1], force_gate_one
+    )
+    posterior = UnifiedFeatures(posterior1, observation.z2, observation.z3, posterior4)
+    values = {f"{name}_z1": value for name, value in values1.items()}
+    values.update({f"{name}_z4": value for name, value in values4.items()})
+    return posterior, (hidden1, hidden4), values
 
 
 def build_semantic_prototype_corrections(prototypes_z1=None, prototypes_z4=None):
