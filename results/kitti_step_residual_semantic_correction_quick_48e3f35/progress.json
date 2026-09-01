@@ -1,0 +1,347 @@
+[
+  {
+    "epoch": 1,
+    "train": {
+      "old": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 0,
+        "fps": 9.764005071784052,
+        "finite": true,
+        "mean_loss": 0.5324665904045105,
+        "mean_temporal_loss": 0.0
+      },
+      "full-explicit": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 9.764005071784052,
+        "finite": true,
+        "mean_loss": 0.8905999660491943,
+        "mean_temporal_loss": 0.0042869290336966515,
+        "mean_gate": 0.0029837104957550764,
+        "mean_abs_delta": 0.0014892652397975326,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0008154025417752564
+      },
+      "full-residual": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 9.764005071784052,
+        "finite": true,
+        "mean_loss": 0.9051591753959656,
+        "mean_temporal_loss": 0.0042869290336966515,
+        "mean_gate": 0.002978120930492878,
+        "mean_abs_delta": 0.001632828381843865,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0008141077123582363
+      }
+    },
+    "val": {
+      "old": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 0,
+        "fps": 11.551303535897892,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5459401806927648,
+        "wIoU": 0.8714991894192574,
+        "mVC8": 0.9538009584361451,
+        "mVC16": 0.9538495725593973
+      },
+      "full-explicit": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 11.551303535897892,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5481023277599572,
+        "wIoU": 0.8715490538020856,
+        "mVC8": 0.9556964078219526,
+        "mVC16": 0.9566003998596211,
+        "mean_gate": 0.0015657221665605903,
+        "mean_abs_delta": 0.0009639826021157205,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0010467732790857553
+      },
+      "full-residual": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 11.551303535897892,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5480707373534247,
+        "wIoU": 0.8714906085286659,
+        "mVC8": 0.9557493998939934,
+        "mVC16": 0.9566997499489013,
+        "mean_gate": 0.0015638957265764475,
+        "mean_abs_delta": 0.0011307761305943131,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0010456334566697478
+      }
+    },
+    "best": {
+      "old": {
+        "mIoU": 0.5459401806927648,
+        "epoch": 1
+      },
+      "full-explicit": {
+        "mIoU": 0.5481023277599572,
+        "epoch": 1
+      },
+      "full-residual": {
+        "mIoU": 0.5480707373534247,
+        "epoch": 1
+      }
+    }
+  },
+  {
+    "epoch": 2,
+    "train": {
+      "old": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 0,
+        "fps": 9.8196575485303,
+        "finite": true,
+        "mean_loss": 0.4428159296512604,
+        "mean_temporal_loss": 0.0
+      },
+      "full-explicit": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 9.8196575485303,
+        "finite": true,
+        "mean_loss": 0.5203985571861267,
+        "mean_temporal_loss": 0.0003016302944160998,
+        "mean_gate": 0.005577669478952885,
+        "mean_abs_delta": 0.003422066569328308,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.001426023431122303
+      },
+      "full-residual": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 9.8196575485303,
+        "finite": true,
+        "mean_loss": 0.5205613970756531,
+        "mean_temporal_loss": 0.0003016302944160998,
+        "mean_gate": 0.0054230475798249245,
+        "mean_abs_delta": 0.0037500334437936544,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.001391368918120861
+      }
+    },
+    "val": {
+      "old": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 0,
+        "fps": 11.342056182035169,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5439623655792002,
+        "wIoU": 0.8714666894431204,
+        "mVC8": 0.9547608038279191,
+        "mVC16": 0.9539188040456655
+      },
+      "full-explicit": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 11.342056182035169,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5427017776362529,
+        "wIoU": 0.8697255771734953,
+        "mVC8": 0.954762091024716,
+        "mVC16": 0.9554068225277674,
+        "mean_gate": 0.0029742817860096693,
+        "mean_abs_delta": 0.0016759774880483747,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.001369661302305758
+      },
+      "full-residual": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 11.342056182035169,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5423404423587828,
+        "wIoU": 0.8696854655580238,
+        "mVC8": 0.9548122350630074,
+        "mVC16": 0.9554408424630946,
+        "mean_gate": 0.002870374359190464,
+        "mean_abs_delta": 0.0017783024813979864,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0013276964891701937
+      }
+    },
+    "best": {
+      "old": {
+        "mIoU": 0.5459401806927648,
+        "epoch": 1
+      },
+      "full-explicit": {
+        "mIoU": 0.5481023277599572,
+        "epoch": 1
+      },
+      "full-residual": {
+        "mIoU": 0.5480707373534247,
+        "epoch": 1
+      }
+    }
+  },
+  {
+    "epoch": 3,
+    "train": {
+      "old": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 0,
+        "fps": 9.790241388629353,
+        "finite": true,
+        "mean_loss": 0.43713822960853577,
+        "mean_temporal_loss": 0.0
+      },
+      "full-explicit": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 9.790241388629353,
+        "finite": true,
+        "mean_loss": 0.49306896328926086,
+        "mean_temporal_loss": 7.601694960612804e-05,
+        "mean_gate": 0.004671098198741674,
+        "mean_abs_delta": 0.002553506987169385,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0009298680815845728
+      },
+      "full-residual": {
+        "total_sequence_frames": 601,
+        "effective_frames": 542,
+        "loss_frames": 542,
+        "metric_frames": 0,
+        "gate_frames": 542,
+        "fps": 9.790241388629353,
+        "finite": true,
+        "mean_loss": 0.49336332082748413,
+        "mean_temporal_loss": 7.601694960612804e-05,
+        "mean_gate": 0.004487296100705862,
+        "mean_abs_delta": 0.0026767090894281864,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0008988377521745861
+      }
+    },
+    "val": {
+      "old": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 0,
+        "fps": 11.24980761248656,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5346578534123272,
+        "wIoU": 0.8690374932134101,
+        "mVC8": 0.9543170774324689,
+        "mVC16": 0.9531213848788483
+      },
+      "full-explicit": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 11.24980761248656,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5492699024003885,
+        "wIoU": 0.8710221102215272,
+        "mVC8": 0.9549442873588264,
+        "mVC16": 0.9555413683047774,
+        "mean_gate": 0.0023620733991265297,
+        "mean_abs_delta": 0.001208346919156611,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0009104346972890198
+      },
+      "full-residual": {
+        "total_sequence_frames": 503,
+        "effective_frames": 453,
+        "loss_frames": 0,
+        "metric_frames": 453,
+        "gate_frames": 453,
+        "fps": 11.24980761248656,
+        "finite": true,
+        "mean_loss": 0.0,
+        "mean_temporal_loss": 0.0,
+        "mIoU": 0.5490209417413188,
+        "wIoU": 0.8710264230004641,
+        "mVC8": 0.9549813402869071,
+        "mVC16": 0.9555973042930808,
+        "mean_gate": 0.0022692822385579348,
+        "mean_abs_delta": 0.0012492608511820436,
+        "mean_gate_channel_std": 0.0,
+        "mean_gate_spatial_std": 0.0008807308622635901
+      }
+    },
+    "best": {
+      "old": {
+        "mIoU": 0.5459401806927648,
+        "epoch": 1
+      },
+      "full-explicit": {
+        "mIoU": 0.5492699024003885,
+        "epoch": 3
+      },
+      "full-residual": {
+        "mIoU": 0.5490209417413188,
+        "epoch": 3
+      }
+    }
+  }
+]
