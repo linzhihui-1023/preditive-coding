@@ -67,26 +67,25 @@ def _copy_scalar_gate(source, target):
 
 def make_variants():
     """Create fair F0--F3 initializations on CUDA."""
-    f0 = DecoupledSemanticTemporalErrorCorrection(gate_channels=1).cuda()
-    f1 = DecoupledSemanticTemporalErrorCorrection(gate_channels=128).cuda()
-    f2 = DecoupledSemanticTemporalErrorCorrection(
-        gate_channels=1,
-        semantic_correction=TemporalConditionedSemanticCorrection(
-            channels=128, baseline=f0.semantic_correction
-        ),
-    ).cuda()
-    f3 = DecoupledSemanticTemporalErrorCorrection(
-        gate_channels=128,
-        semantic_correction=TemporalConditionedSemanticCorrection(
-            channels=128, baseline=f0.semantic_correction
-        ),
-    ).cuda()
-    for target in (f1, f2, f3):
-        _copy_temporal_branch(f0, target)
-    f1.semantic_correction.load_state_dict(f0.semantic_correction.state_dict())
-    _copy_scalar_gate(f0, f1)
-    _copy_scalar_gate(f0, f2)
-    _copy_scalar_gate(f0, f3)
+    f0 = torch.nn.ModuleList([DecoupledSemanticTemporalErrorCorrection(gate_channels=1) for _ in range(2)]).cuda()
+    f1 = torch.nn.ModuleList([DecoupledSemanticTemporalErrorCorrection(gate_channels=128) for _ in range(2)]).cuda()
+    f2 = torch.nn.ModuleList([
+        DecoupledSemanticTemporalErrorCorrection(
+            gate_channels=1,
+            semantic_correction=TemporalConditionedSemanticCorrection(channels=128, baseline=f0[index].semantic_correction),
+        ) for index in range(2)
+    ]).cuda()
+    f3 = torch.nn.ModuleList([
+        DecoupledSemanticTemporalErrorCorrection(
+            gate_channels=128,
+            semantic_correction=TemporalConditionedSemanticCorrection(channels=128, baseline=f0[index].semantic_correction),
+        ) for index in range(2)
+    ]).cuda()
+    for index in range(2):
+        for target in (f1[index], f2[index], f3[index]):
+            _copy_temporal_branch(f0[index], target)
+        f1[index].semantic_correction.load_state_dict(f0[index].semantic_correction.state_dict())
+        _copy_scalar_gate(f0[index], f1[index]); _copy_scalar_gate(f0[index], f2[index]); _copy_scalar_gate(f0[index], f3[index])
     return {"full-scalar": f0, "full-channel-gate": f1, "full-temporal-semantic": f2, "full-channel-temporal": f3}
 
 
@@ -261,7 +260,7 @@ def main():
         ideal = sum(by[("full-channel-temporal", condition)]["mIoU"] - old_reference[condition]["mIoU"] for condition in blur_conditions) / 2 >= 0.0 and all(by[("full-channel-temporal", condition)]["mVC16"] > old_reference[condition]["mVC16"] for condition in blur_conditions)
     judgement = {"CHANNEL-GATE BOTTLENECK": "STRONGLY SUPPORTED" if channel_supported and channel["mean_blur_mIoU_delta"] >= 0.01 else ("SUPPORTED" if channel_supported else "NOT SUPPORTED"), "TEMPORAL-CONDITION BOTTLENECK": "SUPPORTED" if temporal_supported else "NOT SUPPORTED", "COMBINED": "GO" if combined_go else "NO-GO; F3 does not beat both F1 and F2 on every blur condition", "IDEAL F3 VS OLD": ideal}
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    summary = {"commit": commit, "config": {"seed": SEED, "epochs": args.epochs, "patience": PATIENCE, "lr": LR, "weight_decay": WEIGHT_DECAY, "distill_weight": DISTILL_WEIGHT, "bptt": BPTT, "precision": "bf16" if args.fast_bf16 else "fp32", "train_frames": 601, "val_frames": 503, "conditions": {"Clean": "none", "Blur-Mid": "sigma=2.25", "Blur-Max": "sigma=3.0"}}, "variants": {kind: {"label": DISPLAY[kind], "gate_channels": modules[kind].gate.gate_channels, "semantic_interface": "temporal-conditioned" if isinstance(modules[kind].semantic_correction, TemporalConditionedSemanticCorrection) else "frame-only", "trainable_params": parameter_counts[kind]} for kind in VARIANTS}, "train_sequences": list(train.keys()), "val_sequences": list(val.keys()), "best": best, "results": rows, "comparisons": comparisons, "judgement": judgement, "old_reference": old_reference, "sanity": sanity}
+    summary = {"commit": commit, "config": {"seed": SEED, "epochs": args.epochs, "patience": PATIENCE, "lr": LR, "weight_decay": WEIGHT_DECAY, "distill_weight": DISTILL_WEIGHT, "bptt": BPTT, "precision": "bf16" if args.fast_bf16 else "fp32", "train_frames": 601, "val_frames": 503, "conditions": {"Clean": "none", "Blur-Mid": "sigma=2.25", "Blur-Max": "sigma=3.0"}}, "variants": {kind: {"label": DISPLAY[kind], "gate_channels": modules[kind][0].gate.gate_channels, "semantic_interface": "temporal-conditioned" if isinstance(modules[kind][0].semantic_correction, TemporalConditionedSemanticCorrection) else "frame-only", "trainable_params": parameter_counts[kind]} for kind in VARIANTS}, "train_sequences": list(train.keys()), "val_sequences": list(val.keys()), "best": best, "results": rows, "comparisons": comparisons, "judgement": judgement, "old_reference": old_reference, "sanity": sanity}
     with (out / "comparison.csv").open("w", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=sorted({key for row in rows for key in row})); writer.writeheader(); writer.writerows(rows)
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str) + "\n")
