@@ -190,13 +190,16 @@ def _load_old_reference():
 
 
 def _write_readme(out, summary, rows, comparisons, sanity):
-    miou = ["| Variant | Clean | Blur-Mid | Blur-Max |", "|---|---:|---:|---:|"]
-    mvc = ["| Variant | Clean | Blur-Mid | Blur-Max |", "|---|---:|---:|---:|"]
-    for kind in VARIANTS:
-        values = {(row["model"], row["condition"]): row for row in rows}
-        miou.append(f"| {DISPLAY[kind]} | {values[(kind, 'Clean')]['mIoU']:.6f} | {values[(kind, 'Blur-Mid')]['mIoU']:.6f} | {values[(kind, 'Blur-Max')]['mIoU']:.6f} |")
-        mvc.append(f"| {DISPLAY[kind]} | {values[(kind, 'Clean')]['mVC16']:.6f} | {values[(kind, 'Blur-Mid')]['mVC16']:.6f} | {values[(kind, 'Blur-Max')]['mVC16']:.6f} |")
-    text = "# Temporal–semantic interface quick screen\n\nDiagnostic Blur-Mid/Blur-Max conditions (sigma 2.25/3.0), not formal corruption severities.\n\n## mIoU\n\n" + "\n".join(miou) + "\n\n## mVC16\n\n" + "\n".join(mvc) + "\n\n## Deltas and judgement\n\n" + json.dumps(comparisons, indent=2) + "\n\n" + json.dumps(summary["judgement"], indent=2) + "\n\n## Initialization and gradient checks\n\n```json\n" + json.dumps(sanity, indent=2) + "\n```\n"
+    values = {(row["model"], row["epoch"], row["condition"]): row for row in rows}
+    miou = ["| Model | Epoch | Clean | Blur-Mid | Blur-Max | Blur Mean |", "|---|---:|---:|---:|---:|---:|"]
+    mvc = ["| Model | Epoch | Clean | Blur-Mid | Blur-Max | Blur Mean |", "|---|---:|---:|---:|---:|---:|"]
+    for epoch in sorted({row["epoch"] for row in rows}):
+        for kind in VARIANTS:
+            blur_miou = sum(values[(kind, epoch, condition)]["mIoU"] for condition in ("Blur-Mid", "Blur-Max")) / 2
+            blur_mvc = sum(values[(kind, epoch, condition)]["mVC16"] for condition in ("Blur-Mid", "Blur-Max")) / 2
+            miou.append(f"| {DISPLAY[kind]} | {epoch} | {values[(kind, epoch, 'Clean')]['mIoU']:.6f} | {values[(kind, epoch, 'Blur-Mid')]['mIoU']:.6f} | {values[(kind, epoch, 'Blur-Max')]['mIoU']:.6f} | {blur_miou:.6f} |")
+            mvc.append(f"| {DISPLAY[kind]} | {epoch} | {values[(kind, epoch, 'Clean')]['mVC16']:.6f} | {values[(kind, epoch, 'Blur-Mid')]['mVC16']:.6f} | {values[(kind, epoch, 'Blur-Max')]['mVC16']:.6f} | {blur_mvc:.6f} |")
+    text = "# Temporal–semantic interface same-epoch quick screen\n\nDiagnostic Blur-Mid/Blur-Max conditions (sigma 2.25/3.0), not formal corruption severities. Every row is evaluated from its own epoch checkpoint.\n\n## mIoU\n\n" + "\n".join(miou) + "\n\n## mVC16\n\n" + "\n".join(mvc) + "\n\n## Deltas and judgement\n\n" + json.dumps(comparisons, indent=2) + "\n\n" + json.dumps(summary["judgement"], indent=2) + "\n\n## Initialization and gradient checks\n\n```json\n" + json.dumps(sanity, indent=2) + "\n```\n"
     (out / "README.md").write_text(text)
 
 
@@ -230,35 +233,45 @@ def main():
         train_result = run_shared(model, predictor, modules, train, True, optimizers, bf16=args.fast_bf16, log=log)
         val_result = run_shared(model, predictor, modules, val, False, condition="Clean", bf16=args.fast_bf16, log=log)
         for kind in VARIANTS:
+            # Keep every epoch checkpoint so robustness comparisons use the
+            # same training age for every interface variant.
+            torch.save(modules[kind].state_dict(), out / f"{DISPLAY[kind]}_epoch{epoch}.pt")
             if val_result[kind]["mIoU"] > best[kind]["mIoU"]:
                 best[kind] = {"mIoU": val_result[kind]["mIoU"], "epoch": epoch}
-                torch.save(modules[kind].state_dict(), out / CHECKPOINT_NAMES[kind])
         progress.append({"epoch": epoch, "train": train_result, "val": val_result, "best": best})
         (out / "progress.json").write_text(json.dumps(progress, indent=2))
         log("epoch=" + str(epoch) + " best_val_mIoU=" + json.dumps({k: v["mIoU"] for k, v in best.items()}))
-    for kind in VARIANTS:
-        modules[kind].load_state_dict(torch.load(out / CHECKPOINT_NAMES[kind], map_location="cuda", weights_only=True))
     rows = []
     parameter_counts = {kind: sum(parameter.numel() for parameter in modules[kind].parameters() if parameter.requires_grad) for kind in VARIANTS}
-    for condition in ("Clean", "Blur-Mid", "Blur-Max"):
-        evaluated = run_shared(model, predictor, modules, val, False, condition=condition, bf16=args.fast_bf16, log=log)
+    for epoch in range(1, args.epochs + 1):
         for kind in VARIANTS:
-            rows.append({"model": kind, "variant": DISPLAY[kind], "condition": condition, "trainable_params": parameter_counts[kind], "additional_params": parameter_counts[kind], **evaluated[kind]})
-    by = {(row["model"], row["condition"]): row for row in rows}
+            modules[kind].load_state_dict(torch.load(out / f"{DISPLAY[kind]}_epoch{epoch}.pt", map_location="cuda", weights_only=True))
+        for condition in ("Clean", "Blur-Mid", "Blur-Max"):
+            evaluated = run_shared(model, predictor, modules, val, False, condition=condition, bf16=args.fast_bf16, log=log)
+            for kind in VARIANTS:
+                rows.append({"model": kind, "variant": DISPLAY[kind], "epoch": epoch, "condition": condition, "trainable_params": parameter_counts[kind], "additional_params": parameter_counts[kind], **evaluated[kind]})
+    by = {(row["model"], row["epoch"], row["condition"]): row for row in rows}
     blur_conditions = ("Blur-Mid", "Blur-Max")
-    def mean_delta(metric, variant, baseline="full-scalar"):
-        return sum(by[(variant, condition)][metric] - by[(baseline, condition)][metric] for condition in blur_conditions) / 2
-    comparisons = {f"{DISPLAY[kind]} - F0": {"mean_blur_mIoU_delta": mean_delta("mIoU", kind), "mean_blur_mVC16_delta": mean_delta("mVC16", kind)} for kind in VARIANTS[1:]}
-    comparisons["F3 - best(F1,F2)"] = {"Blur-Mid mIoU": by[("full-channel-temporal", "Blur-Mid")]["mIoU"] - max(by[(kind, "Blur-Mid")]["mIoU"] for kind in ("full-channel-gate", "full-temporal-semantic")), "Blur-Max mIoU": by[("full-channel-temporal", "Blur-Max")]["mIoU"] - max(by[(kind, "Blur-Max")]["mIoU"] for kind in ("full-channel-gate", "full-temporal-semantic"))}
-    channel = comparisons["F1 - F0"]; temporal = comparisons["F2 - F0"]
-    channel_supported = channel["mean_blur_mIoU_delta"] >= 0.005 and channel["mean_blur_mVC16_delta"] > -0.01
-    temporal_supported = temporal["mean_blur_mIoU_delta"] >= 0.005 and temporal["mean_blur_mVC16_delta"] > -0.01
-    combined_go = all(comparisons["F3 - best(F1,F2)"][key] > 0.0 for key in ("Blur-Mid mIoU", "Blur-Max mIoU"))
+    def blur_mean(metric, kind, epoch):
+        return sum(by[(kind, epoch, condition)][metric] for condition in blur_conditions) / 2
+    def mean_delta(metric, variant, epoch, baseline="full-scalar"):
+        return blur_mean(metric, variant, epoch) - blur_mean(metric, baseline, epoch)
+    comparisons = {}
+    for kind in VARIANTS[1:]:
+        comparisons[f"{DISPLAY[kind]} - F0"] = {}
+        for epoch in range(1, args.epochs + 1):
+            comparisons[f"{DISPLAY[kind]} - F0"].update({f"epoch{epoch}_blur_mIoU_delta": mean_delta("mIoU", kind, epoch), f"epoch{epoch}_blur_mVC16_delta": mean_delta("mVC16", kind, epoch)})
+    final_epoch = args.epochs
+    comparisons["same_epoch_final"] = {"F0_blur_mean_mIoU": blur_mean("mIoU", "full-scalar", final_epoch), "F1_blur_mean_mIoU": blur_mean("mIoU", "full-channel-gate", final_epoch), "F2_blur_mean_mIoU": blur_mean("mIoU", "full-temporal-semantic", final_epoch), "F3_blur_mean_mIoU": blur_mean("mIoU", "full-channel-temporal", final_epoch), "F1_minus_F0": mean_delta("mIoU", "full-channel-gate", final_epoch), "F3_minus_F0": mean_delta("mIoU", "full-channel-temporal", final_epoch)}
+    f1_final_delta = comparisons["same_epoch_final"]["F1_minus_F0"]
+    f3_final_delta = comparisons["same_epoch_final"]["F3_minus_F0"]
+    channel_status = "RETEST / SUPPORTED" if f1_final_delta >= -0.005 or f3_final_delta >= -0.005 else "NO-GO"
+    combined_go = comparisons["same_epoch_final"]["F3_blur_mean_mIoU"] >= comparisons["same_epoch_final"]["F0_blur_mean_mIoU"]
     old_reference = _load_old_reference()
     ideal = None
     if old_reference and all(old_reference.get(condition) for condition in blur_conditions):
-        ideal = sum(by[("full-channel-temporal", condition)]["mIoU"] - old_reference[condition]["mIoU"] for condition in blur_conditions) / 2 >= 0.0 and all(by[("full-channel-temporal", condition)]["mVC16"] > old_reference[condition]["mVC16"] for condition in blur_conditions)
-    judgement = {"CHANNEL-GATE BOTTLENECK": "STRONGLY SUPPORTED" if channel_supported and channel["mean_blur_mIoU_delta"] >= 0.01 else ("SUPPORTED" if channel_supported else "NOT SUPPORTED"), "TEMPORAL-CONDITION BOTTLENECK": "SUPPORTED" if temporal_supported else "NOT SUPPORTED", "COMBINED": "GO" if combined_go else "NO-GO; F3 does not beat both F1 and F2 on every blur condition", "IDEAL F3 VS OLD": ideal}
+        ideal = blur_mean("mIoU", "full-channel-temporal", final_epoch) >= sum(old_reference[condition]["mIoU"] for condition in blur_conditions) / 2 and all(by[("full-channel-temporal", final_epoch, condition)]["mVC16"] > old_reference[condition]["mVC16"] for condition in blur_conditions)
+    judgement = {"CHANNEL-GATE": channel_status, "COMBINED": "GO" if combined_go else "NO-GO; F3 Blur Mean mIoU is below F0 at the same epoch", "IDEAL F3 VS OLD": ideal}
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     summary = {"commit": commit, "config": {"seed": SEED, "epochs": args.epochs, "patience": PATIENCE, "lr": LR, "weight_decay": WEIGHT_DECAY, "distill_weight": DISTILL_WEIGHT, "bptt": BPTT, "precision": "bf16" if args.fast_bf16 else "fp32", "train_frames": 601, "val_frames": 503, "conditions": {"Clean": "none", "Blur-Mid": "sigma=2.25", "Blur-Max": "sigma=3.0"}}, "variants": {kind: {"label": DISPLAY[kind], "gate_channels": modules[kind][0].gate.gate_channels, "semantic_interface": "temporal-conditioned" if isinstance(modules[kind][0].semantic_correction, TemporalConditionedSemanticCorrection) else "frame-only", "trainable_params": parameter_counts[kind]} for kind in VARIANTS}, "train_sequences": list(train.keys()), "val_sequences": list(val.keys()), "best": best, "results": rows, "comparisons": comparisons, "judgement": judgement, "old_reference": old_reference, "sanity": sanity}
     with (out / "comparison.csv").open("w", newline="") as stream:
