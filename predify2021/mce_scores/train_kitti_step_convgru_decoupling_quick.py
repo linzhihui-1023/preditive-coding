@@ -134,11 +134,19 @@ def run_shared(model, predictor, modules, cached, train=False, optimizers=None, 
                 effective = frame >= warmup_frame_count(len(frames))
                 for kind in KINDS:
                     state = states[kind]
+                    previous_pending = state["pending"] if kind == "full" else None
                     posterior, state["hidden"], values = correction_step(kind, modules[kind], observation, state["pending_dynamics"], state["pending_semantic"], state["hidden"])
+                    current_prediction = None
                     if kind == "full":
-                        state["pending"] = (values["z1"]["predicted_next_task_error"], values["z4"]["predicted_next_task_error"])
+                        current_prediction = (
+                            values["z1"]["predicted_next_task_error"],
+                            values["z4"]["predicted_next_task_error"],
+                        )
                     if not effective:
-                        if state["hidden"] is not None: state["hidden"] = tuple(value.detach() for value in state["hidden"])
+                        if state["hidden"] is not None:
+                            state["hidden"] = tuple(value.detach() for value in state["hidden"])
+                        if current_prediction is not None:
+                            state["pending"] = tuple(value.detach() for value in current_prediction)
                         continue
                     counts[kind]["effective_frames"] += 1
                     logits = corrected_logits(model, raw, observation, posterior, tuple(image.shape[-2:])); mask = entry["mask"].long().cuda(non_blocking=True)
@@ -147,14 +155,21 @@ def run_shared(model, predictor, modules, cached, train=False, optimizers=None, 
                         temporal = torch.zeros((), device="cuda")
                         if kind == "full":
                             current_task = (values["z1"]["task_error"], values["z4"]["task_error"])
-                            if state["pending"] is not None: temporal = F.smooth_l1_loss(state["pending"][0], current_task[0].detach()) + F.smooth_l1_loss(state["pending"][1], current_task[1].detach())
+                            if previous_pending is not None:
+                                temporal = (
+                                    F.smooth_l1_loss(previous_pending[0], current_task[0].detach())
+                                    + F.smooth_l1_loss(previous_pending[1], current_task[1].detach())
+                                )
+                            state["pending"] = current_prediction
                             sums[kind]["temporal_loss"] += temporal.detach(); sums[kind]["gate"] += values["z1"]["gate"].mean().detach(); sums[kind]["delta"] += values["z1"]["delta"].abs().mean().detach(); counts[kind]["gate_frames"] += 1
                         loss = segmentation + temporal; state["chunk"].append(loss); sums[kind]["loss"] += loss.detach(); counts[kind]["loss_frames"] += 1
                         if len(state["chunk"]) == BPTT: flush(states, optimizers, [kind])
                     else:
                         prediction = logits.argmax(1).squeeze(0).cpu(); update_confusion_matrix(confusion[kind], prediction, mask.cpu()); vcs[kind].append(mask.cpu(), {"model": prediction}); counts[kind]["metric_frames"] += 1
-                        if kind == "full": sums[kind]["gate"] += values["z1"]["gate"].mean(); sums[kind]["delta"] += values["z1"]["delta"].abs().mean(); counts[kind]["gate_frames"] += 1
-                        state["hidden"] = tuple(value.detach() for value in state["hidden"]) if state["hidden"] is not None else None; state["pending"] = tuple(value.detach() for value in state["pending"]) if state["pending"] is not None else None
+                        if kind == "full":
+                            sums[kind]["gate"] += values["z1"]["gate"].mean(); sums[kind]["delta"] += values["z1"]["delta"].abs().mean(); counts[kind]["gate_frames"] += 1
+                            state["pending"] = tuple(value.detach() for value in current_prediction)
+                        state["hidden"] = tuple(value.detach() for value in state["hidden"]) if state["hidden"] is not None else None
                 dyn, sem, *ph = next_role_prediction(predictor, observation, current_error, shared["predictor_hidden"])
                 for kind in KINDS: states[kind].update(pending_dynamics=dyn, pending_semantic=sem, predictor_hidden=ph)
             if log and frame % 25 == 0: log(f"condition={condition} sequence={sequence} frame={frame}/{len(frames)}")
