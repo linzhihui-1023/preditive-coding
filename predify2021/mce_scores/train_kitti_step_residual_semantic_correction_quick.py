@@ -293,6 +293,12 @@ def main():
 
     sanity = semantic_refinement_sanity()
 
+    # Reset RNG after the synthetic sanity check so formal model
+    # initialization exactly follows the configured experimental seed.
+    random.seed(SEED)
+    torch.manual_seed(SEED)
+    torch.cuda.manual_seed_all(SEED)
+
     paths = make_paths()
     model, predictor = load_role_components(
         paths["static"],
