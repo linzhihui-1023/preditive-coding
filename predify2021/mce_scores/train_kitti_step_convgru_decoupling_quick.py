@@ -95,11 +95,12 @@ def _run(model, predictor, corrections, groups, kind, optimizer=None, severity=1
                     + F.smooth_l1_loss(pending_prediction[1], error.z4.detach())
                 ).item()
             posterior, hidden, values = _step_correction(kind, corrections, observation, pending_dynamics, pending_semantic, hidden)
-            logits = _host_logits(model, raw, observation, posterior, tuple(image.shape[-2:]))
-            mask = semantic_mask_from_panoptic_png(sample["mask_path"]).cuda()
-            loss = F.cross_entropy(logits, mask.unsqueeze(0), ignore_index=255) + DISTILL_WEIGHT * F.kl_div(F.log_softmax(logits, 1), F.softmax(clean_logits.detach(), 1), reduction="none").sum(1).mean()
-            if kind == "full":
-                loss = loss + F.smooth_l1_loss(values["z1"]["predicted_next_task_error"], error.z1.detach())
+            with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=train):
+                logits = _host_logits(model, raw, observation, posterior, tuple(image.shape[-2:]))
+                mask = semantic_mask_from_panoptic_png(sample["mask_path"]).cuda()
+                loss = F.cross_entropy(logits, mask.unsqueeze(0), ignore_index=255) + DISTILL_WEIGHT * F.kl_div(F.log_softmax(logits, 1), F.softmax(clean_logits.detach(), 1), reduction="none").sum(1).mean()
+                if kind == "full":
+                    loss = loss + F.smooth_l1_loss(values["z1"]["predicted_next_task_error"], error.z1.detach())
                 pending_prediction = (
                     values["z1"]["predicted_next_task_error"],
                     values["z4"]["predicted_next_task_error"],
@@ -127,7 +128,7 @@ def _run(model, predictor, corrections, groups, kind, optimizer=None, severity=1
 
 
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument("--root", default="/home/lin/predify/kitti_step"); parser.add_argument("--output", default="results/kitti_step_convgru_decoupling_quick_c8f1860"); args = parser.parse_args()
+    parser = argparse.ArgumentParser(); parser.add_argument("--root", default="/home/lin/predify/kitti_step"); parser.add_argument("--output", default="results/kitti_step_convgru_decoupling_quick_c8f1860"); parser.add_argument("--epochs", type=int, default=EPOCHS); args = parser.parse_args()
     if not torch.cuda.is_available(): raise RuntimeError("CUDA is required")
     random.seed(SEED); torch.manual_seed(SEED); torch.cuda.manual_seed_all(SEED)
     paths = make_paths()
@@ -139,7 +140,7 @@ def main():
     for kind in ("old", "semantic-only", "full"):
         old, semantic, full = _make_models(); modules = {"old": old, "semantic-only": semantic, "full": full}[kind]; optimizer = torch.optim.AdamW(modules.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
         best = None; stale = 0
-        for epoch in range(EPOCHS):
+        for epoch in range(args.epochs):
             _run(model, predictor, modules, train, kind, optimizer, 1, True)
             metrics = _run(model, predictor, modules, val, kind, None, 1, False)
             if best is None or metrics["mIoU"] > best["mIoU"]: best = metrics; stale = 0; torch.save(modules.state_dict(), out / f"{kind.replace('-', '_')}.pt")
@@ -149,7 +150,7 @@ def main():
             results[(kind, condition)] = _run(model, predictor, modules, val, kind, None, severity, False)
     rows = [{"model": k[0], "condition": k[1], **v} for k, v in results.items()]
     with (out / "comparison.csv").open("w", newline="") as stream: writer = csv.DictWriter(stream, fieldnames=sorted({key for row in rows for key in row})); writer.writeheader(); writer.writerows(rows)
-    summary = {"config": {"seed": SEED, "epochs": EPOCHS, "lr": LR, "weight_decay": WEIGHT_DECAY, "bptt": BPTT, "distill_weight": DISTILL_WEIGHT}, "train_sequences": list(train), "val_sequences": list(val), "results": rows}
+    summary = {"config": {"seed": SEED, "epochs": args.epochs, "lr": LR, "weight_decay": WEIGHT_DECAY, "bptt": BPTT, "distill_weight": DISTILL_WEIGHT}, "train_sequences": list(train), "val_sequences": list(val), "results": rows}
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str) + "\n")
     print(json.dumps(summary, indent=2, default=str))
 
