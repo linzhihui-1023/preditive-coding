@@ -14,7 +14,7 @@ from predify2021.datasets.kitti_step import (
     pil_rgb_to_unit_tensor,
     semantic_mask_from_panoptic_png,
 )
-from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import load_image, sequence_groups
+from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import sequence_groups
 from predify2021.mce_scores.evaluate_kitti_step_static_baseline import compute_iou, update_confusion_matrix
 from predify2021.mce_scores.kitti_step_cityscapes_c import (
     CITYSCAPES_C_COMMON_CORRUPTIONS,
@@ -81,7 +81,7 @@ def load_clean_and_corrupted(sample, corruption, severity, seed):
     with Image.open(Path(sample["image_path"])) as opened:
         rgb = opened.convert("RGB")
         clean = pil_rgb_to_unit_tensor(rgb).unsqueeze(0).cuda()
-        source = np.asarray(rgb, dtype=np.uint8)
+        source = np.array(rgb, dtype=np.uint8)
     corrupted = apply_cityscapes_c_corruption_uint8(
         source, corruption, severity, seed=seed
     )
@@ -378,6 +378,7 @@ def main():
         "smoke": args.smoke,
         "trainable_parameter_count": sum(p.numel() for p in semantic_parameters),
         "frozen_dynamics_trainable_parameter_count": 0,
+        "host_trainable_parameter_count": sum(p.numel() for p in model.parameters() if p.requires_grad),
         "config": {
             "max_epochs": epochs,
             "patience": args.patience,
@@ -388,7 +389,8 @@ def main():
             "weight_decay": 0.01,
             "loss": "KD + lambda_ref * SmoothL1(M_sem_t+1, Z_clean_t+1) on z1/z4",
             "target_alignment": "predictor.step(O_t,E_t) -> t+1",
-            "augmentation": "Common corruption augmentation on KITTI-STEP train; not a formal Cityscapes-C benchmark",
+            "augmentation": "Common corruption augmentation for Semantic Branch training; not a formal Cityscapes-C benchmark",
+            "validation_corruption_policy": "fixed deterministic internal corruption assignment (condition_epoch=0) for checkpoint selection only; formal robustness evaluation remains separate",
             "corruption_scope": "type+severity fixed for each sequence; deterministic realization changes per frame",
             "training_corruptions": list(TRAIN_CORRUPTIONS),
             "excluded_training_corruptions": {
