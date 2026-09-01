@@ -123,7 +123,11 @@ class TemporalErrorGate(nn.Module):
         self.gate_head = nn.Conv2d(channels, 1, kernel_size=1)
 
     def forward(self, hidden):
-        return torch.sigmoid(self.gate_head(hidden.detach()))
+        detached_hidden = hidden.detach()
+        zero_hidden = torch.zeros_like(detached_hidden)
+        active_score = torch.sigmoid(self.gate_head(detached_hidden))
+        zero_score = torch.sigmoid(self.gate_head(zero_hidden))
+        return (active_score - zero_score).abs()
 
 
 class ExplicitSemanticCorrection(nn.Module):
@@ -185,6 +189,14 @@ class DecoupledSemanticTemporalErrorCorrection(nn.Module):
             "semantic_residual": semantic_residual,
             "delta": delta,
             "predicted_next_task_error": predicted_next_task_error,
+        }
+
+    def forward_semantic_only(self, observation, semantic_reference):
+        """Apply explicit semantic recovery without evaluating the temporal branch."""
+        semantic_residual = self.semantic_correction(observation, semantic_reference)
+        return observation + semantic_residual, {
+            "semantic_residual": semantic_residual,
+            "delta": semantic_residual,
         }
 
 
