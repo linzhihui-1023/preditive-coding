@@ -146,6 +146,13 @@ class ExplicitSemanticCorrection(nn.Module):
             torch.cat((observation, semantic_reference, semantic_reference - observation), dim=1)
         )
 
+    def forward_semantic_only(self, observation, semantic_reference):
+        semantic_residual = self.forward(observation, semantic_reference)
+        return observation + semantic_residual, {
+            "semantic_residual": semantic_residual,
+            "delta": semantic_residual,
+        }
+
 
 class TemporalErrorPredictionHead(nn.Module):
     """Predict the next temporal error state for a future auxiliary loss."""
