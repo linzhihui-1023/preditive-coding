@@ -423,6 +423,11 @@ def main():
         default=8,
         help="Semantic-state-only reset period for the diagnostic control.",
     )
+    parser.add_argument(
+        "--predictor-checkpoint",
+        default=None,
+        help="Optional RoleSeparatedRecurrentPredictor checkpoint to diagnose.",
+    )
     args = parser.parse_args()
 
     if not torch.cuda.is_available():
@@ -433,6 +438,8 @@ def main():
     torch.cuda.manual_seed_all(SEED)
 
     paths = make_paths()
+    if args.predictor_checkpoint:
+        paths["predictor"] = Path(args.predictor_checkpoint)
     model, predictor = load_role_components(
         paths["static"],
         paths["adapter"],
