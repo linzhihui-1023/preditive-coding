@@ -144,20 +144,28 @@ class ErrorGuidedSemanticRecurrentCell(nn.Module):
 
 
 class SemanticRestorationHead(nn.Module):
-    """Read the temporal semantic correction state as a same-frame Z4 residual."""
+    """Read error-driven semantic state as a same-frame Z4 residual.
+
+    Observation can modulate the state-to-residual mapping, but it cannot create a
+    residual when the semantic correction state is zero. This prevents a direct
+    single-frame observation bypass around the prediction-error-driven state.
+    """
 
     def __init__(self, channels=UNIFIED_STATE_CHANNELS, hidden_channels=128):
         super().__init__()
-        self.body = nn.Sequential(
-            nn.Conv2d(hidden_channels + channels, hidden_channels, 3, padding=1),
-            nn.GELU(),
+        self.state_projection = nn.Conv2d(
+            hidden_channels, hidden_channels, 3, padding=1, bias=False
         )
-        self.output = nn.Conv2d(hidden_channels, channels, 3, padding=1)
+        self.observation_modulation = nn.Conv2d(
+            channels, hidden_channels, 1, bias=False
+        )
+        self.output = nn.Conv2d(hidden_channels, channels, 3, padding=1, bias=False)
         nn.init.zeros_(self.output.weight)
-        nn.init.zeros_(self.output.bias)
 
     def forward(self, semantic_state, observation_z4):
-        return self.output(self.body(torch.cat((semantic_state, observation_z4), dim=1)))
+        state_command = torch.tanh(self.state_projection(semantic_state))
+        observation_gain = torch.tanh(self.observation_modulation(observation_z4))
+        return self.output(state_command * (1.0 + observation_gain))
 
 
 class ErrorGuidedSemanticRestorationPredictor(nn.Module):
