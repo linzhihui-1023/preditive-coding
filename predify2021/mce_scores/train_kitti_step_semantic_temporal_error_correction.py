@@ -6,9 +6,12 @@ from pathlib import Path
 
 import torch
 from torch.nn import functional as F
+from torch.utils.data import DataLoader, Dataset
+from PIL import Image
 
 from predify2021.datasets.kitti_step import (
     KITTISTEPSegmentationDataset,
+    pil_rgb_to_unit_tensor,
     semantic_mask_from_panoptic_png,
 )
 from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import sequence_groups
@@ -42,6 +45,7 @@ from predify2021.mce_scores.semantic_temporal_error_step import (
 )
 from predify2021.mce_scores.video_metrics import VideoConsistency, weighted_iou
 from predify2021.model_factory.deeplabv3plus_resnet50 import (
+    BackboneFeatures,
     HostFeature,
     UnifiedFeatures,
 )
@@ -59,6 +63,9 @@ TRUNCATED_BPTT = 4
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.01
 DISTILL_WEIGHT = 0.5
+FROZEN_ENCODE_BATCH_SIZE = 8
+LOADER_WORKERS = 8
+LOADER_PREFETCH_FACTOR = 2
 
 
 def parameter_efficiency_metrics(model, predictor, corrections):
@@ -114,10 +121,101 @@ def corrected_host_feature(model, raw_features, observation, posterior, output_s
     return residual_writeback_host_feature(model, raw_features, delta, output_size)
 
 
-def semantic_losses(model, raw_features, observation, posterior, clean_logits, mask, output_size):
+class SequenceChunkDataset(Dataset):
+    """Ordered per-sequence chunks for parallel CPU image loading."""
+
+    def __init__(self, groups, chunk_size):
+        self.chunks = []
+        for sequence_id, samples in groups.items():
+            for start in range(0, len(samples), chunk_size):
+                self.chunks.append((sequence_id, start, samples[start : start + chunk_size], len(samples)))
+
+    def __len__(self):
+        return len(self.chunks)
+
+    def __getitem__(self, index):
+        sequence_id, start, samples, total_frames = self.chunks[index]
+        images = []
+        masks = []
+        for sample in samples:
+            image = Image.open(sample["image_path"]).convert("RGB")
+            images.append(pil_rgb_to_unit_tensor(image))
+            masks.append(semantic_mask_from_panoptic_png(sample["mask_path"]))
+        return {
+            "images": torch.stack(images),
+            "masks": torch.stack(masks),
+            "sequence_id": sequence_id,
+            "start": start,
+            "total_frames": total_frames,
+        }
+
+
+def collate_sequence_chunk(chunks):
+    return chunks[0]
+
+
+def make_sequence_chunk_loader(groups):
+    dataset = SequenceChunkDataset(groups, FROZEN_ENCODE_BATCH_SIZE)
+    return DataLoader(
+        dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=LOADER_WORKERS,
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=LOADER_PREFETCH_FACTOR,
+        collate_fn=collate_sequence_chunk,
+    )
+
+
+def stack_backbone_features(features):
+    return BackboneFeatures(*(torch.cat([getattr(item, name) for item in features], dim=0) for name in ("c1", "c2", "c3", "c4")))
+
+
+def split_backbone_features(features, size):
+    return tuple(BackboneFeatures(*(getattr(features, name).split(size, dim=0)[index] for name in ("c1", "c2", "c3", "c4"))) for index in range(2))
+
+
+def select_backbone_features(features, index):
+    return BackboneFeatures(*(getattr(features, name)[index : index + 1] for name in ("c1", "c2", "c3", "c4")))
+
+
+def stack_unified_features(features):
+    return UnifiedFeatures(*(torch.cat([getattr(item, name) for item in features], dim=0) for name in ("z1", "z2", "z3", "z4")))
+
+
+def split_unified_features(features, size):
+    return tuple(UnifiedFeatures(*(getattr(features, name).split(size, dim=0)[index] for name in ("z1", "z2", "z3", "z4"))) for index in range(2))
+
+
+def select_unified_features(features, index):
+    return UnifiedFeatures(*(getattr(features, name)[index : index + 1] for name in ("z1", "z2", "z3", "z4")))
+
+
+def encode_frozen_sequence_chunk(model, clean_images, frame_indices, total_frames):
+    corrupted_images = torch.cat(
+        [
+            persistent_gaussian_blur(clean_images[index : index + 1], frame_index, total_frames)
+            for index, frame_index in enumerate(frame_indices)
+        ],
+        dim=0,
+    )
+    packed_images = torch.cat((clean_images, corrupted_images), dim=0)
+    with torch.no_grad():
+        packed_raw = model.extract_backbone_features(packed_images)
+        packed_states = model.encode_backbone_features(packed_raw)
+        clean_logits = model.decode_from_host_feature(
+            HostFeature(packed_raw.c4[: len(clean_images)], packed_raw.c1[: len(clean_images)], tuple(clean_images.shape[-2:]))
+        )
+    clean_raw, corrupted_raw = split_backbone_features(packed_raw, len(clean_images))
+    clean_state, observation = split_unified_features(packed_states, len(clean_images))
+    return clean_raw, corrupted_raw, clean_state, observation, clean_logits
+
+
+def semantic_losses_batch(model, raw_features, observation, posterior, clean_logits, masks, output_size):
     host_feature = corrected_host_feature(model, raw_features, observation, posterior, output_size)
     logits = model.decode_from_host_feature(host_feature)
-    semantic = F.cross_entropy(logits, mask.unsqueeze(0).cuda(), ignore_index=255)
+    semantic = F.cross_entropy(logits, masks.cuda(non_blocking=True), ignore_index=255)
     teacher_probability = F.softmax(clean_logits.detach(), dim=1)
     distillation = F.kl_div(
         F.log_softmax(logits, dim=1), teacher_probability, reduction="none"
@@ -125,55 +223,125 @@ def semantic_losses(model, raw_features, observation, posterior, clean_logits, m
     return semantic, distillation, logits
 
 
-def flush_chunk(optimizer, losses):
-    if not losses:
-        return
-    optimizer.zero_grad(set_to_none=True)
-    (torch.stack(losses).mean()).backward()
-    optimizer.step()
-    losses.clear()
+def flush_bptt_batch(
+    model,
+    records,
+    output_size,
+    optimizer,
+    totals,
+    confusion,
+    video_consistency,
+    collect_video_metrics,
+):
+    raw_features = stack_backbone_features([record["raw"] for record in records])
+    observation = stack_unified_features([record["observation"] for record in records])
+    posterior = stack_unified_features([record["posterior"] for record in records])
+    clean_logits = torch.cat([record["clean_logits"] for record in records], dim=0)
+    masks = torch.cat([record["mask"] for record in records], dim=0)
+    semantic, distillation, logits = semantic_losses_batch(
+        model, raw_features, observation, posterior, clean_logits, masks, output_size
+    )
+    total = semantic + DISTILL_WEIGHT * distillation
+    if optimizer is not None:
+        optimizer.zero_grad(set_to_none=True)
+        total.backward()
+        optimizer.step()
+    totals["segmentation_cross_entropy"].add_(semantic.detach() * len(records))
+    totals["distillation_kl"].add_(distillation.detach() * len(records))
+    totals["total_loss"].add_(total.detach() * len(records))
+    finite_tensors = [logits, total]
+    for record in records:
+        values = record["values"]
+        hidden = record["hidden"]
+        finite_tensors.extend(
+            (
+                record["prediction_error"].z1,
+                record["prediction_error"].z4,
+                values["aligned_error_z1"],
+                values["aligned_error_z4"],
+                values["task_error_z1"],
+                values["task_error_z4"],
+                hidden.hidden[0],
+                hidden.hidden[1],
+                hidden.dynamic_error[0],
+                hidden.dynamic_error[1],
+                record["posterior"].z1,
+                record["posterior"].z4,
+            )
+        )
+    finite = bool(torch.stack([torch.isfinite(value).all() for value in finite_tensors]).all().item())
+    if confusion is not None:
+        for index, record in enumerate(records):
+            prediction = logits[index].argmax(dim=0).cpu().to(torch.int64)
+            mask = record["mask"].squeeze(0)
+            update_confusion_matrix(confusion, prediction, mask)
+            if collect_video_metrics:
+                video_consistency.append(mask, {"current_model": prediction})
+    return finite
 
 
-def run_epoch(model, predictor, corrections, groups, optimizer=None, collect_validation_metrics=False):
+def run_epoch(
+    model,
+    predictor,
+    corrections,
+    sequence_loader,
+    optimizer=None,
+    collect_validation_metrics=False,
+    collect_video_metrics=False,
+):
     training = optimizer is not None
     corrections.train(training)
-    totals = {"segmentation_cross_entropy": 0.0, "distillation_kl": 0.0, "total_loss": 0.0}
+    totals = {key: torch.zeros((), device="cuda") for key in ("segmentation_cross_entropy", "distillation_kl", "total_loss")}
     frame_count = 0
-    chunk_losses = []
     finite = True
     confusion = torch.zeros((19, 19), dtype=torch.int64) if collect_validation_metrics else None
-    video_consistency = VideoConsistency(("current_model",)) if collect_validation_metrics else None
-    for samples in groups.values():
-        hidden = None
-        pending_dynamics = None
-        pending_semantic = None
-        if video_consistency is not None:
-            video_consistency.reset_sequence()
-        for frame_index, sample in enumerate(samples):
-            clean_image = load_image(sample)
-            corrupted_image = persistent_gaussian_blur(clean_image, frame_index, len(samples))
-            with torch.no_grad():
-                clean_raw = model.extract_backbone_features(clean_image)
-                corrupted_raw = model.extract_backbone_features(corrupted_image)
-                clean_state = model.encode_backbone_features(clean_raw)
-                observation = model.encode_backbone_features(corrupted_raw)
-                clean_logits = model.decode_from_host_feature(
-                    HostFeature(clean_raw.c4, clean_raw.c1, tuple(clean_image.shape[-2:]))
-                )
-                if hidden is None:
-                    hidden = zero_semantic_temporal_state(observation)
-                if frame_index == 0:
+    video_consistency = VideoConsistency(("current_model",)) if collect_video_metrics else None
+    hidden = None
+    predictor_hidden = None
+    pending_dynamics = None
+    pending_semantic = None
+    previous_sequence = None
+    records = []
+    for chunk in sequence_loader:
+        sequence_id = chunk["sequence_id"]
+        start = chunk["start"]
+        total_frames = chunk["total_frames"]
+        if sequence_id != previous_sequence:
+            hidden = None
+            predictor_hidden = predictor.initial_state()
+            pending_dynamics = None
+            pending_semantic = None
+            previous_sequence = sequence_id
+            if video_consistency is not None:
+                video_consistency.reset_sequence()
+        clean_images = chunk["images"].cuda(non_blocking=True)
+        masks = chunk["masks"]
+        frame_indices = range(start, start + len(clean_images))
+        clean_raw, corrupted_raw, _, observation_batch, clean_logits_batch = encode_frozen_sequence_chunk(
+            model, clean_images, frame_indices, total_frames
+        )
+        output_size = tuple(clean_images.shape[-2:])
+        for index, frame_index in enumerate(frame_indices):
+            raw = select_backbone_features(corrupted_raw, index)
+            observation = select_unified_features(observation_batch, index)
+            clean_logits = clean_logits_batch[index : index + 1]
+            mask = masks[index : index + 1]
+            if hidden is None:
+                hidden = zero_semantic_temporal_state(observation)
+            if frame_index == 0:
+                with torch.no_grad():
                     pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
-                        predictor, observation, zero_state(observation), predictor.initial_state()
+                        predictor, observation, zero_state(observation), predictor_hidden
                     )
-                    continue
-                prediction_error = error_state(observation, pending_dynamics)
-                if frame_index == 1:
+                continue
+            prediction_error = error_state(observation, pending_dynamics)
+            if frame_index == 1:
+                with torch.no_grad():
                     pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
                         predictor, observation, prediction_error, predictor_hidden
                     )
-                    continue
-            if frame_index < warmup_frame_count(len(samples)):
+                continue
+            if frame_index < warmup_frame_count(total_frames):
                 with torch.no_grad():
                     _, hidden, _ = semantic_temporal_error_step(
                         corrections, observation, pending_dynamics, pending_semantic, hidden
@@ -186,74 +354,48 @@ def run_epoch(model, predictor, corrections, groups, optimizer=None, collect_val
             posterior, hidden, values = semantic_temporal_error_step(
                 corrections, observation, pending_dynamics, pending_semantic, hidden
             )
-            mask = semantic_mask_from_panoptic_png(sample["mask_path"])
-            semantic, distillation, logits = semantic_losses(
-                model,
-                corrupted_raw,
-                observation,
-                posterior,
-                clean_logits,
-                mask,
-                tuple(clean_image.shape[-2:]),
+            records.append(
+                {
+                    "raw": raw,
+                    "observation": observation,
+                    "posterior": posterior,
+                    "clean_logits": clean_logits,
+                    "mask": mask,
+                    "prediction_error": prediction_error,
+                    "values": values,
+                    "hidden": hidden,
+                }
             )
-            total = semantic + DISTILL_WEIGHT * distillation
-            if training:
-                chunk_losses.append(total)
-                if len(chunk_losses) == TRUNCATED_BPTT:
-                    flush_chunk(optimizer, chunk_losses)
-                    hidden = detach_error_state(hidden)
-            measurements = {
-                "segmentation_cross_entropy": semantic,
-                "distillation_kl": distillation,
-                "total_loss": total,
-            }
-            for key, value in measurements.items():
-                totals[key] += value.detach().item()
-            finite = finite and all(
-                torch.isfinite(value).all().item()
-                for value in (
-                    prediction_error.z1,
-                    prediction_error.z4,
-                    values["aligned_error_z1"],
-                    values["aligned_error_z4"],
-                    values["task_error_z1"],
-                    values["task_error_z4"],
-                    hidden.hidden[0],
-                    hidden.hidden[1],
-                    hidden.dynamic_error[0],
-                    hidden.dynamic_error[1],
-                    posterior.z1,
-                    posterior.z4,
-                    logits,
-                    total,
-                )
-            )
-            if collect_validation_metrics:
-                prediction = logits.argmax(dim=1).squeeze(0).cpu().to(torch.int64)
-                update_confusion_matrix(confusion, prediction, mask)
-                video_consistency.append(mask, {"current_model": prediction})
             frame_count += 1
             with torch.no_grad():
                 pending_dynamics, pending_semantic, *predictor_hidden = next_role_prediction(
                     predictor, observation, prediction_error, predictor_hidden
                 )
-            if not training:
+            if len(records) == TRUNCATED_BPTT:
+                finite = flush_bptt_batch(
+                    model, records, output_size, optimizer, totals, confusion, video_consistency, collect_video_metrics
+                ) and finite
+                records.clear()
                 hidden = detach_error_state(hidden)
-        if training:
-            flush_chunk(optimizer, chunk_losses)
-            if hidden is not None:
+            elif not training:
                 hidden = detach_error_state(hidden)
-    metrics = {key: value / frame_count for key, value in totals.items()}
+        if start + len(clean_images) == total_frames and records:
+            finite = flush_bptt_batch(
+                model, records, output_size, optimizer, totals, confusion, video_consistency, collect_video_metrics
+            ) and finite
+            records.clear()
+            hidden = detach_error_state(hidden)
+    metrics = {key: value.item() / frame_count for key, value in totals.items()}
     if collect_validation_metrics:
-        mvc = video_consistency.means()
         metrics.update(
             {
                 "miou": float(torch.nanmean(compute_iou(confusion)).item()),
                 "wiou": weighted_iou(confusion),
-                "mvc8": mvc[8]["current_model"],
-                "mvc16": mvc[16]["current_model"],
             }
         )
+    if collect_video_metrics:
+        mvc = video_consistency.means()
+        metrics.update({"mvc8": mvc[8]["current_model"], "mvc16": mvc[16]["current_model"]})
     return metrics, frame_count, finite
 
 
@@ -351,6 +493,8 @@ def main():
     gate = gates(model, predictor, corrections, train.samples[0])
     if not all((value if isinstance(value, bool) else value <= 1e-6) for key, value in gate.items() if key.endswith("passed")):
         raise RuntimeError("semantic temporal error correction gate failed")
+    train_loader = make_sequence_chunk_loader(train_groups)
+    val_loader = make_sequence_chunk_loader(val_groups)
     history = []
     best = None
     early_stopping_best_miou = None
@@ -361,19 +505,23 @@ def main():
         torch.cuda.synchronize()
         train_start = time.perf_counter()
         train_metrics, train_frames, train_finite = run_epoch(
-            model, predictor, corrections, train_groups, optimizer
+            model, predictor, corrections, train_loader, optimizer
         )
         torch.cuda.synchronize()
         train_seconds = time.perf_counter() - train_start
         train_throughput = train_frames / train_seconds
+        torch.cuda.synchronize()
+        val_start = time.perf_counter()
         with torch.no_grad():
             val_metrics, val_frames, val_finite = run_epoch(
                 model,
                 predictor,
                 corrections,
-                val_groups,
+                val_loader,
                 collect_validation_metrics=True,
             )
+        torch.cuda.synchronize()
+        val_seconds = time.perf_counter() - val_start
         row = {
             "epoch": epoch,
             "train": {
@@ -383,7 +531,13 @@ def main():
                 "epoch_seconds": train_seconds,
                 "throughput_frames_per_second": train_throughput,
             },
-            "val": {**val_metrics, "effective_frame_count": val_frames, "finite": val_finite},
+            "val": {
+                **val_metrics,
+                "effective_frame_count": val_frames,
+                "finite": val_finite,
+                "epoch_seconds": val_seconds,
+                "throughput_frames_per_second": val_frames / val_seconds,
+            },
         }
         if best is None:
             checkpoint_improved = True
@@ -432,12 +586,32 @@ def main():
             stopped_early = True
             stop_epoch = epoch
             break
+    best_payload = torch.load(
+        output / "best_semantic_temporal_error_correction.pt",
+        map_location="cpu",
+        weights_only=False,
+    )
+    corrections.load_state_dict(best_payload["corrections"], strict=True)
+    corrections.eval()
+    torch.cuda.synchronize()
+    final_start = time.perf_counter()
+    with torch.no_grad():
+        final_metrics, final_frames, final_finite = run_epoch(
+            model,
+            predictor,
+            corrections,
+            val_loader,
+            collect_validation_metrics=True,
+            collect_video_metrics=True,
+        )
+    torch.cuda.synchronize()
+    final_seconds = time.perf_counter() - final_start
     summary = {
         "experiment": "kitti_step_semantic_temporal_error_correction_training",
         "git_revision": os.environ.get("PREDIFY_GIT_REVISION"),
         "checkpoint": str(output / "best_semantic_temporal_error_correction.pt"),
         "parameter_efficiency": parameter_efficiency,
-        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "early_stopping_min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=epsilon_(t-1)+(Ts/tau_e)*(e_t-K_e*epsilon_(t-1))", "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME, "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_gain": DYNAMIC_ERROR_GAIN, "dynamic_error_usage": "tracked_only_not_connected_to_correction"},
+        "config": {"max_epochs": EPOCHS, "early_stopping_patience": EARLY_STOPPING_PATIENCE, "early_stopping_min_miou_improvement": EARLY_STOPPING_MIN_MIOU_IMPROVEMENT, "checkpoint_selection": "highest_val_miou_then_lower_val_loss", "miou_tie_tolerance": MIOU_TIE_TOLERANCE, "truncated_bptt": TRUNCATED_BPTT, "frozen_encode_batch_size": FROZEN_ENCODE_BATCH_SIZE, "loader_workers": LOADER_WORKERS, "loader_prefetch_factor": LOADER_PREFETCH_FACTOR, "optimizer": "AdamW", "learning_rate": LEARNING_RATE, "weight_decay": WEIGHT_DECAY, "seed": SEED, "temperature": 1.0, "blur_kernel_size": BLUR_KERNEL_SIZE, "blur_sigma_levels": BLUR_SIGMA_LEVELS, "blur_sigma_max": BLUR_SIGMA_MAX, "blur_warmup_fraction": BLUR_WARMUP_FRACTION, "warmup_used_for_state_only": True, "labels_used_for_training": True, "distillation_weight": DISTILL_WEIGHT, "prediction_error_definition": "observation_minus_prediction", "dynamic_error_definition": "epsilon_t=epsilon_(t-1)+(Ts/tau_e)*(e_t-K_e*epsilon_(t-1))", "dynamic_error_sample_time": DYNAMIC_ERROR_SAMPLE_TIME, "dynamic_error_time_constant": DYNAMIC_ERROR_TIME_CONSTANT, "dynamic_error_gain": DYNAMIC_ERROR_GAIN, "dynamic_error_usage": "tracked_only_not_connected_to_correction"},
         "dataset": {"train_sequence_count": len(train_groups), "train_frame_count": len(train.samples), "val_sequence_count": len(val_groups), "val_frame_count": len(val.samples)},
         "base_checkpoints": {key: str(value) for key, value in paths.items()},
         "gates": gate,
@@ -456,6 +630,13 @@ def main():
         "best_epoch": best["epoch"],
         "best_val_miou": best["val"]["miou"],
         "best_val_total_loss": best["val"]["total_loss"],
+        "final_validation": {
+            **final_metrics,
+            "effective_frame_count": final_frames,
+            "finite": final_finite,
+            "seconds": final_seconds,
+            "throughput_frames_per_second": final_frames / final_seconds,
+        },
         "early_stopping_best_miou": early_stopping_best_miou,
         "epochs_without_miou_improvement": epochs_without_improvement,
         "stopped_early": stopped_early,
