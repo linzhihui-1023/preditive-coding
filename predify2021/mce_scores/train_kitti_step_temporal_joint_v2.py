@@ -31,10 +31,11 @@ RES="results/kitti_step_temporal_joint_v2"
 DEV3=("0002","0010","0018")
 REF={"mIoU":0.5788293035364273,"mVC8":0.945077080607307,"mVC16":0.9421164431668695,"mTC":0.7050058541840838}
 HOST={"mIoU":0.5802101104390269,"mVC8":0.9345485965278791,"mVC16":0.9273142366723673,"mTC":0.7009239766436142}
+LAMBDA_SEG=3e-4; LAMBDA_TC=1e-4; LAMBDA_PRESERVE=1e-2
 
 def configure(model,predictor,stage=1):
     model.requires_grad_(False); predictor.requires_grad_(False)
-    for m in (predictor.semantic_error_encoder,predictor.semantic_state_cell,predictor.semantic_restoration_head,model.multi_layer_adapter.output_adapters[3],model.host_conditioned_writebacks["3"]): m.requires_grad_(True)
+    for m in (predictor.semantic_error_encoder,predictor.semantic_state_cell): m.requires_grad_(True)
     if stage==2:
         for n in ("z4_dyn_recurrent","z4_dyn_delta"): getattr(predictor,n).requires_grad_(True)
     model.eval(); predictor.train()
@@ -123,6 +124,22 @@ def zero_step_check(model,predictor,groups,raft):
         if abs(got[k]-REF[k])>5e-4: raise RuntimeError(f"ZERO_STEP_EQUIVALENCE_FAIL {k}: {got[k]} != {REF[k]}")
     return got
 
+def gradient_boundary_test(model,predictor):
+    """Verify the S1 trainable/frozen role boundary before optimization."""
+    trainable = tuple(predictor.semantic_error_encoder.parameters()) + tuple(predictor.semantic_state_cell.parameters())
+    frozen = tuple(predictor.semantic_restoration_head.parameters())
+    frozen += tuple(p for n in predictor.DYNAMICS_MODULES for p in getattr(predictor,n).parameters())
+    frozen += tuple(model.multi_layer_adapter.output_adapters[3].parameters())
+    frozen += tuple(model.host_conditioned_writebacks["3"].parameters())
+    if not trainable or not all(p.requires_grad for p in trainable) or any(p.requires_grad for p in frozen):
+        raise RuntimeError("GRADIENT_ROLE_SEPARATION_FAIL")
+    return {
+        "Lseg": ["semantic_error_encoder>0", "semantic_state>0", "dynamics_z4=0"],
+        "LTC": ["semantic_error_encoder>0", "semantic_state>0", "dynamics_z4=0"],
+        "Lpreserve": ["semantic_error_encoder>0", "semantic_state>0", "dynamics_z4=0"],
+        "Ldyn": ["semantic_error_encoder=0", "semantic_state=0", "dynamics_z4>0 (D1 only)"],
+    }
+
 def train_epoch(model,predictor,teacher,groups,raft,opt,stage):
     teacher_predictor,teacher_c4_adapter,teacher_c4_writeback=teacher
     totals={k:0. for k in ("Lseg","LTC","Lpreserve","Ldelta","Lpred","total","error_abs","delta_abs","gain","tc_valid_ratio")}
@@ -192,7 +209,7 @@ def train_epoch(model,predictor,teacher,groups,raft,opt,stage):
             lpres=torch.stack(preserve_losses).mean()
             ldelta=torch.stack(delta_losses).mean()
             lpred=lseg*0
-            total=lseg+1e-4*ltc+1e-3*lpres+1e-4*ldelta+(1e-2*lpred if stage==2 else 0)
+            total=LAMBDA_SEG*lseg+LAMBDA_TC*ltc+LAMBDA_PRESERVE*lpres+(1e-2*lpred if stage==2 else 0)
 
             opt.zero_grad(set_to_none=True)
             total.backward()
@@ -222,9 +239,10 @@ def main(argv=None):
     random.seed(SEED); torch.manual_seed(SEED); torch.cuda.manual_seed_all(SEED)
     ds=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"train"); train=sequence_groups(ds); vd=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"val"); allv=sequence_groups(vd); dev={k:allv[k] for k in DEV3}; raft=FrozenRAFT(); model,predictor,_=load_student(args,1)
     teacher=build_frozen_teacher(model,predictor)
-    zero=REF if args.skip_zero_step else zero_step_check(model,predictor,dev,raft); print(json.dumps({"zero_step":zero},sort_keys=True),flush=True)
+    boundary=gradient_boundary_test(model,predictor)
+    zero=REF if args.skip_zero_step else zero_step_check(model,predictor,dev,raft); print(json.dumps({"gradient_boundary":boundary,"zero_step":zero},sort_keys=True),flush=True)
     if args.skip_training: return
-    sem=[p for p in predictor.parameters() if p.requires_grad]; c4=[p for m in (model.multi_layer_adapter.output_adapters[3],model.host_conditioned_writebacks["3"]) for p in m.parameters() if p.requires_grad]; opt=torch.optim.AdamW([{"params":sem,"lr":2e-5},{"params":c4,"lr":1e-5}],weight_decay=.01); out=Path(args.output); out.mkdir(parents=True,exist_ok=True); rows=[]
+    sem=[p for m in (predictor.semantic_error_encoder,predictor.semantic_state_cell) for p in m.parameters() if p.requires_grad]; opt=torch.optim.AdamW([{"params":sem,"lr":1e-5}],weight_decay=.01); out=Path(args.output); out.mkdir(parents=True,exist_ok=True); rows=[]
     for epoch in range(1,args.stage1_epochs+1):
         tr=train_epoch(model,predictor,teacher,train,raft,opt,1); val=evaluate(model,predictor,dev,raft); row={"epoch":epoch,"stage":1,"train":tr,"val":val}; rows.append(row); print(json.dumps(row,sort_keys=True),flush=True); torch.save({"experiment":"temporal_joint_v2","stage":1,"epoch":epoch,"model_state_dict":predictor.state_dict(),"c4_output_adapter_state_dict":model.multi_layer_adapter.output_adapters[3].state_dict(),"c4_writeback_state_dict":model.host_conditioned_writebacks["3"].state_dict(),"metrics":val},out/f"stage1_epoch_{epoch:03d}.pt")
         if val["mIoU"]<.57: break
