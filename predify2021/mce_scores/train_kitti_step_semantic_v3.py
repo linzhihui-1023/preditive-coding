@@ -32,6 +32,8 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
 
 SEED, MAX_EPOCHS, PATIENCE, TBPTT_STEPS, LEARNING_RATE, WEIGHT_DECAY = 0, 15, 3, 8, 1e-4, 0.01
 FAST_VALIDATION_SEQUENCES = ("0002", "0010", "0018")
+LAMBDA_FEATURE = 1.0
+LAMBDA_SEGMENTATION = 1e-4
 
 
 def slice_state(state, index):
@@ -61,16 +63,17 @@ def residual_aware_loss(delta, target):
 
 def train_sequence(model, predictor, samples, epoch, sequence_index, optimizer, residual_aware, tbptt_steps, max_steps=0):
     if len(samples) < 2:
-        return {"steps": 0, "loss_sum": 0.0}
+        return {"steps": 0, "feature_loss_sum": 0.0, "segmentation_loss_sum": 0.0, "total_loss_sum": 0.0, "segmentation_windows": 0}
     condition, pattern = training_assignment(epoch, sequence_index)
     first, _, _, _, _ = encode_pair(model, samples[0], condition, pattern_uses_blur(pattern, 0, len(samples)))
     pending, h4, h1 = predictor.predict_next(first, zero_state(first), None, None)
     h_sem = predictor.initial_semantic_state(first)
     error_stats = predictor.initial_error_temporal_statistics()
-    losses, total, steps = [], 0.0, min(len(samples) - 1, max_steps) if max_steps else len(samples) - 1
+    losses, feature_total, segmentation_total, total_objective, segmentation_windows = [], 0.0, 0.0, 0.0, 0
+    steps = min(len(samples) - 1, max_steps) if max_steps else len(samples) - 1
     for offset in range(steps):
         frame = offset + 1
-        observation, clean, _, _, _ = encode_pair(model, samples[frame], condition, pattern_uses_blur(pattern, frame, len(samples)))
+        observation, clean, raw, _, output_size = encode_pair(model, samples[frame], condition, pattern_uses_blur(pattern, frame, len(samples)))
         prediction_error = error_state(observation, pending)
         restored, h_sem, diagnostics = predictor.restore_current(
             observation, pending, h_sem, error_temporal_state=error_stats
@@ -81,21 +84,28 @@ def train_sequence(model, predictor, samples, epoch, sequence_index, optimizer, 
             loss = residual_aware_loss(restored.z4 - observation.z4, target - observation.z4)
         else:
             loss = F.smooth_l1_loss(restored.z4, target)
-        losses.append(loss); total += float(loss.detach().item())
+        losses.append(loss); feature_total += float(loss.detach().item())
         with torch.no_grad():
             pending, h4, h1 = predictor.predict_next(observation, prediction_error, h4, h1)
-        if len(losses) == tbptt_steps or frame == steps:
-            optimizer.zero_grad(set_to_none=True); torch.stack(losses).mean().backward(); optimizer.step()
+        window_end = len(losses) == tbptt_steps or frame == steps
+        if window_end:
+            feature_window = torch.stack(losses).mean()
+            target_mask = semantic_mask_from_panoptic_png(samples[frame]["mask_path"]).unsqueeze(0).to(observation.z4.device)
+            segmentation_logits = decode_z4(model, raw, observation, restored, output_size)
+            segmentation_loss = F.cross_entropy(segmentation_logits, target_mask, ignore_index=255)
+            objective = LAMBDA_FEATURE * feature_window + LAMBDA_SEGMENTATION * segmentation_loss
+            optimizer.zero_grad(set_to_none=True); objective.backward(); optimizer.step()
+            segmentation_total += float(segmentation_loss.detach().item()); total_objective += float(objective.detach().item()); segmentation_windows += 1
             h_sem = h_sem.detach(); error_stats = error_stats.detach() if error_stats is not None else None; losses = []
-    return {"steps": steps, "loss_sum": total}
+    return {"steps": len(samples) - 1 if not max_steps else min(len(samples) - 1, max_steps), "feature_loss_sum": feature_total, "segmentation_loss_sum": segmentation_total, "total_loss_sum": total_objective, "segmentation_windows": segmentation_windows}
 
 
 def train_epoch(model, predictor, groups, epoch, optimizer, residual_aware, tbptt_steps, max_steps=0):
-    predictor.train(); steps = total = 0
+    predictor.train(); steps = feature_total = segmentation_total = total_objective = 0.0; segmentation_windows = 0
     for index, samples in enumerate(groups.values()):
         row = train_sequence(model, predictor, samples, epoch, index, optimizer, residual_aware, tbptt_steps, max_steps)
-        steps += row["steps"]; total += row["loss_sum"]
-    return {"step_count": steps, "loss": total / max(steps, 1)}
+        steps += row["steps"]; feature_total += row["feature_loss_sum"]; segmentation_total += row["segmentation_loss_sum"]; total_objective += row["total_loss_sum"]; segmentation_windows += row["segmentation_windows"]
+    return {"step_count": int(steps), "feature_loss": feature_total / max(steps, 1), "segmentation_loss": segmentation_total / max(segmentation_windows, 1), "total_loss": total_objective / max(segmentation_windows, 1), "segmentation_windows": segmentation_windows}
 
 
 def decode_z4(model, raw, observation, restored, output_size):
@@ -142,7 +152,7 @@ def evaluate_condition(model, predictor, groups, condition, residual_aware=False
     return {"effective_frame_count": sums["steps"], "blur_mIoU": metrics["blur"], "restored_mIoU": metrics["restored"], "clean_mIoU": metrics["clean"], "feature_recovery": 1.0 - restored / max(obs, 1e-12), "state_recovery": 1.0 - state / max(obs, 1e-12), "z4_loss": restored}
 
 
-def smoke_checks(predictor, observation, use_error_temporal_stats=False):
+def smoke_checks(model, predictor, observation, raw, output_size, mask, use_error_temporal_stats=False):
     checks = {}
     checks["frame0_history_exact"] = bool(torch.equal(predictor.initial_semantic_state(observation), observation.z4.detach()))
     h = torch.randn_like(observation.z4); eps1 = torch.randn_like(observation.z4); eps2 = torch.randn_like(observation.z4)
@@ -173,6 +183,23 @@ def smoke_checks(predictor, observation, use_error_temporal_stats=False):
     checks["replacement_k0"] = bool(torch.allclose(output_k0, h))
     checks["replacement_k1"] = bool(torch.allclose(output_k1, diagnostics_k1["semantic_candidate"]))
     checks["dynamics_frozen"] = sum(p.numel() for n in predictor.DYNAMICS_MODULES for p in getattr(predictor, n).parameters() if p.requires_grad) == 0
+    checks["backbone_frozen"] = all(not parameter.requires_grad for parameter in model.backbone.parameters())
+    checks["writeback_frozen"] = all(not parameter.requires_grad for parameter in model.host_conditioned_writebacks.parameters())
+    checks["decoder_frozen"] = all(not parameter.requires_grad for parameter in model.decode_head.parameters())
+    predictor.zero_grad(set_to_none=True)
+    current = UnifiedFeatures(observation.z1, observation.z2, observation.z3, observation.z4 + 0.1 * torch.randn_like(observation.z4))
+    semantic_hidden = predictor.initial_semantic_state(observation)
+    restored, _, diagnostics = predictor.restore_current(observation, current, semantic_hidden, error_temporal_state=predictor.initial_error_temporal_statistics())
+    logits = decode_z4(model, raw, observation, restored, output_size)
+    segmentation_loss = F.cross_entropy(logits, mask.unsqueeze(0).to(logits.device), ignore_index=255)
+    checks["segmentation_loss_finite"] = bool(torch.isfinite(segmentation_loss).item())
+    segmentation_loss.backward()
+    checks["semantic_branch_receives_segmentation_gradient"] = any(parameter.grad is not None and torch.isfinite(parameter.grad).all() and parameter.grad.detach().abs().sum() > 0 for parameter in predictor.semantic_parameters())
+    checks["backbone_has_no_gradient"] = all(parameter.grad is None for parameter in model.backbone.parameters())
+    checks["writeback_has_no_gradient"] = all(parameter.grad is None for parameter in model.host_conditioned_writebacks.parameters())
+    checks["decoder_has_no_gradient"] = all(parameter.grad is None for parameter in model.decode_head.parameters())
+    checks["all_finite"] = all(torch.isfinite(parameter.grad).all() for parameter in predictor.parameters() if parameter.grad is not None)
+    predictor.zero_grad(set_to_none=True)
     return checks
 
 
@@ -189,8 +216,9 @@ def run_variant(args, variant):
     epochs, train_max, val_max = args.epochs, 0, 0; output = Path(args.output) / variant
     if args.smoke: train, val = dict(list(train.items())[:1]), dict(list(val.items())[:1]); epochs, train_max, val_max, output = 1, 16, 32, output / "smoke"
     output.mkdir(parents=True, exist_ok=True)
-    first, _, _, _, _ = encode_pair(model, next(iter(train.values()))[0], "Blur-Mid", False)
-    checks = smoke_checks(predictor, first, use_error_temporal_stats); history = []; best = None; stale = 0
+    first, _, raw_first, _, output_size = encode_pair(model, next(iter(train.values()))[0], "Blur-Mid", False)
+    first_mask = semantic_mask_from_panoptic_png(next(iter(train.values()))[0]["mask_path"])
+    checks = smoke_checks(model, predictor, first, raw_first, output_size, first_mask, use_error_temporal_stats); history = []; best = None; stale = 0
     for epoch in range(1, epochs + 1):
         train_metrics = train_epoch(model, predictor, train, epoch, optimizer, variant == "v3_full", args.tbptt_steps, train_max)
         conditions = {c: evaluate_condition(model, predictor, val, c, variant == "v3_full", val_max) for c in TRAIN_CONDITIONS}
@@ -207,9 +235,21 @@ def run_variant(args, variant):
     return summary
 
 
+def run_smoke_check(args):
+    model, source = load_components(STATIC_CHECKPOINT_DEFAULT, ADAPTER_CHECKPOINT_DEFAULT, args.dynamics_checkpoint, WRITEBACK_CHECKPOINT_DEFAULT)
+    predictor = ErrorRegulatedSemanticRestorationPredictor(use_error_temporal_stats=True).cuda()
+    predictor.load_dynamics_from_role_separated_state_dict(source.state_dict()); predictor.freeze_dynamics(); model.requires_grad_(False); model.eval(); predictor.eval()
+    sample = next(iter(sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "train")).values()))[0]
+    observation, _, raw, _, output_size = encode_pair(model, sample, "Blur-Mid", False)
+    checks = smoke_checks(model, predictor, observation, raw, output_size, semantic_mask_from_panoptic_png(sample["mask_path"]), True)
+    print(json.dumps({"smoke_checks": checks}, sort_keys=True), flush=True)
+
+
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument("--root", default="/home/lin/predify/kitti_step"); parser.add_argument("--output", default="/home/lin/predify/experiments/kitti_step_semantic_v3"); parser.add_argument("--variant", choices=("v3_structure", "v3_temporal_stats", "v3_full", "both"), default="both"); parser.add_argument("--dynamics-checkpoint", default=ROLE_PREDICTOR_CHECKPOINT_DEFAULT); parser.add_argument("--epochs", type=int, default=MAX_EPOCHS); parser.add_argument("--patience", type=int, default=PATIENCE); parser.add_argument("--tbptt-steps", type=int, default=TBPTT_STEPS); parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE); parser.add_argument("--weight-decay", type=float, default=WEIGHT_DECAY); parser.add_argument("--seed", type=int, default=SEED); parser.add_argument("--smoke", action="store_true"); args = parser.parse_args()
+    parser = argparse.ArgumentParser(); parser.add_argument("--root", default="/home/lin/predify/kitti_step"); parser.add_argument("--output", default="/home/lin/predify/experiments/kitti_step_semantic_v3"); parser.add_argument("--variant", choices=("v3_structure", "v3_temporal_stats", "v3_full", "both"), default="both"); parser.add_argument("--dynamics-checkpoint", default=ROLE_PREDICTOR_CHECKPOINT_DEFAULT); parser.add_argument("--epochs", type=int, default=MAX_EPOCHS); parser.add_argument("--patience", type=int, default=PATIENCE); parser.add_argument("--tbptt-steps", type=int, default=TBPTT_STEPS); parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE); parser.add_argument("--weight-decay", type=float, default=WEIGHT_DECAY); parser.add_argument("--seed", type=int, default=SEED); parser.add_argument("--smoke", action="store_true"); parser.add_argument("--smoke-check-only", action="store_true"); args = parser.parse_args()
     if not torch.cuda.is_available(): raise RuntimeError("CUDA is required")
+    if args.smoke_check_only:
+        run_smoke_check(args); return
     variants = ("v3_structure", "v3_temporal_stats") if args.variant == "both" else (args.variant,)
     result = {variant: run_variant(args, variant) for variant in variants}; print(json.dumps({"variants": list(result)}, indent=2), flush=True)
 
