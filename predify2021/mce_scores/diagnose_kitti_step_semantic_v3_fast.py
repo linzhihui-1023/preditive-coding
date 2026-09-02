@@ -92,6 +92,10 @@ def run(model, predictor, groups, limit):
                 oracle = clean.z4 - o.z4; delta = d["restoration_delta_z4"]; discrepancy = d["semantic_discrepancy"]
                 obs_mse = float(F.mse_loss(o.z4, clean.z4).item()); s["obs_sse"] += obs_mse; s["count"] += 1; s["frames"] += 1
                 add(s, "prediction_error_rms", rms(d["prediction_error_z4"])); add(s, "encoded_error_rms", rms(d["encoded_prediction_error"]))
+                if d.get("restoration_magnitude_scale") is not None:
+                    add(s, "restoration_magnitude_scale_mean", float(d["restoration_magnitude_scale"].mean().item()))
+                if d.get("restoration_contextual_residual") is not None:
+                    add(s, "restoration_contextual_residual_rms", rms(d["restoration_contextual_residual"]))
                 for name, value in (("continuous", restored), ("nohistory", nohist), ("zeroerror", zero)):
                     s["variant_sse"][name] += float(F.mse_loss(value.z4, clean.z4).item())
                     add(s, f"{name}_direction", cosine(value.z4 - o.z4, oracle)); add(s, f"{name}_alpha", alpha(value.z4 - o.z4, oracle)); add(s, f"{name}_amplitude", rms(value.z4 - o.z4) / max(rms(oracle), EPS))
@@ -103,7 +107,7 @@ def run(model, predictor, groups, limit):
             count += 1
     results = {}
     for c, s in summaries.items():
-        means = {k: sum(v) / max(len(v), 1) for k, v in s["values"].items()}; obs = s["obs_sse"] / max(s["count"], 1); results[c] = {"effective_frame_count": s["frames"], "prediction_recovery": means.get("prediction_recovery", 0.), "observation_mse": obs, "continuous_feature_recovery": 1. - s["variant_sse"]["continuous"] / max(s["count"], 1) / max(obs, EPS), "nohistory_feature_recovery": 1. - s["variant_sse"]["nohistory"] / max(s["count"], 1) / max(obs, EPS), "zeroerror_feature_recovery": 1. - s["variant_sse"]["zeroerror"] / max(s["count"], 1) / max(obs, EPS), "temporal_feature_gain": means.get("temporal_feature_gain", 0.), "error_contribution": means.get("error_contribution", 0.), "continuous": {k.removeprefix("continuous_"): v for k, v in means.items() if k.startswith("continuous_")}, "no_history": {k.removeprefix("nohistory_"): v for k, v in means.items() if k.startswith("nohistory_")}, "zero_error": {k.removeprefix("zeroerror_"): v for k, v in means.items() if k.startswith("zeroerror_")}, "signal_means": {k: v for k, v in means.items() if k in ("prediction_error_rms", "encoded_error_rms")}, "semantic_state": {"early_hidden_rms": s["first"], "middle_hidden_rms": s["middle"], "final_hidden_rms": s["last"], "growth_ratio": s["last"] / max(s["first"], EPS), "state_recovery": 1. - s["state_sse"] / max(s["count"], 1) / max(obs, EPS), "state_direction_cosine": means.get("state_direction_cosine", 0.)}}
+        means = {k: sum(v) / max(len(v), 1) for k, v in s["values"].items()}; obs = s["obs_sse"] / max(s["count"], 1); results[c] = {"effective_frame_count": s["frames"], "prediction_recovery": means.get("prediction_recovery", 0.), "observation_mse": obs, "continuous_feature_recovery": 1. - s["variant_sse"]["continuous"] / max(s["count"], 1) / max(obs, EPS), "nohistory_feature_recovery": 1. - s["variant_sse"]["nohistory"] / max(s["count"], 1) / max(obs, EPS), "zeroerror_feature_recovery": 1. - s["variant_sse"]["zeroerror"] / max(s["count"], 1) / max(obs, EPS), "temporal_feature_gain": means.get("temporal_feature_gain", 0.), "error_contribution": means.get("error_contribution", 0.), "continuous": {k.removeprefix("continuous_"): v for k, v in means.items() if k.startswith("continuous_")}, "no_history": {k.removeprefix("nohistory_"): v for k, v in means.items() if k.startswith("nohistory_")}, "zero_error": {k.removeprefix("zeroerror_"): v for k, v in means.items() if k.startswith("zeroerror_")}, "signal_means": {k: v for k, v in means.items() if k in ("prediction_error_rms", "encoded_error_rms", "restoration_magnitude_scale_mean", "restoration_contextual_residual_rms")}, "semantic_state": {"early_hidden_rms": s["first"], "middle_hidden_rms": s["middle"], "final_hidden_rms": s["last"], "growth_ratio": s["last"] / max(s["first"], EPS), "state_recovery": 1. - s["state_sse"] / max(s["count"], 1) / max(obs, EPS), "state_direction_cosine": means.get("state_direction_cosine", 0.)}}
     return results, traces
 
 
@@ -161,6 +165,8 @@ def internal_diagnosis_row(condition, result, stage):
         "zeroerror_direction_cosine": zero_error["direction"],
         "prediction_error_rms": result["signal_means"]["prediction_error_rms"],
         "encoded_error_rms": result["signal_means"]["encoded_error_rms"],
+        "restoration_magnitude_scale_mean": result["signal_means"].get("restoration_magnitude_scale_mean"),
+        "restoration_contextual_residual_rms": result["signal_means"].get("restoration_contextual_residual_rms"),
     }
 
 
