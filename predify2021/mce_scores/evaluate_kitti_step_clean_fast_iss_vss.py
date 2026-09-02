@@ -53,6 +53,9 @@ FAST_B_CHECKPOINT_DEFAULT = (
     "kitti_step_semantic_v3_joint_c4_fast_ab_5754714/"
     "fast_b_joint_c4_weak_z4/best.pt"
 )
+DEV3_SEQUENCES = ("0002", "0010", "0018")
+HOLDOUT6_SEQUENCES = ("0006", "0007", "0008", "0013", "0014", "0016")
+OFFICIAL_VAL9_SEQUENCES = tuple(sorted(DEV3_SEQUENCES + HOLDOUT6_SEQUENCES))
 IGNORE_LABEL = 255
 NUM_CLASSES = 19
 
@@ -213,12 +216,23 @@ def evaluate(args):
         Path(args.root), "val"
     )
     all_groups = sequence_groups(dataset)
-    groups = dict(sorted(all_groups.items()))
-    if len(groups) != 9:
+    expected_all = set(OFFICIAL_VAL9_SEQUENCES)
+    observed_all = set(all_groups)
+    if observed_all != expected_all:
         raise RuntimeError(
-            "Full KITTI-STEP validation protocol expects 9 sequences, "
-            f"got {len(groups)}: {list(groups)}"
+            "KITTI-STEP validation protocol mismatch: "
+            f"expected={sorted(expected_all)}, observed={sorted(observed_all)}"
         )
+    sequence_sets = {
+        "dev3": DEV3_SEQUENCES,
+        "holdout6": HOLDOUT6_SEQUENCES,
+        "full9": OFFICIAL_VAL9_SEQUENCES,
+    }
+    selected_sequences = sequence_sets[args.protocol]
+    groups = {
+        sequence: all_groups[sequence]
+        for sequence in selected_sequences
+    }
 
     confusion = {
         "host": torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64),
@@ -357,9 +371,10 @@ def evaluate(args):
         row.pop("_vc_accumulator", None)
 
     result = {
-        "experiment": "kitti_step_clean_full_val_iss_to_vss",
+        "experiment": f"kitti_step_clean_{args.protocol}_iss_to_vss",
         "checkpoint": str(args.checkpoint),
         "checkpoint_epoch": payload.get("epoch"),
+        "protocol": args.protocol,
         "sequences": list(groups),
         "corruption": None,
         "test_time_parameter_updates": False,
@@ -418,10 +433,24 @@ def main():
         "--checkpoint", default=FAST_B_CHECKPOINT_DEFAULT
     )
     parser.add_argument(
+        "--protocol",
+        choices=("dev3", "holdout6", "full9"),
+        default="dev3",
+        help=(
+            "dev3 is the already-used checkpoint-selection subset; "
+            "holdout6 is reserved for one-time independent final testing; "
+            "full9 is the full official KITTI-STEP validation split."
+        ),
+    )
+    parser.add_argument(
         "--output",
-        default="results/kitti_step_clean_full_val_iss_to_vss.json",
+        default=None,
     )
     args = parser.parse_args()
+    if args.output is None:
+        args.output = (
+            f"results/kitti_step_clean_{args.protocol}_iss_to_vss.json"
+        )
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required.")
     evaluate(args)
