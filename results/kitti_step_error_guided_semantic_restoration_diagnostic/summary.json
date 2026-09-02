@@ -1,0 +1,115 @@
+{
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_error_guided_semantic_restoration/best_error_guided_semantic_restoration.pt",
+  "clean_identity": {
+    "continuous_mIoU_gain_vs_clean": 0.00015836232241117632,
+    "continuous_z4_change_mse": 4.4498028540253206e-07,
+    "effective_frame_count": 2972,
+    "mIoU": {
+      "clean_host": 0.6545130588393236,
+      "semantic_continuous": 0.6546714211617348,
+      "semantic_no_history": 0.6545132343223896
+    },
+    "no_history_mIoU_gain_vs_clean": 1.7548306596726349e-07,
+    "no_history_z4_change_mse": 1.2986222249306492e-10
+  },
+  "conditions": {
+    "Blur-Max": "Gaussian blur sigma=3.0 after existing 10% warmup",
+    "Blur-Mid": "Gaussian blur sigma=2.25 after existing 10% warmup"
+  },
+  "decision": {
+    "STAGE_A": "GO",
+    "STAGE_A_STRONG": "NO-GO",
+    "criterion": "Basic: Blur-Mid and Blur-Max both require feature recovery > 0, continuous mIoU > no-history mIoU, and continuous mIoU > Blur Host; Clean continuous mIoU loss must be <= 0.005. Strong: additionally recover at least 50% of the current Oracle-Z4 writeback capacity in both Blur-Mid and Blur-Max."
+  },
+  "diagnostic_only": true,
+  "experiment": "kitti_step_error_guided_semantic_restoration_diagnostic",
+  "parameters_updated": false,
+  "results": {
+    "Blur-Max": {
+      "condition": "Blur-Max",
+      "effective_frame_count": 2686,
+      "feature": {
+        "semantic_continuous": {
+          "direction_cosine_to_oracle_residual": 0.07368221848535846,
+          "feature_recovery_fraction": 0.0040528395423595764,
+          "observation_mse_to_clean_z4": 0.0003751491434096505,
+          "semantic_mse_to_clean_z4": 0.00037362872412695754
+        },
+        "semantic_no_history": {
+          "direction_cosine_to_oracle_residual": 0.03785171964159524,
+          "feature_recovery_fraction": 4.236063294693615e-05,
+          "observation_mse_to_clean_z4": 0.0003751491434096505,
+          "semantic_mse_to_clean_z4": 0.00037513325185448615
+        }
+      },
+      "judgement": {
+        "STAGE_A": "GO",
+        "STAGE_A_STRONG": "NO-GO",
+        "feature_restoration": "SUPPORTED",
+        "strong_writeback_capacity": "NOT_SUPPORTED",
+        "task_recovery": "SUPPORTED",
+        "temporal_semantic_state": "SUPPORTED"
+      },
+      "mIoU": {
+        "blur_host": 0.3917100445495763,
+        "clean_c4_oracle": 0.657073526020085,
+        "clean_host": 0.6658009015515667,
+        "oracle_z4_writeback": 0.4895870336078478,
+        "semantic_continuous": 0.3920977795157817,
+        "semantic_no_history": 0.39170798774386933
+      },
+      "task_recovery": {
+        "oracle_z4_writeback_fraction_of_host_c4_gap": 0.3688412155127272,
+        "semantic_continuous_fraction_of_host_c4_gap": 0.0014611466659117435,
+        "semantic_continuous_fraction_of_writeback_capacity": 0.003961451715423395,
+        "semantic_continuous_gain": 0.0003877349662053664,
+        "semantic_no_history_gain": -2.056805706973641e-06,
+        "temporal_memory_mIoU_gain": 0.00038979177191234005
+      }
+    },
+    "Blur-Mid": {
+      "condition": "Blur-Mid",
+      "effective_frame_count": 2686,
+      "feature": {
+        "semantic_continuous": {
+          "direction_cosine_to_oracle_residual": 0.10262648032566683,
+          "feature_recovery_fraction": 0.006605296877431721,
+          "observation_mse_to_clean_z4": 0.0002585564734072315,
+          "semantic_mse_to_clean_z4": 0.00025684863114079496
+        },
+        "semantic_no_history": {
+          "direction_cosine_to_oracle_residual": 0.04862658898951583,
+          "feature_recovery_fraction": 6.273624881358852e-05,
+          "observation_mse_to_clean_z4": 0.0002585564734072315,
+          "semantic_mse_to_clean_z4": 0.0002585402525439835
+        }
+      },
+      "judgement": {
+        "STAGE_A": "GO",
+        "STAGE_A_STRONG": "NO-GO",
+        "feature_restoration": "SUPPORTED",
+        "strong_writeback_capacity": "NOT_SUPPORTED",
+        "task_recovery": "SUPPORTED",
+        "temporal_semantic_state": "SUPPORTED"
+      },
+      "mIoU": {
+        "blur_host": 0.49539451635774345,
+        "clean_c4_oracle": 0.6600032899353924,
+        "clean_host": 0.6658009015515667,
+        "oracle_z4_writeback": 0.5536512254237067,
+        "semantic_continuous": 0.4962523855949607,
+        "semantic_no_history": 0.4953931832858801
+      },
+      "task_recovery": {
+        "oracle_z4_writeback_fraction_of_host_c4_gap": 0.35391010940545353,
+        "semantic_continuous_fraction_of_host_c4_gap": 0.0052115644784424845,
+        "semantic_continuous_fraction_of_writeback_capacity": 0.014725672819003622,
+        "semantic_continuous_gain": 0.0008578692372172569,
+        "semantic_no_history_gain": -1.3330718633408623e-06,
+        "temporal_memory_mIoU_gain": 0.0008592023090805978
+      }
+    }
+  },
+  "sequence_count": 9,
+  "split": "val"
+}
