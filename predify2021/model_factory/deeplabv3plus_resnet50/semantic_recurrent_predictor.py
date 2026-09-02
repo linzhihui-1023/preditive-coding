@@ -389,18 +389,52 @@ class ErrorRegulatedSemanticStateCell(nn.Module):
 
 
 class SemanticDiscrepancyRestorationHead(nn.Module):
-    """Map temporal semantic discrepancy to a same-frame Z4 residual."""
+    """Task-aware Z4 restoration from observation, semantic state and discrepancy.
+
+    The old discrepancy-only 3x3 path is retained as a stable base.  A contextual
+    residual reads the current observation and semantic state, while an independent
+    magnitude gate scales the final correction without changing the semantic-state
+    update rule.
+    """
 
     def __init__(self, channels=UNIFIED_STATE_CHANNELS):
         super().__init__()
-        self.conv = nn.Conv2d(channels, channels, 3, padding=1)
-        nn.init.dirac_(self.conv.weight)
-        nn.init.zeros_(self.conv.bias)
+        self.base = nn.Conv2d(channels, channels, 3, padding=1)
+        nn.init.dirac_(self.base.weight)
+        nn.init.zeros_(self.base.bias)
         with torch.no_grad():
-            self.conv.weight.mul_(0.1)
+            self.base.weight.mul_(0.1)
 
-    def forward(self, semantic_discrepancy):
-        return self.conv(semantic_discrepancy)
+        self.context_fusion = nn.Conv2d(3 * channels, channels, 1, bias=False)
+        self.context_body = nn.Sequential(
+            nn.Conv2d(channels, channels, 3, padding=1, bias=False),
+            nn.GELU(),
+            nn.Conv2d(channels, channels, 3, padding=1, bias=False),
+        )
+        nn.init.zeros_(self.context_body[-1].weight)
+
+        self.magnitude_gate = nn.Conv2d(2 * channels, channels, 1)
+        nn.init.zeros_(self.magnitude_gate.weight)
+        nn.init.zeros_(self.magnitude_gate.bias)
+
+    def forward(self, observation_z4, semantic_hidden, semantic_discrepancy):
+        context = torch.cat(
+            (observation_z4, semantic_hidden, semantic_discrepancy), dim=1
+        )
+        contextual_residual = self.context_body(self.context_fusion(context))
+        correction_command = self.base(semantic_discrepancy) + contextual_residual
+
+        # Range (0, 2), initialized exactly at 1.0.  This gate controls only the
+        # correction magnitude; K_t remains solely responsible for state updating.
+        magnitude_scale = 2.0 * torch.sigmoid(
+            self.magnitude_gate(torch.cat((observation_z4, semantic_hidden), dim=1))
+        )
+        restoration_delta_z4 = magnitude_scale * correction_command
+        return restoration_delta_z4, {
+            "restoration_contextual_residual": contextual_residual,
+            "restoration_magnitude_scale": magnitude_scale,
+            "restoration_command": correction_command,
+        }
 
 
 class ErrorRegulatedSemanticRestorationPredictor(nn.Module):
@@ -483,8 +517,10 @@ class ErrorRegulatedSemanticRestorationPredictor(nn.Module):
             ),
             disable_error_temporal_stats=disable_error_temporal_stats,
         )
-        restoration_delta_z4 = self.semantic_restoration_head(
-            state_diagnostics["semantic_discrepancy"]
+        restoration_delta_z4, restoration_diagnostics = self.semantic_restoration_head(
+            observation.z4,
+            semantic_hidden,
+            state_diagnostics["semantic_discrepancy"],
         )
         restored = UnifiedFeatures(
             observation.z1,
@@ -499,6 +535,7 @@ class ErrorRegulatedSemanticRestorationPredictor(nn.Module):
             "error_temporal_state": error_temporal_state,
             "history_embedding": state_diagnostics.get("history_embedding"),
             "restoration_delta_z4": restoration_delta_z4,
+            **restoration_diagnostics,
             **state_diagnostics,
         }
         return restored, semantic_hidden, diagnostics
