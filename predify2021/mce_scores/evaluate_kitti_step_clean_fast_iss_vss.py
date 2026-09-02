@@ -4,10 +4,12 @@ No training and no corruption are used. The complete KITTI-STEP validation
 split is evaluated with the frame-wise DeepLabV3+ Host and the trained Predify
 FAST-B checkpoint. Metrics are mIoU, mVC8 and mVC16.
 
-mVC follows the VSPW definition: for each n-frame sliding window, evaluate the
-fraction of pixels whose ground-truth semantic label is unchanged throughout
-the window and whose predictions remain correct throughout the same window.
-VC_n is averaged over windows inside each video, then averaged over videos.
+mVC follows the official VSPW reference implementation: for each n-frame
+window, ground-truth-stable pixels define the valid region and VC measures the
+fraction of those pixels whose *predicted label is also temporally unchanged*.
+It does not require the prediction to be semantically correct; mIoU supplies
+that complementary accuracy check. Global mVC is clip-weighted exactly as in
+the VSPW evaluator.
 """
 
 import argparse
@@ -56,7 +58,18 @@ NUM_CLASSES = 19
 
 
 class VideoConsistency:
-    """Streaming VSPW-style VC8/VC16 accumulator for one video."""
+    """Streaming implementation of the official VSPW VC8/VC16 evaluator.
+
+    VSPW VC measures *prediction consistency*, not prediction correctness.
+    For each f-frame clip, pixels whose ground-truth label stays unchanged
+    define the valid region. VC is the fraction of that region for which the
+    predicted label also stays unchanged across the clip.
+
+    The official VSPW reference implementation uses range(T - f), i.e. T-f
+    windows rather than the T-f+1 windows from the paper formula. We preserve
+    that implementation detail for direct comparability with published VSPW
+    / DiTTA numbers.
+    """
 
     def __init__(self, lengths=(8, 16)):
         self.lengths = tuple(lengths)
@@ -65,23 +78,26 @@ class VideoConsistency:
         self.pred = deque(maxlen=self.max_length)
         self.sums = {length: 0.0 for length in self.lengths}
         self.counts = {length: 0 for length in self.lengths}
+        self.pending = {length: None for length in self.lengths}
 
     @staticmethod
     def _window_score(gt_window, pred_window):
         gt_stack = torch.stack(tuple(gt_window), dim=0)
         pred_stack = torch.stack(tuple(pred_window), dim=0)
-        reference = gt_stack[0]
+        gt_reference = gt_stack[0]
+        pred_reference = pred_stack[0]
 
-        stable_gt = reference != IGNORE_LABEL
-        stable_gt &= torch.all(gt_stack == reference.unsqueeze(0), dim=0)
-        denominator = int(stable_gt.sum().item())
-        if denominator == 0:
-            return None
-
-        consistently_correct = stable_gt & torch.all(
-            pred_stack == reference.unsqueeze(0), dim=0
+        gt_consistent = torch.all(
+            gt_stack == gt_reference.unsqueeze(0), dim=0
         )
-        numerator = int(consistently_correct.sum().item())
+        denominator = int(gt_consistent.sum().item())
+        if denominator == 0:
+            return float("nan")
+
+        pred_consistent = torch.all(
+            pred_stack == pred_reference.unsqueeze(0), dim=0
+        )
+        numerator = int((gt_consistent & pred_consistent).sum().item())
         return numerator / denominator
 
     def update(self, ground_truth, prediction):
@@ -93,14 +109,29 @@ class VideoConsistency:
             gt_window = list(self.gt)[-length:]
             pred_window = list(self.pred)[-length:]
             score = self._window_score(gt_window, pred_window)
-            if score is not None:
-                self.sums[length] += score
+
+            # VSPW reference code intentionally/implicitly excludes the final
+            # possible window via range(T-f). Commit a score only when a later
+            # window arrives, leaving the last one pending at sequence end.
+            previous = self.pending[length]
+            if previous is not None and previous == previous:
+                self.sums[length] += previous
                 self.counts[length] += 1
+            self.pending[length] = score
 
     def values(self):
         return {
             length: self.sums[length] / self.counts[length]
             if self.counts[length] else float("nan")
+            for length in self.lengths
+        }
+
+    def stats(self):
+        return {
+            length: {
+                "sum": self.sums[length],
+                "count": self.counts[length],
+            }
             for length in self.lengths
         }
 
@@ -268,6 +299,8 @@ def evaluate(args):
 
             host_values = host_vc.values()
             predify_values = predify_vc.values()
+            host_vc_stats = host_vc.stats()
+            predify_vc_stats = predify_vc.stats()
             sequence_host_iou = compute_iou(sequence_confusion["host"])
             sequence_predify_iou = compute_iou(sequence_confusion["predify"])
             sequence_host_miou = float(torch.nanmean(sequence_host_iou).item())
@@ -289,6 +322,10 @@ def evaluate(args):
                     "mVC8": predify_values[8] - host_values[8],
                     "mVC16": predify_values[16] - host_values[16],
                 },
+                "_vc_accumulator": {
+                    "host": host_vc_stats,
+                    "predify": predify_vc_stats,
+                },
             }
 
     host_iou = compute_iou(confusion["host"])
@@ -296,18 +333,28 @@ def evaluate(args):
     host_miou = float(torch.nanmean(host_iou).item())
     predify_miou = float(torch.nanmean(predify_iou).item())
 
-    def mean_sequence_metric(model_name, metric):
-        values = [
-            row[model_name][metric]
+    def official_mvc(model_name, length):
+        total_sum = sum(
+            row["_vc_accumulator"][model_name][length]["sum"]
             for row in per_sequence.values()
-            if row[model_name][metric] == row[model_name][metric]
-        ]
-        return sum(values) / len(values)
+        )
+        total_count = sum(
+            row["_vc_accumulator"][model_name][length]["count"]
+            for row in per_sequence.values()
+        )
+        if total_count == 0:
+            return float("nan")
+        return total_sum / total_count
 
-    host_mvc8 = mean_sequence_metric("host", "mVC8")
-    host_mvc16 = mean_sequence_metric("host", "mVC16")
-    predify_mvc8 = mean_sequence_metric("predify", "mVC8")
-    predify_mvc16 = mean_sequence_metric("predify", "mVC16")
+    host_mvc8 = official_mvc("host", 8)
+    host_mvc16 = official_mvc("host", 16)
+    predify_mvc8 = official_mvc("predify", 8)
+    predify_mvc16 = official_mvc("predify", 16)
+
+    # Keep the JSON public-facing section clean; the accumulators are only
+    # needed to reproduce VSPW's clip-weighted global aggregation.
+    for row in per_sequence.values():
+        row.pop("_vc_accumulator", None)
 
     result = {
         "experiment": "kitti_step_clean_full_val_iss_to_vss",
