@@ -1,0 +1,258 @@
+{
+  "base_checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "corruption": "snow",
+  "dataset": {
+    "effective_frame_count": 781.0,
+    "per_severity": {
+      "S3": {
+        "effective_frame_count": 781,
+        "sequence_frame_counts": {
+          "0002": {
+            "effective_frame_count": 210,
+            "total_frame_count": 233,
+            "warmup_frame_count": 23
+          },
+          "0010": {
+            "effective_frame_count": 265,
+            "total_frame_count": 294,
+            "warmup_frame_count": 29
+          },
+          "0018": {
+            "effective_frame_count": 306,
+            "total_frame_count": 339,
+            "warmup_frame_count": 33
+          }
+        },
+        "total_frame_count": 866
+      },
+      "S5": {
+        "effective_frame_count": 781,
+        "sequence_frame_counts": {
+          "0002": {
+            "effective_frame_count": 210,
+            "total_frame_count": 233,
+            "warmup_frame_count": 23
+          },
+          "0010": {
+            "effective_frame_count": 265,
+            "total_frame_count": 294,
+            "warmup_frame_count": 29
+          },
+          "0018": {
+            "effective_frame_count": 306,
+            "total_frame_count": 339,
+            "warmup_frame_count": 33
+          }
+        },
+        "total_frame_count": 866
+      }
+    },
+    "sequence_count": 3,
+    "split": "val",
+    "total_frame_count": 866.0
+  },
+  "experiment": "fast_b_cross_corruption_fast",
+  "fast_b_checkpoint": "/home/lin/predify/experiments/kitti_step_semantic_v3_joint_c4_fast_ab_5754714/fast_b_joint_c4_weak_z4/best.pt",
+  "mean_delta_mIoU": 0.03210663865814202,
+  "parameter_updates": false,
+  "protocol": {
+    "corruption_generated_once_per_frame": true,
+    "corruption_seed_policy": "canonical_condition_ordinal_plus_global_frame_index",
+    "host_fast_b_shared_input": true,
+    "severities": [
+      3,
+      5
+    ],
+    "state_reset_per_sequence": true,
+    "warmup": "predify2021.mce_scores.kitti_step_persistent_blur.warmup_frame_count"
+  },
+  "protocol_entry": {
+    "category": "weather",
+    "from_hendrycks": true,
+    "kamann_rother_new": false,
+    "name": "snow",
+    "name_zh": "\u964d\u96ea",
+    "parameters": {
+      "implementation_tuple": [
+        [
+          0.1,
+          0.3,
+          3,
+          0.5,
+          10,
+          4,
+          0.8
+        ],
+        [
+          0.2,
+          0.3,
+          2,
+          0.5,
+          12,
+          4,
+          0.7
+        ],
+        [
+          0.55,
+          0.3,
+          4,
+          0.9,
+          12,
+          8,
+          0.7
+        ],
+        [
+          0.55,
+          0.3,
+          4.5,
+          0.85,
+          12,
+          8,
+          0.65
+        ],
+        [
+          0.55,
+          0.3,
+          2.5,
+          0.85,
+          12,
+          12,
+          0.55
+        ]
+      ]
+    },
+    "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions"
+  },
+  "sequences": [
+    "0002",
+    "0010",
+    "0018"
+  ],
+  "severity_results": {
+    "S3": {
+      "delta_mIoU": 0.035042828352274374,
+      "effective_frame_count": 781,
+      "fast_b_mIoU": 0.26371885464881284,
+      "host_mIoU": 0.22867602629653846,
+      "metrics": {
+        "fast_b": {
+          "miou": 0.26371885464881284,
+          "per_class_iou": {
+            "bicycle": 0.3098126865333273,
+            "building": 0.344305497059254,
+            "bus": 0.026668942732308663,
+            "car": 0.7243325015262606,
+            "fence": 0.001708823522483372,
+            "motorcycle": 0.0,
+            "person": 0.2979319570483387,
+            "pole": 0.1282951918925808,
+            "rider": 0.0009145876733905798,
+            "road": 0.7390730510353566,
+            "sidewalk": 0.047905095400018693,
+            "sky": 0.8673755748128215,
+            "terrain": 0.48214467656206367,
+            "traffic light": 0.06511501391772674,
+            "traffic sign": 0.14451174380908807,
+            "train": 0.030334785784383003,
+            "truck": 0.009918500556092403,
+            "vegetation": 0.7745034998307704,
+            "wall": 0.015806108631179646
+          }
+        },
+        "host": {
+          "miou": 0.22867602629653846,
+          "per_class_iou": {
+            "bicycle": 0.2661253004529601,
+            "building": 0.2930503656300876,
+            "bus": 0.014806488573856207,
+            "car": 0.668035744521451,
+            "fence": 0.0018028932026707722,
+            "motorcycle": 0.0,
+            "person": 0.21262560233088043,
+            "pole": 0.09446493348247602,
+            "rider": 0.0,
+            "road": 0.5387057212539338,
+            "sidewalk": 0.05222756155963816,
+            "sky": 0.8092413927183769,
+            "terrain": 0.4694063338093231,
+            "traffic light": 0.03165047093058215,
+            "traffic sign": 0.10350760582905592,
+            "train": 0.030828142286818003,
+            "truck": 0.0022134717020474612,
+            "vegetation": 0.7501007179629287,
+            "wall": 0.006051753387144877
+          }
+        }
+      },
+      "total_frame_count": 866
+    },
+    "S5": {
+      "delta_mIoU": 0.029170448964009665,
+      "effective_frame_count": 781,
+      "fast_b_mIoU": 0.1851830071164574,
+      "host_mIoU": 0.15601255815244774,
+      "metrics": {
+        "fast_b": {
+          "miou": 0.1851830071164574,
+          "per_class_iou": {
+            "bicycle": 0.16949210452886274,
+            "building": 0.19364678479387265,
+            "bus": 0.035648731459074774,
+            "car": 0.43018127252183047,
+            "fence": 0.0020163523470250037,
+            "motorcycle": 0.0,
+            "person": 0.020956634025610675,
+            "pole": 0.05686589849689478,
+            "rider": 0.0,
+            "road": 0.6706672045435269,
+            "sidewalk": 0.029951248880151705,
+            "sky": 0.8288564866758213,
+            "terrain": 0.32225966410826673,
+            "traffic light": 0.011981980502597281,
+            "traffic sign": 0.06663816477841657,
+            "train": 5.726234456852346e-06,
+            "truck": 0.00028226853979736616,
+            "vegetation": 0.6789123312725696,
+            "wall": 0.00011428150391451744
+          }
+        },
+        "host": {
+          "miou": 0.15601255815244774,
+          "per_class_iou": {
+            "bicycle": 0.1018165431064675,
+            "building": 0.12229211299805103,
+            "bus": 0.019708341866963148,
+            "car": 0.37364981956959903,
+            "fence": 0.0016646416634820177,
+            "motorcycle": 0.0,
+            "person": 0.010027386042774759,
+            "pole": 0.035943263344080545,
+            "rider": 0.0,
+            "road": 0.4620069775111024,
+            "sidewalk": 0.044972172121231356,
+            "sky": 0.8296063014020862,
+            "terrain": 0.33461337025824056,
+            "traffic light": 0.006110965046813607,
+            "traffic sign": 0.04397651630808018,
+            "train": 0.0,
+            "truck": 0.0,
+            "vegetation": 0.5778501936575348,
+            "wall": 0.0
+          }
+        }
+      },
+      "total_frame_count": 866
+    }
+  },
+  "source_dynamics_checkpoint": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+  "test_time_adaptation": false,
+  "timing": {
+    "wall_seconds": 547.1026052579982
+  },
+  "training": false
+}
