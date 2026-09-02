@@ -77,6 +77,21 @@ def test_v3_frame_zero_state_is_observation_and_error_only_changes_gain():
         diagnostics_second["semantic_update_gain"],
     )
 
+    output_zero, _ = predictor.semantic_state_cell(
+        observation.z4,
+        first,
+        hidden,
+        update_gain_override=torch.zeros_like(hidden),
+    )
+    output_one, diagnostics_one = predictor.semantic_state_cell(
+        observation.z4,
+        first,
+        hidden,
+        update_gain_override=torch.ones_like(hidden),
+    )
+    assert torch.allclose(output_zero, hidden)
+    assert torch.allclose(output_one, diagnostics_one["semantic_candidate"])
+
 
 def test_v3_restoration_is_discrepancy_only_and_dynamics_can_be_frozen():
     predictor = ErrorRegulatedSemanticRestorationPredictor()
@@ -110,3 +125,37 @@ def test_v3_residual_aware_loss_is_finite_and_single_scalar():
     assert torch.isfinite(loss)
     loss.backward()
     assert prediction.grad is not None
+
+
+def test_v3_restoration_head_starts_at_pointwise_zero_point_one_identity():
+    predictor = ErrorRegulatedSemanticRestorationPredictor()
+    discrepancy = torch.randn(1, 128, 3, 4)
+    restored_delta = predictor.semantic_restoration_head(discrepancy)
+    assert torch.allclose(restored_delta, 0.1 * discrepancy, atol=1e-6, rtol=1e-5)
+
+
+def test_v3_zero_error_preserves_raw_diagnostic_but_zeros_encoded_signal():
+    predictor = ErrorRegulatedSemanticRestorationPredictor()
+    observation = unified(torch.randn(1, 128, 2, 3))
+    prediction = unified(torch.randn(1, 128, 2, 3))
+    normal, _, normal_diagnostics = predictor.restore_current(
+        observation,
+        prediction,
+        predictor.initial_semantic_state(observation),
+    )
+    zero, _, zero_diagnostics = predictor.restore_current(
+        observation,
+        prediction,
+        predictor.initial_semantic_state(observation),
+        zero_encoded_prediction_error=True,
+    )
+    assert torch.equal(
+        normal_diagnostics["prediction_error_z4"],
+        zero_diagnostics["prediction_error_z4"],
+    )
+    assert torch.count_nonzero(zero_diagnostics["encoded_prediction_error"]) == 0
+    assert torch.equal(
+        normal_diagnostics["semantic_candidate"],
+        zero_diagnostics["semantic_candidate"],
+    )
+    assert normal.z4.shape == zero.z4.shape

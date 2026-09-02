@@ -72,14 +72,14 @@ def run(model, predictor, groups, limit):
                 for c in CONDITIONS:
                     o = observations[c]; p, h4, h1, _ = pending[c]; e = error_state(o, p)
                     with torch.inference_mode():
-                        _, hidden[c], _ = predictor.restore_current(o, p, hidden[c]); _, hidden_zero[c], _ = predictor.restore_current(o, p, hidden_zero[c], prediction_error_override=torch.zeros_like(e.z4)); pending[c] = (*predictor.predict_next(o, e, h4, h1), None)
+                        _, hidden[c], _ = predictor.restore_current(o, p, hidden[c]); _, hidden_zero[c], _ = predictor.restore_current(o, p, hidden_zero[c], zero_encoded_prediction_error=True); pending[c] = (*predictor.predict_next(o, e, h4, h1), None)
                 continue
             for c in CONDITIONS:
                 o = observations[c]; p, h4, h1, _ = pending[c]; e = error_state(o, p); s = summaries[c]
                 with torch.inference_mode():
                     restored, hidden[c], d = predictor.restore_current(o, p, hidden[c])
                     nohist, _, nd = predictor.restore_current(o, p, o.z4.detach())
-                    zero, hidden_zero[c], zd = predictor.restore_current(o, p, hidden_zero[c], prediction_error_override=torch.zeros_like(e.z4))
+                    zero, hidden_zero[c], zd = predictor.restore_current(o, p, hidden_zero[c], zero_encoded_prediction_error=True)
                 oracle = clean.z4 - o.z4; delta = d["restoration_delta_z4"]; discrepancy = d["semantic_discrepancy"]
                 obs_mse = float(F.mse_loss(o.z4, clean.z4).item()); s["obs_sse"] += obs_mse; s["count"] += 1; s["frames"] += 1
                 for name, value in (("continuous", restored), ("nohistory", nohist), ("zeroerror", zero)):

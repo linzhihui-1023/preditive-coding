@@ -64,7 +64,7 @@ def train_sequence(model, predictor, samples, epoch, sequence_index, optimizer, 
     condition, pattern = training_assignment(epoch, sequence_index)
     first, _, _, _, _ = encode_pair(model, samples[0], condition, pattern_uses_blur(pattern, 0, len(samples)))
     pending, h4, h1 = predictor.predict_next(first, zero_state(first), None, None)
-    h_sem = first.z4.detach()
+    h_sem = predictor.initial_semantic_state(first)
     losses, total, steps = [], 0.0, min(len(samples) - 1, max_steps) if max_steps else len(samples) - 1
     for offset in range(steps):
         frame = offset + 1
@@ -109,7 +109,7 @@ def evaluate_condition(model, predictor, groups, condition, residual_aware=False
             onset = warmup_frame_count(len(samples))
             first, _, _, _, _ = encode_pair(model, samples[0], condition, False)
             pending, h4, h1 = predictor.predict_next(first, zero_state(first), None, None)
-            h_sem = first.z4.detach()
+            h_sem = predictor.initial_semantic_state(first)
             for frame in range(1, len(samples)):
                 if max_frames and sums["steps"] >= max_frames: break
                 obs, clean, raw, clean_raw, output_size = encode_pair(model, samples[frame], condition, frame >= onset)
@@ -142,8 +142,20 @@ def smoke_checks(predictor, observation):
     _, d3 = predictor.semantic_state_cell(observation.z4 + 1.0, eps1, h)
     checks["observation_changes_candidate"] = bool(not torch.equal(d1["semantic_candidate"], d3["semantic_candidate"]))
     candidate = d1["semantic_candidate"]
-    checks["replacement_k0"] = bool(torch.allclose((1 - torch.zeros_like(h)) * h, h))
-    checks["replacement_k1"] = bool(torch.allclose((1 - torch.ones_like(h)) * h + candidate, candidate))
+    output_k0, _ = predictor.semantic_state_cell(
+        observation.z4,
+        eps1,
+        h,
+        update_gain_override=torch.zeros_like(h),
+    )
+    output_k1, diagnostics_k1 = predictor.semantic_state_cell(
+        observation.z4,
+        eps1,
+        h,
+        update_gain_override=torch.ones_like(h),
+    )
+    checks["replacement_k0"] = bool(torch.allclose(output_k0, h))
+    checks["replacement_k1"] = bool(torch.allclose(output_k1, diagnostics_k1["semantic_candidate"]))
     checks["dynamics_frozen"] = sum(p.numel() for n in predictor.DYNAMICS_MODULES for p in getattr(predictor, n).parameters() if p.requires_grad) == 0
     return checks
 

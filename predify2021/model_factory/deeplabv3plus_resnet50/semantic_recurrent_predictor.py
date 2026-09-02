@@ -296,13 +296,23 @@ class ErrorRegulatedSemanticStateCell(nn.Module):
             nn.Sigmoid(),
         )
 
-    def forward(self, observation_z4, encoded_prediction_error, hidden):
+    def forward(
+        self,
+        observation_z4,
+        encoded_prediction_error,
+        hidden,
+        update_gain_override=None,
+    ):
         if hidden is None:
             hidden = observation_z4
         candidate_residual = self.candidate(torch.cat((hidden, observation_z4), dim=1))
         semantic_candidate = observation_z4 + candidate_residual
-        update_gain = self.update_gain(
-            torch.cat((hidden, observation_z4, encoded_prediction_error), dim=1)
+        update_gain = (
+            self.update_gain(
+                torch.cat((hidden, observation_z4, encoded_prediction_error), dim=1)
+            )
+            if update_gain_override is None
+            else update_gain_override
         )
         semantic_hidden = (1.0 - update_gain) * hidden + update_gain * semantic_candidate
         return semantic_hidden, {
@@ -318,17 +328,14 @@ class SemanticDiscrepancyRestorationHead(nn.Module):
 
     def __init__(self, channels=UNIFIED_STATE_CHANNELS):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Conv2d(channels, channels, 3, padding=1),
-            nn.GELU(),
-            nn.Conv2d(channels, channels, 3, padding=1),
-        )
-        nn.init.dirac_(self.net[-1].weight)
-        nn.init.zeros_(self.net[-1].bias)
-        self.net[-1].weight.data.mul_(0.1)
+        self.conv = nn.Conv2d(channels, channels, 3, padding=1)
+        nn.init.dirac_(self.conv.weight)
+        nn.init.zeros_(self.conv.bias)
+        with torch.no_grad():
+            self.conv.weight.mul_(0.1)
 
     def forward(self, semantic_discrepancy):
-        return self.net(semantic_discrepancy)
+        return self.conv(semantic_discrepancy)
 
 
 class ErrorRegulatedSemanticRestorationPredictor(nn.Module):
@@ -381,14 +388,12 @@ class ErrorRegulatedSemanticRestorationPredictor(nn.Module):
         observation,
         current_prediction,
         semantic_hidden=None,
-        prediction_error_override=None,
+        zero_encoded_prediction_error=False,
     ):
-        prediction_error_z4 = (
-            observation.z4 - current_prediction.z4
-            if prediction_error_override is None
-            else prediction_error_override
-        )
+        prediction_error_z4 = observation.z4 - current_prediction.z4
         encoded_prediction_error = self.semantic_error_encoder(prediction_error_z4)
+        if zero_encoded_prediction_error:
+            encoded_prediction_error = torch.zeros_like(encoded_prediction_error)
         semantic_hidden, state_diagnostics = self.semantic_state_cell(
             observation.z4,
             encoded_prediction_error,
