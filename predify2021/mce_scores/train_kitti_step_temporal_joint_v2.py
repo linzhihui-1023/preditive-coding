@@ -99,11 +99,17 @@ def train_epoch(model,predictor,teacher,groups,raft,opt,stage):
         prev_img,obs,raw,size=encode_clean(model,samples[0]); tp_img,tobs,traw,tsize=encode_clean(teacher[0],samples[0]); pending,h4,h1=predictor.predict_next(obs,zero_state(obs),None,None); tpending,th4,th1=teacher[1].predict_next(tobs,zero_state(tobs),None,None); sh=predictor.initial_semantic_state(obs); es=predictor.initial_error_temporal_statistics(); tsh=teacher[1].initial_semantic_state(tobs); tes=teacher[1].initial_error_temporal_statistics(); prev_logits=None; tprev=None; prev_mask=semantic_mask_from_panoptic_png(samples[0]["mask_path"]).cuda(); records=[]
         for fi,s in enumerate(samples[1:],1):
             img,obs,raw,size=encode_clean(model,s); er=error_state(obs,pending); rest,sh,diag=predictor.restore_current(obs,pending,sh,error_temporal_state=es); es=diag["error_temporal_state"]
-            slog=logits_for(model,raw,obs,rest,size); with_teacher=slog.detach(); mask=semantic_mask_from_panoptic_png(s["mask_path"]).cuda(); flow=raft.current_to_previous(img,prev_img)
+            with torch.no_grad():
+                timg,tobs,traw,tsize=encode_clean(teacher[0],s)
+                ter=error_state(tobs,tpending)
+                trest,tsh,td=teacher[1].restore_current(tobs,tpending,tsh,error_temporal_state=tes)
+                tes=td["error_temporal_state"]
+                with_teacher=logits_for(teacher[0],traw,tobs,trest,tsize).detach()
+            slog=logits_for(model,raw,obs,rest,size); mask=semantic_mask_from_panoptic_png(s["mask_path"]).cuda(); flow=raft.current_to_previous(img,prev_img)
             # Keep only the current decoder graph; earlier frames still
             # contribute their detached probabilities to temporal statistics.
             records=[(r[0].detach(),r[1],r[2],r[3],r[4],detach_state(r[5]),detach_state(r[6])) for r in records]
-            records.append((slog,with_teacher,mask,flow,prev_mask,rest,obs)); prev_img=img; prev_mask=mask; pending,h4,h1=predictor.predict_next(obs,er,h4,h1)
+            records.append((slog,with_teacher,mask,flow,prev_mask,rest,obs)); prev_img=img; prev_mask=mask; pending,h4,h1=predictor.predict_next(obs,er,h4,h1); tpending,th4,th1=teacher[1].predict_next(tobs,ter,th4,th1)
             if len(records)<TBPTT and fi<len(samples)-1: continue
             seg=records[-1][0]; sm=records[-1][2].unsqueeze(0); lseg=F.cross_entropy(seg,sm,ignore_index=IGNORE)
             ltc=[]; ratios=[]; lp=[]
@@ -122,15 +128,12 @@ def main(argv=None):
     ap=argparse.ArgumentParser(); ap.add_argument("--root",default="/home/lin/predify/kitti_step"); ap.add_argument("--fast-b-checkpoint",default=FAST_B); ap.add_argument("--dynamics-checkpoint",default=ROLE_PREDICTOR_CHECKPOINT_DEFAULT); ap.add_argument("--output",default=OUT); ap.add_argument("--result-output",default=RES); ap.add_argument("--stage1-epochs",type=int,default=1); ap.add_argument("--skip-training",action="store_true"); ap.add_argument("--skip-zero-step",action="store_true"); args=ap.parse_args(argv)
     random.seed(SEED); torch.manual_seed(SEED); torch.cuda.manual_seed_all(SEED)
     ds=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"train"); train=sequence_groups(ds); vd=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"val"); allv=sequence_groups(vd); dev={k:allv[k] for k in DEV3}; raft=FrozenRAFT(); (model,predictor,_),(teacher,teacher_p,_)=load_pair(args,1)
-    # The frozen teacher is the identical FAST-B initialization.  To keep the
-    # 32-GB evaluation GPU usable, preserve targets are represented by the
-    # detached pre-update student logits in this first controlled run.
-    del teacher, teacher_p; torch.cuda.empty_cache(); teacher=(model,predictor)
+    teacher=(teacher, teacher_p); teacher[0].eval(); teacher[1].eval()
     zero=REF if args.skip_zero_step else zero_step_check(model,predictor,dev,raft); print(json.dumps({"zero_step":zero},sort_keys=True),flush=True)
     if args.skip_training: return
     sem=[p for p in predictor.parameters() if p.requires_grad]; c4=[p for m in (model.multi_layer_adapter.output_adapters[3],model.host_conditioned_writebacks["3"]) for p in m.parameters() if p.requires_grad]; opt=torch.optim.AdamW([{"params":sem,"lr":2e-5},{"params":c4,"lr":1e-5}],weight_decay=.01); out=Path(args.output); out.mkdir(parents=True,exist_ok=True); rows=[]
     for epoch in range(1,args.stage1_epochs+1):
-        tr=train_epoch(model,predictor,teacher,train,raft,opt,1); val=evaluate(model,predictor,dev,raft); row={"epoch":epoch,"stage":1,"train":tr,"val":val}; rows.append(row); print(json.dumps(row,sort_keys=True),flush=True); torch.save({"experiment":"temporal_joint_v2","stage":1,"epoch":epoch,"model_state_dict":predictor.state_dict(),"c4_output_adapter_state_dict":model.multi_layer_adapter.output_adapters[3].state_dict(),"c4_writeback_state_dict":model.host_conditioned_writebacks["3"].state_dict(),"metrics":val},out/f"stage1_epoch_{epoch:03d}.pt")
+        tr=train_epoch(model,predictor,(teacher[0],teacher[1]),train,raft,opt,1); val=evaluate(model,predictor,dev,raft); row={"epoch":epoch,"stage":1,"train":tr,"val":val}; rows.append(row); print(json.dumps(row,sort_keys=True),flush=True); torch.save({"experiment":"temporal_joint_v2","stage":1,"epoch":epoch,"model_state_dict":predictor.state_dict(),"c4_output_adapter_state_dict":model.multi_layer_adapter.output_adapters[3].state_dict(),"c4_writeback_state_dict":model.host_conditioned_writebacks["3"].state_dict(),"metrics":val},out/f"stage1_epoch_{epoch:03d}.pt")
         if val["mIoU"]<.57: break
     res=Path(args.result_output); res.mkdir(parents=True,exist_ok=True); (res/"summary.json").write_text(json.dumps({"experiment":"Temporal Joint V2","zero_step":zero,"history":rows,"host":HOST,"original_fast_b":REF},indent=2)+"\n"); (res/"README.md").write_text("# Temporal Joint V2\nZero-step equivalence and controlled Stage 1 results.\n")
 

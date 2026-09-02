@@ -1,0 +1,2 @@
+epoch,stage,semantic,c4_adapter,c4_writeback,z4_dynamics,backbone,decoder,c1
+0,zero_step,0,0,0,0,0,0,0
