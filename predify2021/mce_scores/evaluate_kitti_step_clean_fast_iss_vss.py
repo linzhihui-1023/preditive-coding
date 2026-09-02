@@ -1,8 +1,8 @@
-"""Fast clean ISS->VSS evaluation matching the DiTTA-style core table.
+"""Full clean ISS->VSS evaluation matching the DiTTA-style core table.
 
-No training and no corruption are used.  The fixed KITTI-STEP fast-validation
-sequences 0002/0010/0018 are evaluated with the frame-wise DeepLabV3+ Host and
-the trained Predify FAST-B checkpoint.  Metrics are mIoU, mVC8 and mVC16.
+No training and no corruption are used. The complete KITTI-STEP validation
+split is evaluated with the frame-wise DeepLabV3+ Host and the trained Predify
+FAST-B checkpoint. Metrics are mIoU, mVC8 and mVC16.
 
 mVC follows the VSPW definition: for each n-frame sliding window, evaluate the
 fraction of pixels whose ground-truth semantic label is unchanged throughout
@@ -46,7 +46,6 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
 )
 
 
-FAST_VALIDATION_SEQUENCES = ("0002", "0010", "0018")
 FAST_B_CHECKPOINT_DEFAULT = (
     "/home/lin/predify/experiments/"
     "kitti_step_semantic_v3_joint_c4_fast_ab_5754714/"
@@ -169,9 +168,11 @@ def predify_logits(model, raw, observation, restored, output_size):
     return model.decode_from_host_feature(host_feature)
 
 
-def update_prediction_metrics(confusion, consistency, prediction, mask):
+def update_prediction_metrics(confusion, consistency, prediction, mask, sequence_confusion=None):
     prediction = prediction.squeeze(0).cpu().to(torch.int64)
     update_confusion_matrix(confusion, prediction, mask)
+    if sequence_confusion is not None:
+        update_confusion_matrix(sequence_confusion, prediction, mask)
     consistency.update(mask, prediction)
 
 
@@ -181,16 +182,12 @@ def evaluate(args):
         Path(args.root), "val"
     )
     all_groups = sequence_groups(dataset)
-    missing = [
-        sequence for sequence in FAST_VALIDATION_SEQUENCES
-        if sequence not in all_groups
-    ]
-    if missing:
-        raise RuntimeError(f"Missing fixed fast-validation sequences: {missing}")
-    groups = {
-        sequence: all_groups[sequence]
-        for sequence in FAST_VALIDATION_SEQUENCES
-    }
+    groups = dict(sorted(all_groups.items()))
+    if len(groups) != 9:
+        raise RuntimeError(
+            "Full KITTI-STEP validation protocol expects 9 sequences, "
+            f"got {len(groups)}: {list(groups)}"
+        )
 
     confusion = {
         "host": torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64),
@@ -205,6 +202,10 @@ def evaluate(args):
 
             host_vc = VideoConsistency()
             predify_vc = VideoConsistency()
+            sequence_confusion = {
+                "host": torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64),
+                "predify": torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64),
+            }
 
             # Frame 0: Predify has no temporal history, so its causal output is
             # exactly the frame-wise Host output.  The frame is still included
@@ -216,10 +217,12 @@ def evaluate(args):
             )
             host_prediction = host_logits.argmax(dim=1)
             update_prediction_metrics(
-                confusion["host"], host_vc, host_prediction, mask
+                confusion["host"], host_vc, host_prediction, mask,
+                sequence_confusion["host"],
             )
             update_prediction_metrics(
-                confusion["predify"], predify_vc, host_prediction, mask
+                confusion["predify"], predify_vc, host_prediction, mask,
+                sequence_confusion["predify"],
             )
 
             pending, h4, h1 = predictor.predict_next(
@@ -251,10 +254,12 @@ def evaluate(args):
                 restored_prediction = restored_logits.argmax(dim=1)
 
                 update_prediction_metrics(
-                    confusion["host"], host_vc, host_prediction, mask
+                    confusion["host"], host_vc, host_prediction, mask,
+                    sequence_confusion["host"],
                 )
                 update_prediction_metrics(
-                    confusion["predify"], predify_vc, restored_prediction, mask
+                    confusion["predify"], predify_vc, restored_prediction, mask,
+                    sequence_confusion["predify"],
                 )
 
                 pending, h4, h1 = predictor.predict_next(
@@ -263,15 +268,26 @@ def evaluate(args):
 
             host_values = host_vc.values()
             predify_values = predify_vc.values()
+            sequence_host_iou = compute_iou(sequence_confusion["host"])
+            sequence_predify_iou = compute_iou(sequence_confusion["predify"])
+            sequence_host_miou = float(torch.nanmean(sequence_host_iou).item())
+            sequence_predify_miou = float(torch.nanmean(sequence_predify_iou).item())
             per_sequence[sequence] = {
                 "frame_count": len(samples),
                 "host": {
+                    "mIoU": sequence_host_miou,
                     "mVC8": host_values[8],
                     "mVC16": host_values[16],
                 },
                 "predify": {
+                    "mIoU": sequence_predify_miou,
                     "mVC8": predify_values[8],
                     "mVC16": predify_values[16],
+                },
+                "delta": {
+                    "mIoU": sequence_predify_miou - sequence_host_miou,
+                    "mVC8": predify_values[8] - host_values[8],
+                    "mVC16": predify_values[16] - host_values[16],
                 },
             }
 
@@ -294,10 +310,10 @@ def evaluate(args):
     predify_mvc16 = mean_sequence_metric("predify", "mVC16")
 
     result = {
-        "experiment": "kitti_step_clean_fast_iss_to_vss",
+        "experiment": "kitti_step_clean_full_val_iss_to_vss",
         "checkpoint": str(args.checkpoint),
         "checkpoint_epoch": payload.get("epoch"),
-        "sequences": list(FAST_VALIDATION_SEQUENCES),
+        "sequences": list(groups),
         "corruption": None,
         "test_time_parameter_updates": False,
         "metrics": {
@@ -356,7 +372,7 @@ def main():
     )
     parser.add_argument(
         "--output",
-        default="results/kitti_step_clean_fast_iss_to_vss.json",
+        default="results/kitti_step_clean_full_val_iss_to_vss.json",
     )
     args = parser.parse_args()
     if not torch.cuda.is_available():
