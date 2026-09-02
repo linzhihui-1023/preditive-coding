@@ -1,0 +1,52 @@
+{
+  "checkpoint": "/home/lin/experiments/kitti_step_semantic_v3_temporal_stats_e3_correct/v3_temporal_stats/best.pt",
+  "checkpoint_epoch": 1,
+  "conditions": [
+    "Blur-Mid",
+    "Blur-Max"
+  ],
+  "experiment": "semantic_v3_temporal_stats_fast_miou_bottleneck",
+  "results": {
+    "Blur-Max": {
+      "effective_frame_count": 781,
+      "learned_transfer_efficiency": 0.019690700809195296,
+      "mIoU": {
+        "clean_c4": 0.5847528592339077,
+        "corrupted": 0.3490690673936184,
+        "learned": 0.3505943369339855,
+        "oracle_z4_writeback": 0.42653048205565014
+      },
+      "writeback_transfer_ratio": 0.3286667023522912,
+      "z4_mse": {
+        "corrupted": 0.00035381152651722277,
+        "learned": 0.0003030276030596291,
+        "oracle": 0.0
+      }
+    },
+    "Blur-Mid": {
+      "effective_frame_count": 781,
+      "learned_transfer_efficiency": -0.01688439673219328,
+      "mIoU": {
+        "clean_c4": 0.5847528592339077,
+        "corrupted": 0.437285378004644,
+        "learned": 0.43645105435132026,
+        "oracle_z4_writeback": 0.48669926388739865
+      },
+      "writeback_transfer_ratio": 0.3350832703647538,
+      "z4_mse": {
+        "corrupted": 0.0002609318368662764,
+        "learned": 0.00022359469632866164,
+        "oracle": 0.0
+      }
+    }
+  },
+  "sequences": [
+    "0002",
+    "0010",
+    "0018"
+  ],
+  "sigma": {
+    "Blur-Max": 3.0,
+    "Blur-Mid": 2.25
+  }
+}
