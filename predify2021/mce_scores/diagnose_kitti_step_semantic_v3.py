@@ -29,7 +29,7 @@ def main():
     if not torch.cuda.is_available(): raise RuntimeError("CUDA is required")
     payload = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
     model, _ = load_components(STATIC_CHECKPOINT_DEFAULT, ADAPTER_CHECKPOINT_DEFAULT, payload["source_dynamics_checkpoint"], WRITEBACK_CHECKPOINT_DEFAULT)
-    predictor = ErrorRegulatedSemanticRestorationPredictor().cuda(); predictor.load_state_dict(payload["model_state_dict"], strict=True); predictor.freeze_dynamics(); model.requires_grad_(False); model.eval(); predictor.eval()
+    predictor = ErrorRegulatedSemanticRestorationPredictor(use_error_temporal_stats=payload.get("use_error_temporal_stats", False)).cuda(); predictor.load_state_dict(payload["model_state_dict"], strict=True); predictor.freeze_dynamics(); model.requires_grad_(False); model.eval(); predictor.eval()
     groups_all = sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "val")); missing = [sequence for sequence in FAST_VALIDATION_SEQUENCES if sequence not in groups_all]
     if missing: raise RuntimeError(f"Missing fixed fast-validation sequences: {missing}")
     groups = {sequence: groups_all[sequence] for sequence in FAST_VALIDATION_SEQUENCES}

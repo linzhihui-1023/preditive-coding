@@ -69,6 +69,7 @@ def run(model, predictor, groups, limit):
         pending = {c: (*predictor.predict_next(o, zero_state(o), None, None), None) for c, o in observations.items()}
         hidden = {c: predictor.initial_semantic_state(observations[c]) for c in CONDITIONS}
         hidden_zero = {c: predictor.initial_semantic_state(observations[c]) for c in CONDITIONS}
+        error_stats = {c: predictor.initial_error_temporal_statistics() for c in CONDITIONS}
         count = 0
         for frame in range(1, len(samples)):
             if count >= limit: break
@@ -77,14 +78,17 @@ def run(model, predictor, groups, limit):
                 for c in CONDITIONS:
                     o = observations[c]; p, h4, h1, _ = pending[c]; e = error_state(o, p)
                     with torch.inference_mode():
-                        _, hidden[c], _ = predictor.restore_current(o, p, hidden[c]); _, hidden_zero[c], _ = predictor.restore_current(o, p, hidden_zero[c], zero_encoded_prediction_error=True); pending[c] = (*predictor.predict_next(o, e, h4, h1), None)
+                        _, hidden[c], d = predictor.restore_current(o, p, hidden[c], error_temporal_state=error_stats[c]); error_stats[c] = d["error_temporal_state"]
+                        _, hidden_zero[c], _ = predictor.restore_current(o, p, hidden_zero[c], zero_encoded_prediction_error=True, error_temporal_state=error_stats[c], update_error_temporal_state=False)
+                        pending[c] = (*predictor.predict_next(o, e, h4, h1), None)
                 continue
             for c in CONDITIONS:
                 o = observations[c]; p, h4, h1, _ = pending[c]; e = error_state(o, p); s = summaries[c]
                 with torch.inference_mode():
-                    restored, hidden[c], d = predictor.restore_current(o, p, hidden[c])
-                    nohist, _, nd = predictor.restore_current(o, p, o.z4.detach())
-                    zero, hidden_zero[c], zd = predictor.restore_current(o, p, hidden_zero[c], zero_encoded_prediction_error=True)
+                    restored, hidden[c], d = predictor.restore_current(o, p, hidden[c], error_temporal_state=error_stats[c])
+                    error_stats[c] = d["error_temporal_state"]
+                    nohist, _, nd = predictor.restore_current(o, p, o.z4.detach(), disable_error_temporal_stats=True, update_error_temporal_state=False)
+                    zero, hidden_zero[c], zd = predictor.restore_current(o, p, hidden_zero[c], zero_encoded_prediction_error=True, error_temporal_state=error_stats[c], update_error_temporal_state=False)
                 oracle = clean.z4 - o.z4; delta = d["restoration_delta_z4"]; discrepancy = d["semantic_discrepancy"]
                 obs_mse = float(F.mse_loss(o.z4, clean.z4).item()); s["obs_sse"] += obs_mse; s["count"] += 1; s["frames"] += 1
                 add(s, "prediction_error_rms", rms(d["prediction_error_z4"])); add(s, "encoded_error_rms", rms(d["encoded_prediction_error"]))
@@ -105,18 +109,20 @@ def run(model, predictor, groups, limit):
 
 def gradients(model, predictor, groups, steps):
     sequence, samples = next(iter(groups.items())); onset = warmup_frame_count(len(samples)); predictor.train(); predictor.zero_grad(set_to_none=True)
-    _, mid, maximum = batch_observations(model, samples[0], 0, len(samples)); mid, maximum = materialize_state(mid), materialize_state(maximum); pending = {c: (*predictor.predict_next(o, zero_state(o), None, None), None) for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum))}; hidden = {c: predictor.initial_semantic_state(o) for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum))}
+    _, mid, maximum = batch_observations(model, samples[0], 0, len(samples)); mid, maximum = materialize_state(mid), materialize_state(maximum); pending = {c: (*predictor.predict_next(o, zero_state(o), None, None), None) for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum))}; hidden = {c: predictor.initial_semantic_state(o) for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum))}; error_stats = {c: predictor.initial_error_temporal_statistics() for c in ("Blur-Mid", "Blur-Max")}
     for frame in range(1, onset):
         _, mid, maximum = batch_observations(model, samples[frame], frame, len(samples))
         mid, maximum = materialize_state(mid), materialize_state(maximum)
         for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum)):
             p, h4, h1, _ = pending[c]; e = error_state(o, p)
-            with torch.no_grad(): _, hidden[c], _ = predictor.restore_current(o, p, hidden[c]); pending[c] = (*predictor.predict_next(o, e, h4, h1), None)
+            with torch.no_grad():
+                _, hidden[c], d = predictor.restore_current(o, p, hidden[c], error_temporal_state=error_stats[c]); error_stats[c] = d["error_temporal_state"]
+                pending[c] = (*predictor.predict_next(o, e, h4, h1), None)
     losses = []
     for frame in range(onset, onset + steps):
         clean, mid, maximum = batch_observations(model, samples[frame], frame, len(samples)); clean, mid, maximum = materialize_state(clean), materialize_state(mid), materialize_state(maximum)
         for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum)):
-            p, h4, h1, _ = pending[c]; p = materialize_state(p); restored, hidden[c], _ = predictor.restore_current(o, p, hidden[c]); losses.append(F.smooth_l1_loss(restored.z4, clean.z4.detach()))
+            p, h4, h1, _ = pending[c]; p = materialize_state(p); restored, hidden[c], d = predictor.restore_current(o, p, hidden[c], error_temporal_state=error_stats[c]); error_stats[c] = d["error_temporal_state"]; losses.append(F.smooth_l1_loss(restored.z4, clean.z4.detach()))
             with torch.no_grad(): pending[c] = (*predictor.predict_next(o, error_state(o, p), h4, h1), None)
     torch.stack(losses).mean().backward(); modules = {"semantic_error_encoder": predictor.semantic_error_encoder, "semantic_state_cell.candidate": predictor.semantic_state_cell.candidate, "semantic_state_cell.update_gain": predictor.semantic_state_cell.update_gain, "semantic_restoration_head": predictor.semantic_restoration_head}; result = {"sequence": sequence, "start_frame": onset, "step_count": steps, "optimizer_step_performed": False, "gradient_norms": {name: math.sqrt(sum(float(p.grad.detach().float().square().sum().item()) for p in module.parameters() if p.grad is not None)) for name, module in modules.items()}}; predictor.zero_grad(set_to_none=True); predictor.eval(); return result
 
@@ -161,7 +167,7 @@ def internal_diagnosis_row(condition, result, stage):
 def main():
     p = argparse.ArgumentParser(); p.add_argument("--root", default="/home/lin/predify/kitti_step"); p.add_argument("--checkpoint", default=DEFAULT_CHECKPOINT); p.add_argument("--output", default="results/kitti_step_semantic_v3_fast"); p.add_argument("--max-frames-per-sequence", type=int, default=250); p.add_argument("--gradient-steps", type=int, default=8); p.add_argument("--skip-gradient-check", action="store_true"); p.add_argument("--smoke", action="store_true"); args = p.parse_args()
     if not torch.cuda.is_available(): raise RuntimeError("CUDA is required")
-    payload = torch.load(args.checkpoint, map_location="cpu", weights_only=False); model, _ = load_components(STATIC_CHECKPOINT_DEFAULT, ADAPTER_CHECKPOINT_DEFAULT, payload["source_dynamics_checkpoint"], WRITEBACK_CHECKPOINT_DEFAULT); predictor = ErrorRegulatedSemanticRestorationPredictor().cuda(); predictor.load_state_dict(payload["model_state_dict"], strict=True); predictor.freeze_dynamics(); model.requires_grad_(False); model.eval(); predictor.eval()
+    payload = torch.load(args.checkpoint, map_location="cpu", weights_only=False); model, _ = load_components(STATIC_CHECKPOINT_DEFAULT, ADAPTER_CHECKPOINT_DEFAULT, payload["source_dynamics_checkpoint"], WRITEBACK_CHECKPOINT_DEFAULT); predictor = ErrorRegulatedSemanticRestorationPredictor(use_error_temporal_stats=payload.get("use_error_temporal_stats", False)).cuda(); predictor.load_state_dict(payload["model_state_dict"], strict=True); predictor.freeze_dynamics(); model.requires_grad_(False); model.eval(); predictor.eval()
     groups = sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "val")); ids = sorted(groups); chosen = [ids[0], ids[len(ids) // 2], ids[-1]]; chosen = chosen[:1] if args.smoke else chosen; groups = {k: groups[k] for k in chosen}; limit = 8 if args.smoke else args.max_frames_per_sequence
     results, trace = run(model, predictor, groups, limit); gradient = None if args.skip_gradient_check else gradients(model, predictor, sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "train")), args.gradient_steps); output = Path(args.output) / "smoke" if args.smoke else Path(args.output); output.mkdir(parents=True, exist_ok=True)
     stage_a = {c: "GO" if results[c]["continuous_feature_recovery"] > 0 and results[c]["semantic_state"]["state_recovery"] > 0 and results[c]["continuous"]["direction"] > 0 and results[c]["continuous"]["amplitude"] >= 0.08 and results[c]["semantic_state"]["growth_ratio"] < 3 else "NO-GO" for c in CONDITIONS}

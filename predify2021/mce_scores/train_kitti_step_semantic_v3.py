@@ -66,12 +66,16 @@ def train_sequence(model, predictor, samples, epoch, sequence_index, optimizer, 
     first, _, _, _, _ = encode_pair(model, samples[0], condition, pattern_uses_blur(pattern, 0, len(samples)))
     pending, h4, h1 = predictor.predict_next(first, zero_state(first), None, None)
     h_sem = predictor.initial_semantic_state(first)
+    error_stats = predictor.initial_error_temporal_statistics()
     losses, total, steps = [], 0.0, min(len(samples) - 1, max_steps) if max_steps else len(samples) - 1
     for offset in range(steps):
         frame = offset + 1
         observation, clean, _, _, _ = encode_pair(model, samples[frame], condition, pattern_uses_blur(pattern, frame, len(samples)))
         prediction_error = error_state(observation, pending)
-        restored, h_sem, _ = predictor.restore_current(observation, pending, h_sem)
+        restored, h_sem, diagnostics = predictor.restore_current(
+            observation, pending, h_sem, error_temporal_state=error_stats
+        )
+        error_stats = diagnostics["error_temporal_state"]
         target = clean.z4.detach()
         if residual_aware:
             loss = residual_aware_loss(restored.z4 - observation.z4, target - observation.z4)
@@ -82,7 +86,7 @@ def train_sequence(model, predictor, samples, epoch, sequence_index, optimizer, 
             pending, h4, h1 = predictor.predict_next(observation, prediction_error, h4, h1)
         if len(losses) == tbptt_steps or frame == steps:
             optimizer.zero_grad(set_to_none=True); torch.stack(losses).mean().backward(); optimizer.step()
-            h_sem = h_sem.detach(); losses = []
+            h_sem = h_sem.detach(); error_stats = error_stats.detach() if error_stats is not None else None; losses = []
     return {"steps": steps, "loss_sum": total}
 
 
@@ -112,11 +116,15 @@ def evaluate_condition(model, predictor, groups, condition, residual_aware=False
             first, _, _, _, _ = encode_pair(model, samples[0], condition, False)
             pending, h4, h1 = predictor.predict_next(first, zero_state(first), None, None)
             h_sem = predictor.initial_semantic_state(first)
+            error_stats = predictor.initial_error_temporal_statistics()
             for frame in range(1, len(samples)):
                 if max_frames and sequence_steps >= max_frames: break
                 obs, clean, raw, clean_raw, output_size = encode_pair(model, samples[frame], condition, frame >= onset)
                 error = error_state(obs, pending)
-                restored, h_sem, _ = predictor.restore_current(obs, pending, h_sem)
+                restored, h_sem, diagnostics = predictor.restore_current(
+                    obs, pending, h_sem, error_temporal_state=error_stats
+                )
+                error_stats = diagnostics["error_temporal_state"]
                 if frame >= onset:
                     mask = semantic_mask_from_panoptic_png(samples[frame]["mask_path"])
                     update_confusion_matrix(confusion["blur"], model.decode_from_host_feature(HostFeature(raw.c4, raw.c1, output_size)).argmax(1).squeeze(0).cpu(), mask)
@@ -134,26 +142,32 @@ def evaluate_condition(model, predictor, groups, condition, residual_aware=False
     return {"effective_frame_count": sums["steps"], "blur_mIoU": metrics["blur"], "restored_mIoU": metrics["restored"], "clean_mIoU": metrics["clean"], "feature_recovery": 1.0 - restored / max(obs, 1e-12), "state_recovery": 1.0 - state / max(obs, 1e-12), "z4_loss": restored}
 
 
-def smoke_checks(predictor, observation):
+def smoke_checks(predictor, observation, use_error_temporal_stats=False):
     checks = {}
     checks["frame0_history_exact"] = bool(torch.equal(predictor.initial_semantic_state(observation), observation.z4.detach()))
     h = torch.randn_like(observation.z4); eps1 = torch.randn_like(observation.z4); eps2 = torch.randn_like(observation.z4)
-    _, d1 = predictor.semantic_state_cell(observation.z4, eps1, h); _, d2 = predictor.semantic_state_cell(observation.z4, eps2, h)
+    stats = None
+    if use_error_temporal_stats:
+        from predify2021.model_factory.deeplabv3plus_resnet50.semantic_recurrent_predictor import update_error_temporal_statistics
+        stats = update_error_temporal_statistics(None, eps1).as_features()
+    _, d1 = predictor.semantic_state_cell(observation.z4, eps1, h, error_history_statistics=stats); _, d2 = predictor.semantic_state_cell(observation.z4, eps2, h, error_history_statistics=stats)
     checks["error_does_not_change_candidate"] = bool(torch.equal(d1["semantic_candidate"], d2["semantic_candidate"]))
     checks["error_changes_gain"] = bool(not torch.equal(d1["semantic_update_gain"], d2["semantic_update_gain"]))
-    _, d3 = predictor.semantic_state_cell(observation.z4 + 1.0, eps1, h)
+    _, d3 = predictor.semantic_state_cell(observation.z4 + 1.0, eps1, h, error_history_statistics=stats)
     checks["observation_changes_candidate"] = bool(not torch.equal(d1["semantic_candidate"], d3["semantic_candidate"]))
     candidate = d1["semantic_candidate"]
     output_k0, _ = predictor.semantic_state_cell(
         observation.z4,
         eps1,
         h,
+        error_history_statistics=stats,
         update_gain_override=torch.zeros_like(h),
     )
     output_k1, diagnostics_k1 = predictor.semantic_state_cell(
         observation.z4,
         eps1,
         h,
+        error_history_statistics=stats,
         update_gain_override=torch.ones_like(h),
     )
     checks["replacement_k0"] = bool(torch.allclose(output_k0, h))
@@ -165,7 +179,8 @@ def smoke_checks(predictor, observation):
 def run_variant(args, variant):
     random.seed(args.seed); torch.manual_seed(args.seed); torch.cuda.manual_seed_all(args.seed)
     model, source = load_components(STATIC_CHECKPOINT_DEFAULT, ADAPTER_CHECKPOINT_DEFAULT, args.dynamics_checkpoint, WRITEBACK_CHECKPOINT_DEFAULT)
-    predictor = ErrorRegulatedSemanticRestorationPredictor().cuda(); predictor.load_dynamics_from_role_separated_state_dict(source.state_dict()); predictor.freeze_dynamics(); model.requires_grad_(False); model.eval()
+    use_error_temporal_stats = variant == "v3_temporal_stats"
+    predictor = ErrorRegulatedSemanticRestorationPredictor(use_error_temporal_stats=use_error_temporal_stats).cuda(); predictor.load_dynamics_from_role_separated_state_dict(source.state_dict()); predictor.freeze_dynamics(); model.requires_grad_(False); model.eval()
     semantic_parameters = [p for p in predictor.semantic_parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(semantic_parameters, lr=args.learning_rate, weight_decay=args.weight_decay)
     train = sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "train")); val_all = sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "val")); missing = [sequence for sequence in FAST_VALIDATION_SEQUENCES if sequence not in val_all]
@@ -175,27 +190,27 @@ def run_variant(args, variant):
     if args.smoke: train, val = dict(list(train.items())[:1]), dict(list(val.items())[:1]); epochs, train_max, val_max, output = 1, 16, 32, output / "smoke"
     output.mkdir(parents=True, exist_ok=True)
     first, _, _, _, _ = encode_pair(model, next(iter(train.values()))[0], "Blur-Mid", False)
-    checks = smoke_checks(predictor, first); history = []; best = None; stale = 0
+    checks = smoke_checks(predictor, first, use_error_temporal_stats); history = []; best = None; stale = 0
     for epoch in range(1, epochs + 1):
         train_metrics = train_epoch(model, predictor, train, epoch, optimizer, variant == "v3_full", args.tbptt_steps, train_max)
         conditions = {c: evaluate_condition(model, predictor, val, c, variant == "v3_full", val_max) for c in TRAIN_CONDITIONS}
         val_metrics = {"conditions": conditions, "mean_restored_mIoU": sum(v["restored_mIoU"] for v in conditions.values()) / 2, "mean_loss": sum(v["z4_loss"] for v in conditions.values()) / 2}
         row = {"epoch": epoch, "train": train_metrics, "val": val_metrics}; history.append(row); print(json.dumps({"variant": variant, **row}, sort_keys=True), flush=True)
-        checkpoint = {"model_state_dict": predictor.state_dict(), "source_dynamics_checkpoint": args.dynamics_checkpoint, "epoch": epoch}
+        checkpoint = {"model_state_dict": predictor.state_dict(), "source_dynamics_checkpoint": args.dynamics_checkpoint, "epoch": epoch, "use_error_temporal_stats": use_error_temporal_stats}
         torch.save(checkpoint, output / f"epoch_{epoch:03d}.pt")
         if best is None or (val_metrics["mean_restored_mIoU"], -val_metrics["mean_loss"]) > (best["val"]["mean_restored_mIoU"], -best["val"]["mean_loss"]):
-            best = row; stale = 0; torch.save({"model_state_dict": predictor.state_dict(), "source_dynamics_checkpoint": args.dynamics_checkpoint, "epoch": epoch}, output / "best.pt")
+            best = row; stale = 0; torch.save({"model_state_dict": predictor.state_dict(), "source_dynamics_checkpoint": args.dynamics_checkpoint, "epoch": epoch, "use_error_temporal_stats": use_error_temporal_stats}, output / "best.pt")
         else: stale += 1
         if stale >= args.patience: break
-    summary = {"experiment": f"kitti_step_semantic_{variant}", "variant": variant, "checkpoint": str(output / "best.pt"), "trainable_parameter_count": sum(p.numel() for p in semantic_parameters), "dynamics_trainable_parameter_count": 0, "config": {"epochs": epochs, "patience": args.patience, "tbptt_steps": args.tbptt_steps, "learning_rate": args.learning_rate, "weight_decay": args.weight_decay, "loss": "ResidualAwareSmoothL1(beta=0.01)" if variant == "v3_full" else "SmoothL1", "fast_validation_sequences": FAST_VALIDATION_SEQUENCES}, "smoke_checks": checks, "history": history, "best": best}
+    summary = {"experiment": f"kitti_step_semantic_{variant}", "variant": variant, "checkpoint": str(output / "best.pt"), "trainable_parameter_count": sum(p.numel() for p in semantic_parameters), "dynamics_trainable_parameter_count": 0, "error_temporal_stats_trainable_parameter_count": sum(p.numel() for p in predictor.semantic_state_cell.history_projection.parameters()) if use_error_temporal_stats else 0, "config": {"epochs": epochs, "patience": args.patience, "tbptt_steps": args.tbptt_steps, "learning_rate": args.learning_rate, "weight_decay": args.weight_decay, "loss": "ResidualAwareSmoothL1(beta=0.01)" if variant == "v3_full" else "SmoothL1", "fast_validation_sequences": FAST_VALIDATION_SEQUENCES, "use_error_temporal_stats": use_error_temporal_stats}, "smoke_checks": checks, "history": history, "best": best}
     (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n"); (output / "training_history.json").write_text(json.dumps(history, indent=2, sort_keys=True) + "\n")
     return summary
 
 
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument("--root", default="/home/lin/predify/kitti_step"); parser.add_argument("--output", default="/home/lin/predify/experiments/kitti_step_semantic_v3"); parser.add_argument("--variant", choices=("v3_structure", "v3_full", "both"), default="both"); parser.add_argument("--dynamics-checkpoint", default=ROLE_PREDICTOR_CHECKPOINT_DEFAULT); parser.add_argument("--epochs", type=int, default=MAX_EPOCHS); parser.add_argument("--patience", type=int, default=PATIENCE); parser.add_argument("--tbptt-steps", type=int, default=TBPTT_STEPS); parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE); parser.add_argument("--weight-decay", type=float, default=WEIGHT_DECAY); parser.add_argument("--seed", type=int, default=SEED); parser.add_argument("--smoke", action="store_true"); args = parser.parse_args()
+    parser = argparse.ArgumentParser(); parser.add_argument("--root", default="/home/lin/predify/kitti_step"); parser.add_argument("--output", default="/home/lin/predify/experiments/kitti_step_semantic_v3"); parser.add_argument("--variant", choices=("v3_structure", "v3_temporal_stats", "v3_full", "both"), default="both"); parser.add_argument("--dynamics-checkpoint", default=ROLE_PREDICTOR_CHECKPOINT_DEFAULT); parser.add_argument("--epochs", type=int, default=MAX_EPOCHS); parser.add_argument("--patience", type=int, default=PATIENCE); parser.add_argument("--tbptt-steps", type=int, default=TBPTT_STEPS); parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE); parser.add_argument("--weight-decay", type=float, default=WEIGHT_DECAY); parser.add_argument("--seed", type=int, default=SEED); parser.add_argument("--smoke", action="store_true"); args = parser.parse_args()
     if not torch.cuda.is_available(): raise RuntimeError("CUDA is required")
-    variants = ("v3_structure", "v3_full") if args.variant == "both" else (args.variant,)
+    variants = ("v3_structure", "v3_temporal_stats") if args.variant == "both" else (args.variant,)
     result = {variant: run_variant(args, variant) for variant in variants}; print(json.dumps({"variants": list(result)}, indent=2), flush=True)
 
 
