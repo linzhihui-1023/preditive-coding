@@ -18,7 +18,7 @@ from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import 
 from predify2021.mce_scores.kitti_step_persistent_blur import BLUR_KERNEL_SIZE
 from predify2021.mce_scores.role_separated_dynamic_error_correction import ADAPTER_CHECKPOINT_DEFAULT, STATIC_CHECKPOINT_DEFAULT, WRITEBACK_CHECKPOINT_DEFAULT, load_components
 from predify2021.mce_scores.train_kitti_step_semantic_v3 import TRAIN_CONDITIONS, evaluate_condition
-from predify2021.mce_scores.diagnose_kitti_step_semantic_v3_fast import gradients, run
+from predify2021.mce_scores.diagnose_kitti_step_semantic_v3_fast import gradients, internal_diagnosis_row, run, write_csv
 from predify2021.model_factory.deeplabv3plus_resnet50 import ErrorRegulatedSemanticRestorationPredictor
 
 
@@ -29,19 +29,32 @@ def main():
     model, _ = load_components(STATIC_CHECKPOINT_DEFAULT, ADAPTER_CHECKPOINT_DEFAULT, payload["source_dynamics_checkpoint"], WRITEBACK_CHECKPOINT_DEFAULT)
     predictor = ErrorRegulatedSemanticRestorationPredictor().cuda(); predictor.load_state_dict(payload["model_state_dict"], strict=True); predictor.freeze_dynamics(); model.requires_grad_(False); model.eval(); predictor.eval()
     groups = sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "val"))
-    fast, trace = run(model, predictor, groups, 10**9)
+    internal_results, trace = run(model, predictor, groups, 10**9)
     formal = {c: evaluate_condition(model, predictor, groups, c) for c in TRAIN_CONDITIONS}
-    for c in TRAIN_CONDITIONS:
-        fast[c]["blur_mIoU"] = formal[c]["blur_mIoU"]; fast[c]["restored_mIoU"] = formal[c]["restored_mIoU"]; fast[c]["clean_mIoU"] = formal[c]["clean_mIoU"]; fast[c]["mIoU_gain_vs_blur"] = formal[c]["restored_mIoU"] - formal[c]["blur_mIoU"]
+    validation_results = {
+        c: {
+            "effective_frame_count": formal[c]["effective_frame_count"],
+            "blur_mIoU": formal[c]["blur_mIoU"],
+            "v3_mIoU": formal[c]["restored_mIoU"],
+            "clean_mIoU": formal[c]["clean_mIoU"],
+            "v3_minus_host": formal[c]["restored_mIoU"] - formal[c]["blur_mIoU"],
+            "feature_recovery": formal[c]["feature_recovery"],
+            "clean_stability_delta": formal[c]["restored_mIoU"] - formal[c]["clean_mIoU"],
+        }
+        for c in TRAIN_CONDITIONS
+    }
     train_groups = sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "train")); gradient = gradients(model, predictor, train_groups, args.gradient_steps)
     output = Path(args.output); output.mkdir(parents=True, exist_ok=True)
-    summary = {"experiment": "kitti_step_semantic_v3_formal", "diagnostic_only": True, "parameters_updated": False, "checkpoint": args.checkpoint, "split": "val", "sequence_count": len(groups), "protocol": {"conditions": {"Blur-Mid": "sigma=2.25", "Blur-Max": "sigma=3.0"}, "kernel": [BLUR_KERNEL_SIZE, BLUR_KERNEL_SIZE], "warmup": "existing 10%", "states_start": "frame 0", "writeback": "existing frozen residual writeback"}, "results": fast, "gradient_norms": gradient, "stage_a": {c: "GO" if fast[c]["continuous_feature_recovery"] > 0 and fast[c]["state_recovery"] > 0 and fast[c]["continuous"]["direction"] > 0 and fast[c]["continuous"]["amplitude"] >= 0.08 and fast[c]["semantic_state"]["growth_ratio"] < 3 and fast[c]["restored_mIoU"] >= fast[c]["blur_mIoU"] else "NO-GO" for c in TRAIN_CONDITIONS}}
+    internal_stage_a = {c: "GO" if internal_results[c]["continuous_feature_recovery"] > 0 and internal_results[c]["semantic_state"]["state_recovery"] > 0 and internal_results[c]["continuous"]["direction"] > 0 and internal_results[c]["continuous"]["amplitude"] >= 0.08 and internal_results[c]["semantic_state"]["growth_ratio"] < 3 else "NO-GO" for c in TRAIN_CONDITIONS}
+    validation_stage_a = {c: "GO" if validation_results[c]["v3_mIoU"] >= validation_results[c]["blur_mIoU"] else "NO-GO" for c in TRAIN_CONDITIONS}
+    summary = {"experiment": "kitti_step_semantic_v3_formal", "diagnostic_only": True, "parameters_updated": False, "checkpoint": args.checkpoint, "split": "val", "sequence_count": len(groups), "protocol": {"conditions": {"Blur-Mid": "sigma=2.25", "Blur-Max": "sigma=3.0"}, "kernel": [BLUR_KERNEL_SIZE, BLUR_KERNEL_SIZE], "warmup": "existing 10%", "states_start": "frame 0", "writeback": "existing frozen residual writeback"}, "internal_diagnosis": {"conditions": internal_results, "gradient_probe": gradient, "stage_a": internal_stage_a}, "fast_validation": {"conditions": validation_results, "stage_a": validation_stage_a}}
     (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n"); (output / "gradient_norms.json").write_text(json.dumps(gradient, indent=2, sort_keys=True) + "\n")
-    rows = [{"condition": c, "stage_a": summary["stage_a"][c], **{k: v for k, v in fast[c].items() if not isinstance(v, (dict, list))}, **{f"continuous_{k}": v for k, v in fast[c]["continuous"].items()}, **{f"no_history_{k}": v for k, v in fast[c]["no_history"].items()}, **{f"zero_error_{k}": v for k, v in fast[c]["zero_error"].items()}, **{f"semantic_{k}": v for k, v in fast[c]["semantic_state"].items()}} for c in TRAIN_CONDITIONS]
-    with (output / "condition_summary.csv").open("w", newline="") as f: writer = csv.DictWriter(f, fieldnames=list(rows[0])); writer.writeheader(); writer.writerows(rows)
-    with (output / "comparison.csv").open("w", newline="") as f: writer = csv.DictWriter(f, fieldnames=["condition", "variant", "mIoU", "gain_vs_blur", "feature_recovery"]); writer.writeheader(); writer.writerows([{"condition": c, "variant": v, "mIoU": fast[c]["blur_mIoU"] if v == "blur" else fast[c]["restored_mIoU"] if v == "restored" else fast[c]["clean_mIoU"], "gain_vs_blur": 0. if v == "blur" else fast[c]["restored_mIoU"] - fast[c]["blur_mIoU"] if v == "restored" else fast[c]["clean_mIoU"] - fast[c]["blur_mIoU"], "feature_recovery": 0. if v == "blur" else fast[c]["continuous_feature_recovery"] if v == "restored" else None} for c in TRAIN_CONDITIONS for v in ("blur", "restored", "clean")])
+    write_csv(output / "internal_diagnosis.csv", [internal_diagnosis_row(c, internal_results[c], internal_stage_a[c]) for c in TRAIN_CONDITIONS])
+    validation_rows = [{"condition": c, "stage_a": validation_stage_a[c], **validation_results[c]} for c in TRAIN_CONDITIONS]
+    write_csv(output / "fast_validation.csv", validation_rows)
+    with (output / "fast_validation_comparison.csv").open("w", newline="") as f: writer = csv.DictWriter(f, fieldnames=["condition", "variant", "mIoU", "gain_vs_blur", "feature_recovery"]); writer.writeheader(); writer.writerows([{"condition": c, "variant": v, "mIoU": validation_results[c]["blur_mIoU"] if v == "blur" else validation_results[c]["v3_mIoU"] if v == "restored" else validation_results[c]["clean_mIoU"], "gain_vs_blur": 0. if v == "blur" else validation_results[c]["v3_minus_host"] if v == "restored" else validation_results[c]["clean_mIoU"] - validation_results[c]["blur_mIoU"], "feature_recovery": 0. if v == "blur" else validation_results[c]["feature_recovery"] if v == "restored" else None} for c in TRAIN_CONDITIONS for v in ("blur", "restored", "clean")])
     with (output / "temporal_trace.csv").open("w", newline="") as f: writer = csv.DictWriter(f, fieldnames=list(trace[0])); writer.writeheader(); writer.writerows(trace)
-    print(json.dumps({"stage_a": summary["stage_a"]}, indent=2), flush=True)
+    print(json.dumps({"internal_diagnosis_stage_a": internal_stage_a, "fast_validation_stage_a": validation_stage_a}, indent=2), flush=True)
 
 
 if __name__ == "__main__": main()

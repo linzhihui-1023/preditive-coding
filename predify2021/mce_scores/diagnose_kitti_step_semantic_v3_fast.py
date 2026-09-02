@@ -119,14 +119,52 @@ def write_csv(path, rows):
     with path.open("w", newline="") as f: writer = csv.DictWriter(f, fieldnames=list(rows[0])); writer.writeheader(); writer.writerows(rows)
 
 
+def internal_diagnosis_row(condition, result, stage):
+    """Flatten only mechanism diagnostics for the internal-diagnosis table."""
+    state = result["semantic_state"]
+    continuous = result["continuous"]
+    no_history = result["no_history"]
+    zero_error = result["zero_error"]
+    return {
+        "condition": condition,
+        "stage_a": stage,
+        "effective_frame_count": result["effective_frame_count"],
+        "observation_mse": result["observation_mse"],
+        "state_recovery": state["state_recovery"],
+        "state_direction_cosine": state["state_direction_cosine"],
+        "continuous_feature_recovery": result["continuous_feature_recovery"],
+        "nohistory_feature_recovery": result["nohistory_feature_recovery"],
+        "zeroerror_feature_recovery": result["zeroerror_feature_recovery"],
+        "restoration_direction_cosine": continuous["direction"],
+        "amplitude_ratio": continuous["amplitude"],
+        "temporal_feature_gain": result["temporal_feature_gain"],
+        "error_contribution": result["error_contribution"],
+        "early_hidden_rms": state["early_hidden_rms"],
+        "middle_hidden_rms": state["middle_hidden_rms"],
+        "final_hidden_rms": state["final_hidden_rms"],
+        "hidden_growth_ratio": state["growth_ratio"],
+        "continuous_projection_scale": continuous["alpha"],
+        "nohistory_direction_cosine": no_history["direction"],
+        "zeroerror_direction_cosine": zero_error["direction"],
+        "prediction_error_rms": result["signal_means"]["prediction_error_rms"],
+        "encoded_error_rms": result["signal_means"]["encoded_error_rms"],
+    }
+
+
 def main():
     p = argparse.ArgumentParser(); p.add_argument("--root", default="/home/lin/predify/kitti_step"); p.add_argument("--checkpoint", default=DEFAULT_CHECKPOINT); p.add_argument("--output", default="results/kitti_step_semantic_v3_fast"); p.add_argument("--max-frames-per-sequence", type=int, default=250); p.add_argument("--gradient-steps", type=int, default=8); p.add_argument("--skip-gradient-check", action="store_true"); p.add_argument("--smoke", action="store_true"); args = p.parse_args()
     if not torch.cuda.is_available(): raise RuntimeError("CUDA is required")
     payload = torch.load(args.checkpoint, map_location="cpu", weights_only=False); model, _ = load_components(STATIC_CHECKPOINT_DEFAULT, ADAPTER_CHECKPOINT_DEFAULT, payload["source_dynamics_checkpoint"], WRITEBACK_CHECKPOINT_DEFAULT); predictor = ErrorRegulatedSemanticRestorationPredictor().cuda(); predictor.load_state_dict(payload["model_state_dict"], strict=True); predictor.freeze_dynamics(); model.requires_grad_(False); model.eval(); predictor.eval()
     groups = sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "val")); ids = sorted(groups); chosen = [ids[0], ids[len(ids) // 2], ids[-1]]; chosen = chosen[:1] if args.smoke else chosen; groups = {k: groups[k] for k in chosen}; limit = 8 if args.smoke else args.max_frames_per_sequence
     results, trace = run(model, predictor, groups, limit); gradient = None if args.skip_gradient_check else gradients(model, predictor, sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "train")), args.gradient_steps); output = Path(args.output) / "smoke" if args.smoke else Path(args.output); output.mkdir(parents=True, exist_ok=True)
-    summary = {"experiment": "kitti_step_semantic_v3_fast", "diagnostic_only": True, "parameters_updated": False, "checkpoint": args.checkpoint, "selected_sequences": chosen, "max_frames_per_sequence": limit, "protocol": {"batch": ["clean", "Blur-Mid", "Blur-Max"], "sigma": {"Blur-Mid": 2.25, "Blur-Max": 3.0}, "kernel": [BLUR_KERNEL_SIZE, BLUR_KERNEL_SIZE], "warmup": "existing 10%", "states_start": "frame 0"}, "results": results, "gradient_norms": gradient, "stage_a": {c: "GO" if results[c]["continuous_feature_recovery"] > 0 and results[c]["state_recovery"] > 0 and results[c]["continuous"]["direction"] > 0 and results[c]["continuous"]["amplitude"] >= 0.08 and results[c]["semantic_state"]["growth_ratio"] < 3 else "NO-GO" for c in CONDITIONS}}
-    (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n"); write_csv(output / "condition_summary.csv", [{"condition": c, "stage_a": summary["stage_a"][c], **{k: v for k, v in results[c].items() if not isinstance(v, (dict, list))}, **{f"continuous_{k}": v for k, v in results[c]["continuous"].items()}, **{f"no_history_{k}": v for k, v in results[c]["no_history"].items()}, **{f"zero_error_{k}": v for k, v in results[c]["zero_error"].items()}, **{f"semantic_{k}": v for k, v in results[c]["semantic_state"].items()}} for c in CONDITIONS]); write_csv(output / "temporal_trace.csv", trace); (output / "gradient_norms.json").write_text(json.dumps(gradient, indent=2, sort_keys=True) + "\n" if gradient else "null\n"); print(json.dumps({"stage_a": summary["stage_a"]}, indent=2), flush=True)
+    stage_a = {c: "GO" if results[c]["continuous_feature_recovery"] > 0 and results[c]["semantic_state"]["state_recovery"] > 0 and results[c]["continuous"]["direction"] > 0 and results[c]["continuous"]["amplitude"] >= 0.08 and results[c]["semantic_state"]["growth_ratio"] < 3 else "NO-GO" for c in CONDITIONS}
+    internal = {"conditions": results, "gradient_probe": gradient, "stage_a": stage_a}
+    summary = {"experiment": "kitti_step_semantic_v3_fast", "diagnostic_only": True, "parameters_updated": False, "checkpoint": args.checkpoint, "selected_sequences": chosen, "max_frames_per_sequence": limit, "protocol": {"batch": ["clean", "Blur-Mid", "Blur-Max"], "sigma": {"Blur-Mid": 2.25, "Blur-Max": 3.0}, "kernel": [BLUR_KERNEL_SIZE, BLUR_KERNEL_SIZE], "warmup": "existing 10%", "states_start": "frame 0"}, "internal_diagnosis": internal}
+    (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+    write_csv(output / "internal_diagnosis.csv", [internal_diagnosis_row(c, results[c], stage_a[c]) for c in CONDITIONS])
+    write_csv(output / "temporal_trace.csv", trace)
+    (output / "gradient_norms.json").write_text(json.dumps(gradient, indent=2, sort_keys=True) + "\n" if gradient else "null\n")
+    print(json.dumps({"internal_diagnosis_stage_a": stage_a}, indent=2), flush=True)
 
 
 if __name__ == "__main__": main()
