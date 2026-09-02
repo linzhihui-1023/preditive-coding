@@ -1,0 +1,164 @@
+{
+  "backbone_trainable": false,
+  "decision": "HARMFUL_TEMPORAL_CORRECTION",
+  "decision_basis": "All three clean validation epochs have negative delta_clean_mIoU while mean_abs_delta_z4 and mean_abs_delta_c4 remain nonzero; no correction collapse.",
+  "best": {
+    "delta_clean_mIoU": -0.027954062504986332,
+    "effective_frame_count": 781,
+    "epoch": 1,
+    "host_clean_mIoU": 0.5847409576401138,
+    "mean_abs_delta_c4": 0.03958486782104624,
+    "mean_abs_delta_z4": 0.005187365004620101,
+    "ours_clean_mIoU": 0.5567868951351275,
+    "segmentation_loss": 0.10869533485508984,
+    "semantic_state_difference": 0.01063314485795432,
+    "semantic_update_gain_mean": 0.39168645947547637,
+    "semantic_update_gain_std": 0.3195934672285603,
+    "sequence_frame_counts": {
+      "0002": {
+        "effective_frame_count": 210,
+        "total_frame_count": 233,
+        "warmup_frame_count": 23
+      },
+      "0010": {
+        "effective_frame_count": 265,
+        "total_frame_count": 294,
+        "warmup_frame_count": 29
+      },
+      "0018": {
+        "effective_frame_count": 306,
+        "total_frame_count": 339,
+        "warmup_frame_count": 33
+      }
+    }
+  },
+  "c1_trainable": false,
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_clean_task_temporal_fast/best.pt",
+  "corruption_training": false,
+  "decoder_trainable": false,
+  "dynamics_trainable": false,
+  "epoch_history": [
+    {
+      "delta_clean_mIoU": -0.027954062504986332,
+      "effective_frame_count": 781,
+      "epoch": 1,
+      "host_clean_mIoU": 0.5847409576401138,
+      "mean_abs_delta_c4": 0.03958486782104624,
+      "mean_abs_delta_z4": 0.005187365004620101,
+      "ours_clean_mIoU": 0.5567868951351275,
+      "segmentation_loss": 0.10869533485508984,
+      "semantic_state_difference": 0.01063314485795432,
+      "semantic_update_gain_mean": 0.39168645947547637,
+      "semantic_update_gain_std": 0.3195934672285603,
+      "sequence_frame_counts": {
+        "0002": {
+          "effective_frame_count": 210,
+          "total_frame_count": 233,
+          "warmup_frame_count": 23
+        },
+        "0010": {
+          "effective_frame_count": 265,
+          "total_frame_count": 294,
+          "warmup_frame_count": 29
+        },
+        "0018": {
+          "effective_frame_count": 306,
+          "total_frame_count": 339,
+          "warmup_frame_count": 33
+        }
+      }
+    },
+    {
+      "delta_clean_mIoU": -0.036886133953694555,
+      "effective_frame_count": 781,
+      "epoch": 2,
+      "host_clean_mIoU": 0.5847409576401138,
+      "mean_abs_delta_c4": 0.08221860482178235,
+      "mean_abs_delta_z4": 0.010768887794233956,
+      "ours_clean_mIoU": 0.5478548236864192,
+      "segmentation_loss": 0.10830411474114354,
+      "semantic_state_difference": 0.02212906327193319,
+      "semantic_update_gain_mean": 0.28525251626136416,
+      "semantic_update_gain_std": 0.4174938808112653,
+      "sequence_frame_counts": {
+        "0002": {
+          "effective_frame_count": 210,
+          "total_frame_count": 233,
+          "warmup_frame_count": 23
+        },
+        "0010": {
+          "effective_frame_count": 265,
+          "total_frame_count": 294,
+          "warmup_frame_count": 29
+        },
+        "0018": {
+          "effective_frame_count": 306,
+          "total_frame_count": 339,
+          "warmup_frame_count": 33
+        }
+      }
+    },
+    {
+      "delta_clean_mIoU": -0.030438999218342255,
+      "effective_frame_count": 781,
+      "epoch": 3,
+      "host_clean_mIoU": 0.5847409576401138,
+      "mean_abs_delta_c4": 0.069163368939462,
+      "mean_abs_delta_z4": 0.009619313746259909,
+      "ours_clean_mIoU": 0.5543019584217715,
+      "segmentation_loss": 0.10053878006985105,
+      "semantic_state_difference": 0.022053564596802352,
+      "semantic_update_gain_mean": 0.23312215597952826,
+      "semantic_update_gain_std": 0.4166042851486567,
+      "sequence_frame_counts": {
+        "0002": {
+          "effective_frame_count": 210,
+          "total_frame_count": 233,
+          "warmup_frame_count": 23
+        },
+        "0010": {
+          "effective_frame_count": 265,
+          "total_frame_count": 294,
+          "warmup_frame_count": 29
+        },
+        "0018": {
+          "effective_frame_count": 306,
+          "total_frame_count": 339,
+          "warmup_frame_count": 33
+        }
+      }
+    }
+  ],
+  "epochs": 3,
+  "experiment_name": "kitti_step_clean_task_temporal_fast",
+  "git_revision": "d8ca6e5be05e79458eea3b35a87aee91912a71b4",
+  "gradient_smoke": {
+    "backbone_grad_norm": 0.0,
+    "c1_adapter_grad_norm": 0.0,
+    "c1_writeback_grad_norm": 0.0,
+    "c4_adapter_grad_norm": 0.005303073674440384,
+    "c4_writeback_grad_norm": 0.19180667400360107,
+    "decoder_grad_norm": 0.0,
+    "dynamics_grad_norm": 0.0,
+    "error_regulation_grad_norm": 0.0003168592229485512,
+    "loss_finite": true,
+    "semantic_grad_norm": 1.5588233470916748
+  },
+  "learning_rate": 0.0001,
+  "segmentation_supervision_positions": [
+    2,
+    4,
+    6,
+    8
+  ],
+  "tbptt_steps": 8,
+  "test_time_adaptation": false,
+  "train_sequence_count": 12,
+  "trainable_parameter_count": 2851584,
+  "validation_sequences": [
+    "0002",
+    "0010",
+    "0018"
+  ],
+  "weight_decay": 0.01
+}
