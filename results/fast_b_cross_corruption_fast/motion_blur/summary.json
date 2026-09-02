@@ -1,0 +1,253 @@
+{
+  "base_checkpoints": {
+    "adapter": "/home/lin/predify/experiments/kitti_step_state_predictor_d655a0d/best_state_predictor.pt",
+    "predictor": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+    "static": "/home/lin/predify/checkpoints/kitti_step_static_deeplabv3plus_epoch1/best_kitti_step_static_deeplabv3plus.pt",
+    "writeback": "/home/lin/predify/experiments/kitti_step_host_conditioned_writeback/host_conditioned_writeback_epoch3.pt"
+  },
+  "corruption": "motion_blur",
+  "dataset": {
+    "effective_frame_count": 781.0,
+    "per_severity": {
+      "S3": {
+        "effective_frame_count": 781,
+        "sequence_frame_counts": {
+          "0002": {
+            "effective_frame_count": 210,
+            "total_frame_count": 233,
+            "warmup_frame_count": 23
+          },
+          "0010": {
+            "effective_frame_count": 265,
+            "total_frame_count": 294,
+            "warmup_frame_count": 29
+          },
+          "0018": {
+            "effective_frame_count": 306,
+            "total_frame_count": 339,
+            "warmup_frame_count": 33
+          }
+        },
+        "total_frame_count": 866
+      },
+      "S5": {
+        "effective_frame_count": 781,
+        "sequence_frame_counts": {
+          "0002": {
+            "effective_frame_count": 210,
+            "total_frame_count": 233,
+            "warmup_frame_count": 23
+          },
+          "0010": {
+            "effective_frame_count": 265,
+            "total_frame_count": 294,
+            "warmup_frame_count": 29
+          },
+          "0018": {
+            "effective_frame_count": 306,
+            "total_frame_count": 339,
+            "warmup_frame_count": 33
+          }
+        },
+        "total_frame_count": 866
+      }
+    },
+    "sequence_count": 3,
+    "split": "val",
+    "total_frame_count": 866.0
+  },
+  "experiment": "fast_b_cross_corruption_fast",
+  "fast_b_checkpoint": "/home/lin/predify/experiments/kitti_step_semantic_v3_joint_c4_fast_ab_5754714/fast_b_joint_c4_weak_z4/best.pt",
+  "mean_delta_mIoU": 0.017513185576295567,
+  "parameter_updates": false,
+  "protocol": {
+    "corruption_generated_once_per_frame": true,
+    "corruption_seed_policy": "canonical_condition_ordinal_plus_global_frame_index",
+    "host_fast_b_shared_input": true,
+    "severities": [
+      3,
+      5
+    ],
+    "state_reset_per_sequence": true,
+    "warmup": "predify2021.mce_scores.kitti_step_persistent_blur.warmup_frame_count"
+  },
+  "protocol_entry": {
+    "category": "blur",
+    "from_hendrycks": true,
+    "kamann_rother_new": false,
+    "name": "motion_blur",
+    "name_zh": "\u8fd0\u52a8\u6a21\u7cca",
+    "parameters": {
+      "radius_sigma_angle": [
+        [
+          10,
+          3,
+          [
+            -45,
+            45
+          ]
+        ],
+        [
+          15,
+          5,
+          [
+            -45,
+            45
+          ]
+        ],
+        [
+          15,
+          8,
+          [
+            -45,
+            45
+          ]
+        ],
+        [
+          15,
+          12,
+          [
+            -45,
+            45
+          ]
+        ],
+        [
+          20,
+          15,
+          [
+            -45,
+            45
+          ]
+        ]
+      ]
+    },
+    "source": "Hendrycks & Dietterich ICLR 2019 via imagecorruptions"
+  },
+  "sequences": [
+    "0002",
+    "0010",
+    "0018"
+  ],
+  "severity_results": {
+    "S3": {
+      "delta_mIoU": 0.016813578288179865,
+      "effective_frame_count": 781,
+      "fast_b_mIoU": 0.3320799228851131,
+      "host_mIoU": 0.31526634459693326,
+      "metrics": {
+        "fast_b": {
+          "miou": 0.3320799228851131,
+          "per_class_iou": {
+            "bicycle": 0.14391465461086833,
+            "building": 0.4696528479706163,
+            "bus": 0.2367648623229231,
+            "car": 0.8121191562025367,
+            "fence": 0.01097101706203374,
+            "motorcycle": 0.0,
+            "person": 0.17621887860713614,
+            "pole": 0.20739830794311784,
+            "rider": 0.0,
+            "road": 0.8730200095933512,
+            "sidewalk": 0.25979841761186845,
+            "sky": 0.8493357292763953,
+            "terrain": 0.5859266381598721,
+            "traffic light": 0.03648267392160424,
+            "traffic sign": 0.5563329705797483,
+            "train": 0.0448014805001519,
+            "truck": 0.0019074226490274973,
+            "vegetation": 0.8280827257992395,
+            "wall": 0.2167907420066581
+          }
+        },
+        "host": {
+          "miou": 0.31526634459693326,
+          "per_class_iou": {
+            "bicycle": 0.1375739990561762,
+            "building": 0.4102263578013279,
+            "bus": 0.23396167862098285,
+            "car": 0.8014053085799454,
+            "fence": 0.008962499208689963,
+            "motorcycle": 0.0,
+            "person": 0.09351976870468755,
+            "pole": 0.2030776120109984,
+            "rider": 0.0,
+            "road": 0.807518036957916,
+            "sidewalk": 0.23099867910254412,
+            "sky": 0.7941473423929817,
+            "terrain": 0.5992626755538323,
+            "traffic light": 0.031783476193906215,
+            "traffic sign": 0.5554074902683569,
+            "train": 0.061487132951283746,
+            "truck": 0.0007247914386374761,
+            "vegetation": 0.831230951269852,
+            "wall": 0.18877274722961285
+          }
+        }
+      },
+      "total_frame_count": 866
+    },
+    "S5": {
+      "delta_mIoU": 0.01821279286441127,
+      "effective_frame_count": 781,
+      "fast_b_mIoU": 0.22155080979280103,
+      "host_mIoU": 0.20333801692838976,
+      "metrics": {
+        "fast_b": {
+          "miou": 0.22155080979280103,
+          "per_class_iou": {
+            "bicycle": 0.012264832123229973,
+            "building": 0.24047022495806877,
+            "bus": 0.050745463629370005,
+            "car": 0.6146195977648221,
+            "fence": 0.013828504024661327,
+            "motorcycle": 0.0,
+            "person": 0.003794959622688981,
+            "pole": 0.08738209838805591,
+            "rider": 0.0,
+            "road": 0.8178943541750158,
+            "sidewalk": 0.1710158202124287,
+            "sky": 0.7458833412705232,
+            "terrain": 0.4964800592886721,
+            "traffic light": 0.0,
+            "traffic sign": 0.1814088236233839,
+            "train": 0.0023268813761540114,
+            "truck": 1.1939277788310873e-05,
+            "vegetation": 0.7650408485799242,
+            "wall": 0.006297637748431611
+          }
+        },
+        "host": {
+          "miou": 0.20333801692838976,
+          "per_class_iou": {
+            "bicycle": 0.004547929234881023,
+            "building": 0.18861341871517004,
+            "bus": 0.03698428752405395,
+            "car": 0.5698533273698942,
+            "fence": 0.008829960579249369,
+            "motorcycle": 0.0,
+            "person": 0.0010086465810007926,
+            "pole": 0.09706226091473279,
+            "rider": 0.0,
+            "road": 0.7123274627251467,
+            "sidewalk": 0.15202802521494838,
+            "sky": 0.6582842548409924,
+            "terrain": 0.517865944032991,
+            "traffic light": 0.0,
+            "traffic sign": 0.15872140682332736,
+            "train": 0.002196337238079525,
+            "truck": 0.0,
+            "vegetation": 0.7522259447290871,
+            "wall": 0.002873115115851416
+          }
+        }
+      },
+      "total_frame_count": 866
+    }
+  },
+  "source_dynamics_checkpoint": "/home/lin/predify/experiments/kitti_step_role_separated_predictor_3370f78/best_role_separated_predictor.pt",
+  "test_time_adaptation": false,
+  "timing": {
+    "wall_seconds": 608.4131184458965
+  },
+  "training": false
+}
