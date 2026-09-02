@@ -33,7 +33,8 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
 SEED, MAX_EPOCHS, PATIENCE, TBPTT_STEPS, LEARNING_RATE, WEIGHT_DECAY = 0, 15, 3, 8, 1e-4, 0.01
 FAST_VALIDATION_SEQUENCES = ("0002", "0010", "0018")
 LAMBDA_FEATURE = 1.0
-LAMBDA_SEGMENTATION = 1e-4
+LAMBDA_SEGMENTATION = 3e-4
+SEGMENTATION_SUPERVISION_POSITIONS = (2, 4, 6, 8)
 
 
 def slice_state(state, index):
@@ -61,15 +62,35 @@ def residual_aware_loss(delta, target):
     return (weights * per_element).mean()
 
 
+def decode_z4_batch(model, records):
+    host_features = []
+    target_masks = []
+    for raw, observation, restored, output_size, target_mask in records:
+        zero = zero_state(observation)
+        delta = UnifiedFeatures(zero.z1, zero.z2, zero.z3, restored.z4 - observation.z4)
+        host_features.append(residual_writeback_host_feature(model, raw, delta, output_size))
+        target_masks.append(target_mask)
+    output_size = host_features[0].output_size
+    batched = HostFeature(
+        torch.cat([feature.tensor for feature in host_features], dim=0),
+        torch.cat([feature.low_level for feature in host_features], dim=0),
+        output_size,
+    )
+    logits = model.decode_from_host_feature(batched)
+    targets = torch.stack(target_masks, dim=0).to(logits.device)
+    return logits, targets
+
+
 def train_sequence(model, predictor, samples, epoch, sequence_index, optimizer, residual_aware, tbptt_steps, max_steps=0):
     if len(samples) < 2:
-        return {"steps": 0, "feature_loss_sum": 0.0, "segmentation_loss_sum": 0.0, "total_loss_sum": 0.0, "segmentation_windows": 0}
+        return {"steps": 0, "feature_loss_sum": 0.0, "segmentation_loss_sum": 0.0, "total_loss_sum": 0.0, "segmentation_windows": 0, "segmentation_supervised_frames": 0}
     condition, pattern = training_assignment(epoch, sequence_index)
     first, _, _, _, _ = encode_pair(model, samples[0], condition, pattern_uses_blur(pattern, 0, len(samples)))
     pending, h4, h1 = predictor.predict_next(first, zero_state(first), None, None)
     h_sem = predictor.initial_semantic_state(first)
     error_stats = predictor.initial_error_temporal_statistics()
-    losses, feature_total, segmentation_total, total_objective, segmentation_windows = [], 0.0, 0.0, 0.0, 0
+    losses, segmentation_records = [], []
+    feature_total, segmentation_total, total_objective, segmentation_windows, segmentation_supervised_frames = 0.0, 0.0, 0.0, 0, 0
     steps = min(len(samples) - 1, max_steps) if max_steps else len(samples) - 1
     for offset in range(steps):
         frame = offset + 1
@@ -87,25 +108,30 @@ def train_sequence(model, predictor, samples, epoch, sequence_index, optimizer, 
         losses.append(loss); feature_total += float(loss.detach().item())
         with torch.no_grad():
             pending, h4, h1 = predictor.predict_next(observation, prediction_error, h4, h1)
-        window_end = len(losses) == tbptt_steps or frame == steps
+        local_position = len(losses)
+        window_end = local_position == tbptt_steps or frame == steps
+        if local_position in SEGMENTATION_SUPERVISION_POSITIONS or (window_end and local_position not in SEGMENTATION_SUPERVISION_POSITIONS):
+            target_mask = semantic_mask_from_panoptic_png(samples[frame]["mask_path"])
+            segmentation_records.append((raw, observation, restored, output_size, target_mask))
         if window_end:
             feature_window = torch.stack(losses).mean()
-            target_mask = semantic_mask_from_panoptic_png(samples[frame]["mask_path"]).unsqueeze(0).to(observation.z4.device)
-            segmentation_logits = decode_z4(model, raw, observation, restored, output_size)
-            segmentation_loss = F.cross_entropy(segmentation_logits, target_mask, ignore_index=255)
+            segmentation_logits, target_masks = decode_z4_batch(model, segmentation_records)
+            segmentation_loss = F.cross_entropy(segmentation_logits, target_masks, ignore_index=255)
             objective = LAMBDA_FEATURE * feature_window + LAMBDA_SEGMENTATION * segmentation_loss
             optimizer.zero_grad(set_to_none=True); objective.backward(); optimizer.step()
             segmentation_total += float(segmentation_loss.detach().item()); total_objective += float(objective.detach().item()); segmentation_windows += 1
-            h_sem = h_sem.detach(); error_stats = error_stats.detach() if error_stats is not None else None; losses = []
-    return {"steps": len(samples) - 1 if not max_steps else min(len(samples) - 1, max_steps), "feature_loss_sum": feature_total, "segmentation_loss_sum": segmentation_total, "total_loss_sum": total_objective, "segmentation_windows": segmentation_windows}
+            segmentation_supervised_frames += len(segmentation_records)
+            h_sem = h_sem.detach(); error_stats = error_stats.detach() if error_stats is not None else None
+            losses = []; segmentation_records = []
+    return {"steps": len(samples) - 1 if not max_steps else min(len(samples) - 1, max_steps), "feature_loss_sum": feature_total, "segmentation_loss_sum": segmentation_total, "total_loss_sum": total_objective, "segmentation_windows": segmentation_windows, "segmentation_supervised_frames": segmentation_supervised_frames}
 
 
 def train_epoch(model, predictor, groups, epoch, optimizer, residual_aware, tbptt_steps, max_steps=0):
-    predictor.train(); steps = feature_total = segmentation_total = total_objective = 0.0; segmentation_windows = 0
+    predictor.train(); steps = feature_total = segmentation_total = total_objective = 0.0; segmentation_windows = segmentation_supervised_frames = 0
     for index, samples in enumerate(groups.values()):
         row = train_sequence(model, predictor, samples, epoch, index, optimizer, residual_aware, tbptt_steps, max_steps)
-        steps += row["steps"]; feature_total += row["feature_loss_sum"]; segmentation_total += row["segmentation_loss_sum"]; total_objective += row["total_loss_sum"]; segmentation_windows += row["segmentation_windows"]
-    return {"step_count": int(steps), "feature_loss": feature_total / max(steps, 1), "segmentation_loss": segmentation_total / max(segmentation_windows, 1), "total_loss": total_objective / max(segmentation_windows, 1), "segmentation_windows": segmentation_windows}
+        steps += row["steps"]; feature_total += row["feature_loss_sum"]; segmentation_total += row["segmentation_loss_sum"]; total_objective += row["total_loss_sum"]; segmentation_windows += row["segmentation_windows"]; segmentation_supervised_frames += row["segmentation_supervised_frames"]
+    return {"step_count": int(steps), "feature_loss": feature_total / max(steps, 1), "segmentation_loss": segmentation_total / max(segmentation_windows, 1), "total_loss": total_objective / max(segmentation_windows, 1), "segmentation_windows": segmentation_windows, "segmentation_supervised_frames": segmentation_supervised_frames}
 
 
 def decode_z4(model, raw, observation, restored, output_size):
@@ -230,7 +256,7 @@ def run_variant(args, variant):
             best = row; stale = 0; torch.save({"model_state_dict": predictor.state_dict(), "source_dynamics_checkpoint": args.dynamics_checkpoint, "epoch": epoch, "use_error_temporal_stats": use_error_temporal_stats}, output / "best.pt")
         else: stale += 1
         if stale >= args.patience: break
-    summary = {"experiment": f"kitti_step_semantic_{variant}", "variant": variant, "checkpoint": str(output / "best.pt"), "trainable_parameter_count": sum(p.numel() for p in semantic_parameters), "dynamics_trainable_parameter_count": 0, "error_temporal_stats_trainable_parameter_count": sum(p.numel() for p in predictor.semantic_state_cell.history_projection.parameters()) if use_error_temporal_stats else 0, "config": {"epochs": epochs, "patience": args.patience, "tbptt_steps": args.tbptt_steps, "learning_rate": args.learning_rate, "weight_decay": args.weight_decay, "loss": "ResidualAwareSmoothL1(beta=0.01)" if variant == "v3_full" else "SmoothL1", "fast_validation_sequences": FAST_VALIDATION_SEQUENCES, "use_error_temporal_stats": use_error_temporal_stats}, "smoke_checks": checks, "history": history, "best": best}
+    summary = {"experiment": f"kitti_step_semantic_{variant}", "variant": variant, "checkpoint": str(output / "best.pt"), "trainable_parameter_count": sum(p.numel() for p in semantic_parameters), "dynamics_trainable_parameter_count": 0, "error_temporal_stats_trainable_parameter_count": sum(p.numel() for p in predictor.semantic_state_cell.history_projection.parameters()) if use_error_temporal_stats else 0, "config": {"epochs": epochs, "patience": args.patience, "tbptt_steps": args.tbptt_steps, "learning_rate": args.learning_rate, "weight_decay": args.weight_decay, "loss": "ResidualAwareSmoothL1(beta=0.01)" if variant == "v3_full" else "SmoothL1", "lambda_feature": LAMBDA_FEATURE, "lambda_segmentation": LAMBDA_SEGMENTATION, "segmentation_supervision_positions": SEGMENTATION_SUPERVISION_POSITIONS, "fast_validation_sequences": FAST_VALIDATION_SEQUENCES, "use_error_temporal_stats": use_error_temporal_stats}, "smoke_checks": checks, "history": history, "best": best}
     (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n"); (output / "training_history.json").write_text(json.dumps(history, indent=2, sort_keys=True) + "\n")
     return summary
 
