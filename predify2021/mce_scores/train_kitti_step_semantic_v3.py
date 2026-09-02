@@ -266,7 +266,14 @@ def smoke_checks(model, predictor, observation, raw, output_size, mask, use_erro
         observation.z1, observation.z2, observation.z3,
         observation.z4 + 0.1 * torch.randn_like(observation.z4)
     )
-    semantic_hidden = predictor.initial_semantic_state(observation)
+    # Use a deliberately nonzero semantic discrepancy for this gradient probe.
+    # Frame-0 initialization has H_sem == O_z4, which makes the simple
+    # restoration head output exactly zero and creates a false-negative C4
+    # gradient check even when the joint C4 path is correctly trainable.
+    semantic_hidden = (
+        predictor.initial_semantic_state(observation)
+        + 0.05 * torch.randn_like(observation.z4)
+    )
     restored, _, _ = predictor.restore_current(
         observation, current, semantic_hidden,
         error_temporal_state=predictor.initial_error_temporal_statistics()
