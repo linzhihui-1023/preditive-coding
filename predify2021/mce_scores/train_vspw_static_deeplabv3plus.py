@@ -77,7 +77,7 @@ def collate_val(samples):
     if len(samples) != 1:
         raise ValueError("VSPW validation uses batch size 1 to retain frame order.")
     image, mask, metadata = samples[0]
-    return image.unsqueeze(0), mask, metadata
+    return image.unsqueeze(0), mask.unsqueeze(0), metadata
 
 
 def segmentation_logits(model, images):

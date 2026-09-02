@@ -8,6 +8,7 @@ from predify2021.datasets.vspw import (
     semantic_mask_from_vspw_png,
 )
 from predify2021.mce_scores.vspw_metrics import official_vc_window_scores
+from predify2021.mce_scores.train_vspw_static_deeplabv3plus import collate_val
 from predify2021.model_factory.deeplabv3plus_resnet50 import build_deeplabv3plus_resnet50_host
 
 
@@ -37,6 +38,14 @@ def test_vspw_model_shape_and_124_class_heads():
     assert output.shape == (1, VSPW_NUM_CLASSES, 64, 96)
     assert model.decode_head.conv_seg.out_channels == VSPW_NUM_CLASSES
     assert model.auxiliary_head.conv_seg.out_channels == VSPW_NUM_CLASSES
+
+
+def test_vspw_validation_collate_keeps_batch_dimension():
+    image = torch.zeros(3, 4, 5)
+    mask = torch.zeros(4, 5, dtype=torch.int64)
+    images, masks, _ = collate_val([(image, mask, {"video_id": "v", "frame_name": "f.jpg"})])
+    assert images.shape == (1, 3, 4, 5)
+    assert masks.shape == (1, 4, 5)
 
 
 def _official_reference(gt_frames, prediction_frames, clip_size):
