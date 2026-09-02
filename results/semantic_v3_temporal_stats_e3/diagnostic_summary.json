@@ -1,0 +1,129 @@
+{
+  "checkpoint": "/home/lin/experiments/kitti_step_semantic_v3_temporal_stats_e3_correct/v3_temporal_stats/best.pt",
+  "diagnostic_only": true,
+  "experiment": "kitti_step_semantic_v3_fast",
+  "internal_diagnosis": {
+    "conditions": {
+      "Blur-Max": {
+        "continuous": {
+          "alpha": 0.08884928678752671,
+          "amplitude": 0.17745825529508766,
+          "direction": 0.49969108625197073,
+          "feature_recovery": 0.14520726383761196
+        },
+        "continuous_feature_recovery": 0.14524049587089893,
+        "effective_frame_count": 710,
+        "error_contribution": 9.499644299471815e-08,
+        "no_history": {
+          "alpha": 0.0657204478874173,
+          "amplitude": 0.13709072217550608,
+          "direction": 0.482090878360708,
+          "feature_recovery": 0.11247656630346511
+        },
+        "nohistory_feature_recovery": 0.11207699629969525,
+        "observation_mse": 0.0003495861514648554,
+        "prediction_recovery": 0.0,
+        "semantic_state": {
+          "early_hidden_rms": 0.2581307291984558,
+          "final_hidden_rms": 0.2619560956954956,
+          "growth_ratio": 1.014819492855106,
+          "middle_hidden_rms": 0.2619560956954956,
+          "state_direction_cosine": 0.0,
+          "state_recovery": -0.9176742204030173
+        },
+        "signal_means": {
+          "encoded_error_rms": 0.0013397477971370214,
+          "prediction_error_rms": 0.008370877370815462
+        },
+        "temporal_feature_gain": 0.0327306975341469,
+        "zero_error": {
+          "alpha": 0.08884923890967604,
+          "amplitude": 0.1774582614315124,
+          "direction": 0.4996908383470186,
+          "feature_recovery": 0.14520716884116905
+        },
+        "zeroerror_feature_recovery": 0.14524039016400447
+      },
+      "Blur-Mid": {
+        "continuous": {
+          "alpha": 0.09167627958239803,
+          "amplitude": 0.19131148219045016,
+          "direction": 0.4783377311599087,
+          "feature_recovery": 0.14522479366247923
+        },
+        "continuous_feature_recovery": 0.14455928570770737,
+        "effective_frame_count": 710,
+        "error_contribution": 1.1973140118702265e-07,
+        "no_history": {
+          "alpha": 0.07456537735661571,
+          "amplitude": 0.16024625585528302,
+          "direction": 0.4673574167238155,
+          "feature_recovery": 0.1231718992032268
+        },
+        "nohistory_feature_recovery": 0.12223934020614324,
+        "observation_mse": 0.00025763352334738746,
+        "prediction_recovery": 0.0,
+        "semantic_state": {
+          "early_hidden_rms": 0.257720023393631,
+          "final_hidden_rms": 0.26095613837242126,
+          "growth_ratio": 1.012556707609201,
+          "middle_hidden_rms": 0.26095613837242126,
+          "state_direction_cosine": 0.0,
+          "state_recovery": -1.3314626898939363
+        },
+        "signal_means": {
+          "encoded_error_rms": 0.001327862625352999,
+          "prediction_error_rms": 0.008308173467169031
+        },
+        "temporal_feature_gain": 0.022052894459252487,
+        "zero_error": {
+          "alpha": 0.09167622305767636,
+          "amplitude": 0.19131149735654565,
+          "direction": 0.47833741920095096,
+          "feature_recovery": 0.14522467393107802
+        },
+        "zeroerror_feature_recovery": 0.14455914975073103
+      }
+    },
+    "gradient_probe": {
+      "gradient_norms": {
+        "semantic_error_encoder": 1.4164892924918393e-09,
+        "semantic_restoration_head": 0.0007842221552269038,
+        "semantic_state_cell.candidate": 0.0002983770729677706,
+        "semantic_state_cell.update_gain": 1.6969945890763782e-05
+      },
+      "optimizer_step_performed": false,
+      "sequence": "0000",
+      "start_frame": 15,
+      "step_count": 8
+    },
+    "stage_a": {
+      "Blur-Max": "NO-GO",
+      "Blur-Mid": "NO-GO"
+    }
+  },
+  "max_frames_per_sequence": 250,
+  "parameters_updated": false,
+  "protocol": {
+    "batch": [
+      "clean",
+      "Blur-Mid",
+      "Blur-Max"
+    ],
+    "kernel": [
+      11,
+      11
+    ],
+    "sigma": {
+      "Blur-Max": 3.0,
+      "Blur-Mid": 2.25
+    },
+    "states_start": "frame 0",
+    "warmup": "existing 10%"
+  },
+  "selected_sequences": [
+    "0002",
+    "0010",
+    "0018"
+  ]
+}
