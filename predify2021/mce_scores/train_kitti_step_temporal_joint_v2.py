@@ -124,21 +124,71 @@ def zero_step_check(model,predictor,groups,raft):
         if abs(got[k]-REF[k])>5e-4: raise RuntimeError(f"ZERO_STEP_EQUIVALENCE_FAIL {k}: {got[k]} != {REF[k]}")
     return got
 
-def gradient_boundary_test(model,predictor):
-    """Verify the S1 trainable/frozen role boundary before optimization."""
-    trainable = tuple(predictor.semantic_error_encoder.parameters()) + tuple(predictor.semantic_state_cell.parameters())
-    frozen = tuple(predictor.semantic_restoration_head.parameters())
-    frozen += tuple(p for n in predictor.DYNAMICS_MODULES for p in getattr(predictor,n).parameters())
-    frozen += tuple(model.multi_layer_adapter.output_adapters[3].parameters())
-    frozen += tuple(model.host_conditioned_writebacks["3"].parameters())
-    if not trainable or not all(p.requires_grad for p in trainable) or any(p.requires_grad for p in frozen):
-        raise RuntimeError("GRADIENT_ROLE_SEPARATION_FAIL")
-    return {
-        "Lseg": ["semantic_error_encoder>0", "semantic_state>0", "dynamics_z4=0"],
-        "LTC": ["semantic_error_encoder>0", "semantic_state>0", "dynamics_z4=0"],
-        "Lpreserve": ["semantic_error_encoder>0", "semantic_state>0", "dynamics_z4=0"],
-        "Ldyn": ["semantic_error_encoder=0", "semantic_state=0", "dynamics_z4>0 (D1 only)"],
-    }
+def gradient_boundary_test(model,predictor,teacher,samples,raft):
+    """Run real isolated backward probes on one ordered eight-frame clip."""
+    sem_modules=(predictor.semantic_error_encoder,predictor.semantic_state_cell)
+    sem_params=tuple(p for m in sem_modules for p in m.parameters())
+    dyn_params=tuple(p for n in ("z4_dyn_recurrent","z4_dyn_delta") for p in getattr(predictor,n).parameters())
+    old_flags=[p.requires_grad for p in dyn_params]
+    for p in dyn_params: p.requires_grad_(True)
+    original_sem=next(iter(predictor.semantic_error_encoder.parameters())).detach().clone()
+
+    def norm(params):
+        values=[p.grad.detach().norm() for p in params if p.grad is not None]
+        return float(torch.stack(values).norm().item()) if values else 0.0
+
+    def probe(kind):
+        model.zero_grad(set_to_none=True); predictor.zero_grad(set_to_none=True)
+        clip=list(samples[:9])
+        prev_img,obs,raw,size=encode_clean(model,clip[0])
+        prev_mask=semantic_mask_from_panoptic_png(clip[0]["mask_path"]).cuda()
+        with torch.no_grad():
+            prev_logits=model.decode_from_host_feature(HostFeature(raw.c4,raw.c1,size)).detach()
+            pending,h4,h1=predictor.predict_next(obs,zero_state(obs),None,None)
+            tpending,th4,th1=teacher[0].predict_next(obs,zero_state(obs),None,None)
+        sh=predictor.initial_semantic_state(obs); es=predictor.initial_error_temporal_statistics()
+        tsh=teacher[0].initial_semantic_state(obs); tes=teacher[0].initial_error_temporal_statistics()
+        segs=[]; tcs=[]; preserves=[]
+        for local,sample in enumerate(clip[1:],1):
+            image,observation,raw,output_size=encode_clean(model,sample)
+            error=error_state(observation,pending)
+            detached_error=UnifiedFeatures(*(x.detach() for x in error.as_tuple()))
+            restored,sh,diag=predictor.restore_current(observation,pending,sh,prediction_error_override=detached_error,error_temporal_state=es)
+            es=diag["error_temporal_state"]
+            logits=logits_for(model,raw,observation,restored,output_size)
+            mask=semantic_mask_from_panoptic_png(sample["mask_path"]).cuda()
+            flow=raft.current_to_previous(image,prev_img)
+            if local in SEGMENTATION_POSITIONS:
+                segs.append(F.cross_entropy(logits,mask.unsqueeze(0),ignore_index=IGNORE))
+            tc,_=temporal_loss(logits,prev_logits,flow,prev_mask,mask); tcs.append(tc)
+            with torch.no_grad():
+                teacher_error=error_state(observation,tpending)
+                teacher_restored,tsh,teacher_diag=teacher[0].restore_current(observation,tpending,tsh,error_temporal_state=tes)
+                tes=teacher_diag["error_temporal_state"]
+                teacher_logits=teacher_logits_for(model,raw,observation,teacher_restored,output_size,teacher[1],teacher[2])
+                tpending,th4,th1=teacher[0].predict_next(observation,teacher_error,th4,th1)
+            preserves.append(preserve_loss(logits,teacher_logits))
+            prev_img=image; prev_mask=mask; prev_logits=logits.detach()
+            pending,h4,h1=predictor.predict_next(observation,error,h4,h1)
+        losses={"Lseg":torch.stack(segs).mean(),"LTC":torch.stack(tcs).mean(),"Lpreserve":torch.stack(preserves).mean()}
+        if kind=="Lpreserve" and float(losses[kind].detach())==0.0:
+            with torch.no_grad():
+                next(iter(predictor.semantic_error_encoder.parameters())).add_(1e-4)
+            # Re-run the preserve probe with a non-identical student; restore
+            # immediately after measuring the real backward path.
+            model.zero_grad(set_to_none=True); predictor.zero_grad(set_to_none=True)
+            return probe(kind)
+        losses[kind].backward()
+        result={"semantic_error_encoder":norm(tuple(predictor.semantic_error_encoder.parameters())),"semantic_state":norm(tuple(predictor.semantic_state_cell.parameters())),"dynamics_z4":norm(dyn_params),"loss":float(losses[kind].detach())}
+        model.zero_grad(set_to_none=True); predictor.zero_grad(set_to_none=True)
+        return result
+
+    results={k:probe(k) for k in ("Lseg","LTC","Lpreserve")}
+    with torch.no_grad(): next(iter(predictor.semantic_error_encoder.parameters())).copy_(original_sem)
+    for p,flag in zip(dyn_params,old_flags): p.requires_grad_(flag)
+    if any(results[k]["semantic_error_encoder"]<=0 or results[k]["semantic_state"]<=0 or results[k]["dynamics_z4"]!=0.0 for k in results):
+        raise RuntimeError(f"GRADIENT_ROLE_SEPARATION_FAIL: {results}")
+    return results
 
 def train_epoch(model,predictor,teacher,groups,raft,opt,stage):
     teacher_predictor,teacher_c4_adapter,teacher_c4_writeback=teacher
@@ -239,7 +289,7 @@ def main(argv=None):
     random.seed(SEED); torch.manual_seed(SEED); torch.cuda.manual_seed_all(SEED)
     ds=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"train"); train=sequence_groups(ds); vd=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"val"); allv=sequence_groups(vd); dev={k:allv[k] for k in DEV3}; raft=FrozenRAFT(); model,predictor,_=load_student(args,1)
     teacher=build_frozen_teacher(model,predictor)
-    boundary=gradient_boundary_test(model,predictor)
+    boundary=gradient_boundary_test(model,predictor,teacher,next(iter(train.values())),raft)
     zero=REF if args.skip_zero_step else zero_step_check(model,predictor,dev,raft); print(json.dumps({"gradient_boundary":boundary,"zero_step":zero},sort_keys=True),flush=True)
     if args.skip_training: return
     sem=[p for m in (predictor.semantic_error_encoder,predictor.semantic_state_cell) for p in m.parameters() if p.requires_grad]; opt=torch.optim.AdamW([{"params":sem,"lr":1e-5}],weight_decay=.01); out=Path(args.output); out.mkdir(parents=True,exist_ok=True); rows=[]
