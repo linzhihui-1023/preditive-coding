@@ -493,12 +493,17 @@ class ErrorRegulatedSemanticRestorationPredictor(nn.Module):
         observation,
         current_prediction,
         semantic_hidden=None,
+        prediction_error_override=None,
         error_temporal_state=None,
         zero_encoded_prediction_error=False,
         disable_error_temporal_stats=False,
         update_error_temporal_state=True,
     ):
-        prediction_error_z4 = observation.z4 - current_prediction.z4
+        prediction_error_z4 = (
+            observation.z4 - current_prediction.z4
+            if prediction_error_override is None
+            else prediction_error_override.z4
+        )
         if self.use_error_temporal_stats and update_error_temporal_state:
             error_temporal_state = update_error_temporal_statistics(
                 error_temporal_state, prediction_error_z4

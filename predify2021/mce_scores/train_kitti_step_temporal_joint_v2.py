@@ -145,7 +145,8 @@ def train_epoch(model,predictor,teacher,groups,raft,opt,stage):
         for fi,s in enumerate(samples[1:],1):
             img,obs,raw,size=encode_clean(model,s)
             er=error_state(obs,pending)
-            rest,sh,diag=predictor.restore_current(obs,pending,sh,error_temporal_state=es)
+            semantic_error=UnifiedFeatures(*(x.detach() for x in er.as_tuple()))
+            rest,sh,diag=predictor.restore_current(obs,pending,sh,prediction_error_override=semantic_error,error_temporal_state=es)
             es=diag["error_temporal_state"]
             slog=logits_for(model,raw,obs,rest,size)
             mask=semantic_mask_from_panoptic_png(s["mask_path"]).cuda()
