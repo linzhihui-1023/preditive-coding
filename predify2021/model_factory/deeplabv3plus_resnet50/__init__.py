@@ -14,7 +14,6 @@ from .semantic_recurrent_predictor import (
     ErrorGuidedSemanticRecurrentCell,
     ErrorGuidedSemanticRestorationPredictor,
     ErrorRegulatedSemanticStateCell,
-    ErrorRegulatedSemanticRestorationPredictor,
     RoleSeparatedRecurrentPredictor,
     SemanticPredictionErrorEncoder,
     ErrorTemporalStatisticsState,
@@ -22,6 +21,10 @@ from .semantic_recurrent_predictor import (
     SemanticRecurrentPredictor,
     SemanticRestorationHead,
     SemanticDiscrepancyRestorationHead,
+)
+from .task_aware_z4_restoration import (
+    ContextGatedZ4RestorationHead,
+    ErrorRegulatedSemanticRestorationPredictor,
 )
 from .adapters import (
     HOST_STAGE_CHANNELS,
@@ -92,6 +95,7 @@ __all__ = [
     "ErrorGuidedSemanticRestorationPredictor",
     "ErrorRegulatedSemanticStateCell",
     "SemanticDiscrepancyRestorationHead",
+    "ContextGatedZ4RestorationHead",
     "ErrorRegulatedSemanticRestorationPredictor",
     "DecoupledLocalFeatureCorrelation",
     "DecoupledTemporalErrorEncoder",
