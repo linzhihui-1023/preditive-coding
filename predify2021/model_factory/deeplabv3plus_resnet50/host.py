@@ -318,13 +318,30 @@ class DeepLabV3PlusResNet50Host(nn.Module):
             ("decode_head", self.decode_head),
             ("auxiliary_head", self.auxiliary_head),
         )
+        skipped_classifier_keys = []
         for prefix, module in static_modules:
             module_state = {
                 key[len(prefix) + 1 :]: value
                 for key, value in state_dict.items()
                 if key.startswith(prefix + ".")
             }
-            module.load_state_dict(module_state, strict=True)
+            if self.num_classes != CITYSCAPES_NUM_CLASSES and prefix in {"decode_head", "auxiliary_head"}:
+                classifier_keys = {"conv_seg.weight", "conv_seg.bias"}
+                skipped_classifier_keys.extend(
+                    f"{prefix}.{key}" for key in classifier_keys if key in module_state
+                )
+                module_state = {
+                    key: value for key, value in module_state.items() if key not in classifier_keys
+                }
+                missing, unexpected = module.load_state_dict(module_state, strict=False)
+                expected_missing = {"conv_seg.weight", "conv_seg.bias"}
+                if set(missing) != expected_missing or unexpected:
+                    raise RuntimeError(
+                        f"Unexpected VSPW classifier load result for {prefix}: "
+                        f"missing={missing}, unexpected={unexpected}"
+                    )
+            else:
+                module.load_state_dict(module_state, strict=True)
         backbone_keys = sum(key.startswith("backbone.") for key in state_dict)
         decode_keys = sum(key.startswith("decode_head.") for key in state_dict)
         auxiliary_keys = sum(key.startswith("auxiliary_head.") for key in state_dict)
@@ -340,6 +357,8 @@ class DeepLabV3PlusResNet50Host(nn.Module):
             "decode_head_key_count": decode_keys,
             "auxiliary_head_key_count": auxiliary_keys,
             "num_classes": self.num_classes,
+            "reinitialized_classifier": bool(skipped_classifier_keys),
+            "skipped_classifier_keys": skipped_classifier_keys,
         }
         return self.checkpoint_load_report
 
