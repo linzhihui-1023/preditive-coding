@@ -11,6 +11,7 @@ from .cityscapes import (
     label_ids_to_train_ids,
 )
 from .cityscapes_corruptions import apply_published_corruption
+from .vspw import VSPW_IGNORE_LABEL, VSPW_NUM_CLASSES, VSPWSegmentationDataset, semantic_mask_from_vspw_png
 
 __all__ = [
     "KITTI_STEP_IGNORE_LABEL",
@@ -22,4 +23,8 @@ __all__ = [
     "CityscapesSegmentationDataset",
     "label_ids_to_train_ids",
     "apply_published_corruption",
+    "VSPW_IGNORE_LABEL",
+    "VSPW_NUM_CLASSES",
+    "VSPWSegmentationDataset",
+    "semantic_mask_from_vspw_png",
 ]
