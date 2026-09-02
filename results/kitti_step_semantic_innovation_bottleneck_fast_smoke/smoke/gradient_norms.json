@@ -1,0 +1,16 @@
+{
+  "gradient_norms": {
+    "semantic_error_encoder": 1.8848840959246097e-06,
+    "semantic_recurrent.context_modulation": 8.442220275407876e-07,
+    "semantic_recurrent.error_drive": 2.50529840583239e-06,
+    "semantic_recurrent.update_gain": 3.69204291675128e-07,
+    "semantic_restoration_head.observation_modulation": 3.7460084559408315e-07,
+    "semantic_restoration_head.output": 1.2355822024648269e-05,
+    "semantic_restoration_head.state_projection": 4.607384650915655e-06
+  },
+  "loss": 0.0001537990028737113,
+  "optimizer_step_performed": false,
+  "sequence": "0000",
+  "start_frame": 15,
+  "step_count": 8
+}

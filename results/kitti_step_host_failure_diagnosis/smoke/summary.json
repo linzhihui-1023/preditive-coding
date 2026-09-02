@@ -1,0 +1,426 @@
+{
+  "conditions": {
+    "Blur-Max": {
+      "condition": "Blur-Max",
+      "effective_frame_count": 32,
+      "feature_shift": {
+        "backbone": {
+          "c1": {
+            "cosine": 0.7913048435002565,
+            "count": 32,
+            "mse": 0.01839486591052264,
+            "relative_mse": 0.4394436636726908
+          },
+          "c2": {
+            "cosine": 0.7004561759531498,
+            "count": 32,
+            "mse": 0.006564607203472406,
+            "relative_mse": 0.6063255583593725
+          },
+          "c3": {
+            "cosine": 0.6229532156139612,
+            "count": 32,
+            "mse": 0.0015314845040848013,
+            "relative_mse": 0.740778775731862
+          },
+          "c4": {
+            "cosine": 0.4408743176609278,
+            "count": 32,
+            "mse": 0.009053919464349747,
+            "relative_mse": 0.9384712303321008
+          }
+        },
+        "unified": {
+          "z1": {
+            "cosine": 0.9986341055482626,
+            "count": 32,
+            "mse": 0.000531072744706762,
+            "relative_mse": 0.003904699024491785
+          },
+          "z2": {
+            "cosine": 0.9995204918086529,
+            "count": 32,
+            "mse": 0.00016071230265879421,
+            "relative_mse": 0.0014108975703831985
+          },
+          "z3": {
+            "cosine": 0.9996129926294088,
+            "count": 32,
+            "mse": 9.499463430984179e-05,
+            "relative_mse": 0.0009576686477885883
+          },
+          "z4": {
+            "cosine": 0.9981701597571373,
+            "count": 32,
+            "mse": 0.00033393901412637206,
+            "relative_mse": 0.0053562579461591975
+          }
+        }
+      },
+      "segmentation": {
+        "blur": {
+          "mIoU": 0.3231840868417733,
+          "per_class_iou": {
+            "bicycle": null,
+            "building": 0.7605847022623415,
+            "bus": 0.0,
+            "car": 0.08612599521690431,
+            "fence": 0.0,
+            "motorcycle": null,
+            "person": 0.0,
+            "pole": 0.45951363521492405,
+            "rider": null,
+            "road": 0.7983014522387357,
+            "sidewalk": 0.11790191938652496,
+            "sky": 0.7239687127725396,
+            "terrain": 0.6636235337667445,
+            "traffic light": 0.0,
+            "traffic sign": 0.05646023263124803,
+            "train": null,
+            "truck": 0.0,
+            "vegetation": 0.858097032294864,
+            "wall": null
+          }
+        },
+        "clean": {
+          "mIoU": 0.3785149834301851,
+          "per_class_iou": {
+            "bicycle": 0.0,
+            "building": 0.8558138825809548,
+            "bus": 0.0,
+            "car": 0.4868063983854032,
+            "fence": 0.0,
+            "motorcycle": null,
+            "person": 0.013240250361097737,
+            "pole": 0.5238710254560907,
+            "rider": null,
+            "road": 0.890739763779612,
+            "sidewalk": 0.26493898424515916,
+            "sky": 0.8885744353159566,
+            "terrain": 0.8703990288207488,
+            "traffic light": 0.09178974114657773,
+            "traffic sign": 0.25382522951377084,
+            "train": null,
+            "truck": 0.0,
+            "vegetation": 0.9162409952775898,
+            "wall": 0.0
+          }
+        },
+        "clean_c1": {
+          "absolute_gain_vs_blur": -0.011150957051001942,
+          "mIoU": 0.31203312979077136,
+          "per_class_iou": {
+            "bicycle": 0.0,
+            "building": 0.7743015236548583,
+            "bus": 0.0,
+            "car": 0.0999743809997438,
+            "fence": 0.0,
+            "motorcycle": null,
+            "person": 0.0,
+            "pole": 0.49970506801492715,
+            "rider": null,
+            "road": 0.8073324027669478,
+            "sidewalk": 0.14101113718535732,
+            "sky": 0.7299780662754164,
+            "terrain": 0.6760157257518963,
+            "traffic light": 0.0,
+            "traffic sign": 0.086482741244646,
+            "train": null,
+            "truck": 0.0,
+            "vegetation": 0.8656959009677766,
+            "wall": null
+          },
+          "recovery_fraction_of_clean_gap": -0.2015321951847305
+        },
+        "clean_c1_c4": {
+          "absolute_gain_vs_blur": 0.05533089658841178,
+          "mIoU": 0.3785149834301851,
+          "per_class_iou": {
+            "bicycle": 0.0,
+            "building": 0.8558138825809548,
+            "bus": 0.0,
+            "car": 0.4868063983854032,
+            "fence": 0.0,
+            "motorcycle": null,
+            "person": 0.013240250361097737,
+            "pole": 0.5238710254560907,
+            "rider": null,
+            "road": 0.890739763779612,
+            "sidewalk": 0.26493898424515916,
+            "sky": 0.8885744353159566,
+            "terrain": 0.8703990288207488,
+            "traffic light": 0.09178974114657773,
+            "traffic sign": 0.25382522951377084,
+            "train": null,
+            "truck": 0.0,
+            "vegetation": 0.9162409952775898,
+            "wall": 0.0
+          },
+          "recovery_fraction_of_clean_gap": 1.0
+        },
+        "clean_c4": {
+          "absolute_gain_vs_blur": 0.04855789809364547,
+          "mIoU": 0.37174198493541877,
+          "per_class_iou": {
+            "bicycle": 0.0,
+            "building": 0.8489766834511366,
+            "bus": 0.0,
+            "car": 0.4565612653624793,
+            "fence": 0.0,
+            "motorcycle": null,
+            "person": 0.018060200668896322,
+            "pole": 0.47321706806748876,
+            "rider": null,
+            "road": 0.8871982125604797,
+            "sidewalk": 0.2640320151318785,
+            "sky": 0.8805364526312432,
+            "terrain": 0.8674860298266447,
+            "traffic light": 0.07877916267178012,
+            "traffic sign": 0.26113110263709116,
+            "train": null,
+            "truck": 0.0,
+            "vegetation": 0.9118935659575816,
+            "wall": 0.0
+          },
+          "recovery_fraction_of_clean_gap": 0.8775910221526246
+        }
+      }
+    },
+    "Blur-Mid": {
+      "condition": "Blur-Mid",
+      "effective_frame_count": 32,
+      "feature_shift": {
+        "backbone": {
+          "c1": {
+            "cosine": 0.8242634311318398,
+            "count": 32,
+            "mse": 0.015402682503918186,
+            "relative_mse": 0.36798935446311837
+          },
+          "c2": {
+            "cosine": 0.7466378659009933,
+            "count": 32,
+            "mse": 0.005466732109198347,
+            "relative_mse": 0.5049361891298848
+          },
+          "c3": {
+            "cosine": 0.6877989545464516,
+            "count": 32,
+            "mse": 0.001257391821127385,
+            "relative_mse": 0.6081211987292815
+          },
+          "c4": {
+            "cosine": 0.5398697350174189,
+            "count": 32,
+            "mse": 0.007474496102076955,
+            "relative_mse": 0.7747872435809685
+          }
+        },
+        "unified": {
+          "z1": {
+            "cosine": 0.9988742768764496,
+            "count": 32,
+            "mse": 0.00045620118726219516,
+            "relative_mse": 0.0033542116827121435
+          },
+          "z2": {
+            "cosine": 0.9995860327035189,
+            "count": 32,
+            "mse": 0.00014125482539384393,
+            "relative_mse": 0.0012400797597165896
+          },
+          "z3": {
+            "cosine": 0.9996788110584021,
+            "count": 32,
+            "mse": 7.999443369044457e-05,
+            "relative_mse": 0.0008064473268646175
+          },
+          "z4": {
+            "cosine": 0.9986858163028955,
+            "count": 32,
+            "mse": 0.00023144069200498052,
+            "relative_mse": 0.0037124496943444097
+          }
+        }
+      },
+      "segmentation": {
+        "blur": {
+          "mIoU": 0.3669155928764197,
+          "per_class_iou": {
+            "bicycle": null,
+            "building": 0.8133188750824789,
+            "bus": 0.0,
+            "car": 0.21729160022476346,
+            "fence": 0.0,
+            "motorcycle": null,
+            "person": 0.0,
+            "pole": 0.47661342068825774,
+            "rider": null,
+            "road": 0.8491063008164108,
+            "sidewalk": 0.17182163135756098,
+            "sky": 0.8189067140396794,
+            "terrain": 0.7420324556542546,
+            "traffic light": 0.0,
+            "traffic sign": 0.16260806039206135,
+            "train": null,
+            "truck": 0.0,
+            "vegetation": 0.8851192420144092,
+            "wall": null
+          }
+        },
+        "clean": {
+          "mIoU": 0.3785149834301851,
+          "per_class_iou": {
+            "bicycle": 0.0,
+            "building": 0.8558138825809548,
+            "bus": 0.0,
+            "car": 0.4868063983854032,
+            "fence": 0.0,
+            "motorcycle": null,
+            "person": 0.013240250361097737,
+            "pole": 0.5238710254560907,
+            "rider": null,
+            "road": 0.890739763779612,
+            "sidewalk": 0.26493898424515916,
+            "sky": 0.8885744353159566,
+            "terrain": 0.8703990288207488,
+            "traffic light": 0.09178974114657773,
+            "traffic sign": 0.25382522951377084,
+            "train": null,
+            "truck": 0.0,
+            "vegetation": 0.9162409952775898,
+            "wall": 0.0
+          }
+        },
+        "clean_c1": {
+          "absolute_gain_vs_blur": 0.007430559035852935,
+          "mIoU": 0.37434615191227266,
+          "per_class_iou": {
+            "bicycle": null,
+            "building": 0.8243236952938439,
+            "bus": 0.0,
+            "car": 0.23340528872099298,
+            "fence": 0.0,
+            "motorcycle": null,
+            "person": 0.0,
+            "pole": 0.5062521729053193,
+            "rider": null,
+            "road": 0.8541422121319378,
+            "sidewalk": 0.19108108969782828,
+            "sky": 0.8236941609930748,
+            "terrain": 0.7497106362401745,
+            "traffic light": 0.0,
+            "traffic sign": 0.17028452293352955,
+            "train": null,
+            "truck": 0.0,
+            "vegetation": 0.8879523478551162,
+            "wall": null
+          },
+          "recovery_fraction_of_clean_gap": 0.6405990902203782
+        },
+        "clean_c1_c4": {
+          "absolute_gain_vs_blur": 0.011599390553765354,
+          "mIoU": 0.3785149834301851,
+          "per_class_iou": {
+            "bicycle": 0.0,
+            "building": 0.8558138825809548,
+            "bus": 0.0,
+            "car": 0.4868063983854032,
+            "fence": 0.0,
+            "motorcycle": null,
+            "person": 0.013240250361097737,
+            "pole": 0.5238710254560907,
+            "rider": null,
+            "road": 0.890739763779612,
+            "sidewalk": 0.26493898424515916,
+            "sky": 0.8885744353159566,
+            "terrain": 0.8703990288207488,
+            "traffic light": 0.09178974114657773,
+            "traffic sign": 0.25382522951377084,
+            "train": null,
+            "truck": 0.0,
+            "vegetation": 0.9162409952775898,
+            "wall": 0.0
+          },
+          "recovery_fraction_of_clean_gap": 1.0
+        },
+        "clean_c4": {
+          "absolute_gain_vs_blur": 0.007185495776388884,
+          "mIoU": 0.3741010886528086,
+          "per_class_iou": {
+            "bicycle": 0.0,
+            "building": 0.8504118096321933,
+            "bus": 0.0,
+            "car": 0.46463962407573767,
+            "fence": 0.0,
+            "motorcycle": null,
+            "person": 0.02097902097902098,
+            "pole": 0.4847146663084604,
+            "rider": null,
+            "road": 0.8883444094081246,
+            "sidewalk": 0.2644848719324007,
+            "sky": 0.8842680511085442,
+            "terrain": 0.8691837469556021,
+            "traffic light": 0.08205863607393245,
+            "traffic sign": 0.2625740851503453,
+            "train": null,
+            "truck": 0.0,
+            "vegetation": 0.9139584968205764,
+            "wall": 0.0
+          },
+          "recovery_fraction_of_clean_gap": 0.6194718371696134
+        }
+      }
+    }
+  },
+  "conditions_definition": {
+    "Blur-Max": "Gaussian blur sigma=3.0 after 10% sequence warmup",
+    "Blur-Mid": "Gaussian blur sigma=2.25 after 10% sequence warmup"
+  },
+  "diagnostic_only": true,
+  "evaluated_window": "post-warmup frames only",
+  "experiment": "kitti_step_host_failure_diagnosis",
+  "feature_metrics": {
+    "cosine": "channel-wise cosine similarity to same-frame clean feature",
+    "mse": "mean squared error to same-frame clean feature",
+    "relative_mse": "MSE divided by same-frame clean feature energy"
+  },
+  "judgement": {
+    "Blur-Max": {
+      "blur_drop": 0.05533089658841178,
+      "blur_host_mIoU": 0.3231840868417733,
+      "clean_c1_c4_gain": 0.05533089658841178,
+      "clean_c1_c4_recovery_fraction": 1.0,
+      "clean_c1_gain": -0.011150957051001942,
+      "clean_c1_recovery_fraction": -0.2015321951847305,
+      "clean_c4_gain": 0.04855789809364547,
+      "clean_c4_recovery_fraction": 0.8775910221526246,
+      "clean_host_mIoU": 0.3785149834301851,
+      "decoder_check": "PASS",
+      "dominant_recoverable_stage": "C4 high-level semantic degradation"
+    },
+    "Blur-Mid": {
+      "blur_drop": 0.011599390553765354,
+      "blur_host_mIoU": 0.3669155928764197,
+      "clean_c1_c4_gain": 0.011599390553765354,
+      "clean_c1_c4_recovery_fraction": 1.0,
+      "clean_c1_gain": 0.007430559035852935,
+      "clean_c1_recovery_fraction": 0.6405990902203782,
+      "clean_c4_gain": 0.007185495776388884,
+      "clean_c4_recovery_fraction": 0.6194718371696134,
+      "clean_host_mIoU": 0.3785149834301851,
+      "decoder_check": "PASS",
+      "dominant_recoverable_stage": "C1 low-level spatial/boundary degradation"
+    }
+  },
+  "oracle_variants": {
+    "blur": "blur C1 + blur C4",
+    "clean": "clean C1 + clean C4",
+    "clean_c1": "clean C1 + blur C4",
+    "clean_c1_c4": "clean C1 + clean C4",
+    "clean_c4": "blur C1 + clean C4"
+  },
+  "parameters_updated": false,
+  "sequence_count": 1,
+  "split": "val"
+}

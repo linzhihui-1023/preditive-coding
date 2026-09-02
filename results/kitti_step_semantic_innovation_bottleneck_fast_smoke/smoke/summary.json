@@ -1,0 +1,152 @@
+{
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_error_guided_semantic_restoration/best_error_guided_semantic_restoration.pt",
+  "cosine_sign_note": "e=blur-prediction and R*=clean-blur; useful prediction therefore yields a negative raw cos(e,R*).",
+  "diagnostic_only": true,
+  "experiment": "kitti_step_semantic_innovation_bottleneck_fast",
+  "gradient_norms": {
+    "gradient_norms": {
+      "semantic_error_encoder": 1.8848840959246097e-06,
+      "semantic_recurrent.context_modulation": 8.442220275407876e-07,
+      "semantic_recurrent.error_drive": 2.50529840583239e-06,
+      "semantic_recurrent.update_gain": 3.69204291675128e-07,
+      "semantic_restoration_head.observation_modulation": 3.7460084559408315e-07,
+      "semantic_restoration_head.output": 1.2355822024648269e-05,
+      "semantic_restoration_head.state_projection": 4.607384650915655e-06
+    },
+    "loss": 0.0001537990028737113,
+    "optimizer_step_performed": false,
+    "sequence": "0000",
+    "start_frame": 15,
+    "step_count": 8
+  },
+  "max_frames_per_sequence": 8,
+  "parameters_updated": false,
+  "primary_bottleneck": {
+    "Blur-Max": "UNRESOLVED",
+    "Blur-Mid": "UNRESOLVED"
+  },
+  "protocol": {
+    "batch": [
+      "clean",
+      "Blur-Mid",
+      "Blur-Max"
+    ],
+    "evaluation": "post-warmup only; states start at frame 0",
+    "kernel": [
+      11,
+      11
+    ],
+    "sigma": {
+      "Blur-Max": 3.0,
+      "Blur-Mid": 2.25
+    },
+    "warmup": "existing 10%"
+  },
+  "results": {
+    "Blur-Max": {
+      "condition": "Blur-Max",
+      "continuous": {
+        "alpha": 0.00040736389564699493,
+        "amplitude_ratio": 0.0030548153717608376,
+        "direction_cosine": 0.13264098530635238,
+        "mse": 0.0002945122687378898
+      },
+      "continuous_feature_recovery": 0.0008017238845924313,
+      "effective_frame_count": 8,
+      "encoder_ratio": 0.18126869378838079,
+      "error_oracle_cosine": -0.24411888886243105,
+      "no_history": {
+        "alpha": 5.327583721737028e-05,
+        "amplitude_ratio": 0.0008465377932506129,
+        "direction_cosine": 0.05868218932300806,
+        "mse": 0.0002947168977698311
+      },
+      "no_history_feature_recovery": 0.00010746835864949844,
+      "observation_mse": 0.0002947485737961885,
+      "prediction_recovery": -0.029308240393244978,
+      "residual_sparsity_sample_count": 1,
+      "residual_sparsity_sample_mean": {
+        "top_10pct_energy_fraction": 0.6690698862075806,
+        "top_20pct_energy_fraction": 0.8050003051757812,
+        "top_50pct_energy_fraction": 0.9581611752510071,
+        "top_5pct_energy_fraction": 0.5337470173835754
+      },
+      "restoration_amplitude": 0.0030567438297497253,
+      "semantic_state": {
+        "hidden_encoded_error_cosine": -0.005980296351481229,
+        "hidden_first_rms": 0.0013439042959362268,
+        "hidden_growth_ratio": 1.2482109831471624,
+        "hidden_last_rms": 0.0016774761024862528,
+        "state_projection_oracle_cosine": -0.012388763774652034
+      },
+      "signal_rms": {
+        "encoded_error": 0.002019781810064971,
+        "oracle_residual": 0.017168243177337294,
+        "raw_error": 0.011142474565536024,
+        "restoration_delta": 5.247892139996859e-05,
+        "semantic_hidden": 0.0015149425834667114,
+        "state_innovation": 0.0004402815734096329
+      },
+      "state_ratio": 0.21798472053546727,
+      "temporal_feature_gain": 0.0006942555259429982
+    },
+    "Blur-Mid": {
+      "condition": "Blur-Mid",
+      "continuous": {
+        "alpha": 0.0004330993579060305,
+        "amplitude_ratio": 0.003771148562679347,
+        "direction_cosine": 0.11431286949664354,
+        "mse": 0.00018698216990742367
+      },
+      "continuous_feature_recovery": 0.0008442580073321215,
+      "effective_frame_count": 8,
+      "encoder_ratio": 0.1786650672427548,
+      "error_oracle_cosine": -0.2352250055409968,
+      "no_history": {
+        "alpha": 5.929930773618253e-05,
+        "amplitude_ratio": 0.00098186809602828,
+        "direction_cosine": 0.05796106066554785,
+        "mse": 0.00018711752818489913
+      },
+      "no_history_feature_recovery": 0.00012096977030706668,
+      "observation_mse": 0.0001871401634101847,
+      "prediction_recovery": -0.1456189872952527,
+      "residual_sparsity_sample_count": 1,
+      "residual_sparsity_sample_mean": {
+        "top_10pct_energy_fraction": 0.6625030040740967,
+        "top_20pct_energy_fraction": 0.8021770119667053,
+        "top_50pct_energy_fraction": 0.9585127830505371,
+        "top_5pct_energy_fraction": 0.5253599882125854
+      },
+      "restoration_amplitude": 0.0037655983727053004,
+      "semantic_state": {
+        "hidden_encoded_error_cosine": -0.007466386101441458,
+        "hidden_first_rms": 0.0013090941356495023,
+        "hidden_growth_ratio": 1.245686784556346,
+        "hidden_last_rms": 0.0016307212645187974,
+        "state_projection_oracle_cosine": -0.01054810092318803
+      },
+      "signal_rms": {
+        "encoded_error": 0.0018491307577254926,
+        "oracle_residual": 0.013679918253051978,
+        "raw_error": 0.01034970510051107,
+        "restoration_delta": 5.1513077912434066e-05,
+        "semantic_hidden": 0.001475774261066841,
+        "state_innovation": 0.0003921912811169602
+      },
+      "state_ratio": 0.21209494216589186,
+      "temporal_feature_gain": 0.0007232882370250727
+    }
+  },
+  "selected_sequences": [
+    "0002"
+  ],
+  "split": "val",
+  "thresholds": {
+    "amplitude_collapsed": 0.1,
+    "direction_learned": 0.3,
+    "encoder_or_state_ratio": 0.1,
+    "prediction_cosine_weak": 0.1,
+    "top10_sparse": 0.8
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "conditions": {
+    "Blur-Max": "Gaussian blur sigma=3.0 after existing 10% warmup",
+    "Blur-Mid": "Gaussian blur sigma=2.25 after existing 10% warmup"
+  },
+  "diagnostic_only": true,
+  "evaluated_window": "post-warmup frames only; recurrent state runs from sequence start",
+  "experiment": "kitti_step_semantic_z4_restoration_test",
+  "parameters_updated": false,
+  "question": "Can the current Semantic ConvGRU restore the blur-damaged Z4/C4 high-level semantics required by the frozen host?",
+  "results": {
+    "Blur-Max": {
+      "condition": "Blur-Max",
+      "effective_frame_count": 32,
+      "feature": {
+        "semantic_continuous": {
+          "direction_cosine_to_oracle_residual": 0.3600884129034647,
+          "feature_recovery_fraction": -1.4448729572646686,
+          "observation_mse_to_clean_z4": 0.00033393900829280454,
+          "semantic_mse_to_clean_z4": 0.0008164384507508598
+        },
+        "semantic_no_history": {
+          "direction_cosine_to_oracle_residual": 0.3633753115273667,
+          "feature_recovery_fraction": -1.3907528832424187,
+          "observation_mse_to_clean_z4": 0.00033393900829280454,
+          "semantic_mse_to_clean_z4": 0.0007983656469031364
+        }
+      },
+      "judgement": {
+        "semantic_temporal_memory_contribution": "NOT_SUPPORTED",
+        "semantic_z4_restoration": "NOT_SUPPORTED",
+        "writeback_can_use_oracle_z4": "SUPPORTED"
+      },
+      "mIoU": {
+        "blur_host": 0.3231840868417733,
+        "clean_c4_oracle": 0.37174198493541877,
+        "clean_host": 0.3785149834301851,
+        "oracle_z4_writeback": 0.38919641530105936,
+        "semantic_continuous": 0.22966830031741925,
+        "semantic_no_history": 0.20029700096565342
+      },
+      "task_recovery": {
+        "host_c4_gap": 0.04855789809364547,
+        "oracle_z4_writeback_fraction_of_host_c4_gap": 1.3594560524835562,
+        "oracle_z4_writeback_gain": 0.06601232845928606,
+        "semantic_continuous_fraction_of_host_c4_gap": -1.9258615013361131,
+        "semantic_continuous_fraction_of_writeback_capacity": -1.416641235160052,
+        "semantic_continuous_gain": -0.09351578652435405,
+        "semantic_no_history_fraction_of_host_c4_gap": -2.530733221588961,
+        "semantic_no_history_fraction_of_writeback_capacity": -1.8615778104526648,
+        "semantic_no_history_gain": -0.12288708587611988,
+        "temporal_memory_mIoU_gain": 0.02937129935176583
+      }
+    },
+    "Blur-Mid": {
+      "condition": "Blur-Mid",
+      "effective_frame_count": 32,
+      "feature": {
+        "semantic_continuous": {
+          "direction_cosine_to_oracle_residual": 0.3476345147581876,
+          "feature_recovery_fraction": -2.3554405105103937,
+          "observation_mse_to_clean_z4": 0.0002314406866283932,
+          "semantic_mse_to_clean_z4": 0.0007765854556932517
+        },
+        "semantic_no_history": {
+          "direction_cosine_to_oracle_residual": 0.3527091058043268,
+          "feature_recovery_fraction": -2.2575149940946972,
+          "observation_mse_to_clean_z4": 0.0002314406866283932,
+          "semantic_mse_to_clean_z4": 0.0007539215069355629
+        }
+      },
+      "judgement": {
+        "semantic_temporal_memory_contribution": "NOT_SUPPORTED",
+        "semantic_z4_restoration": "NOT_SUPPORTED",
+        "writeback_can_use_oracle_z4": "SUPPORTED"
+      },
+      "mIoU": {
+        "blur_host": 0.3669155928764197,
+        "clean_c4_oracle": 0.3741010886528086,
+        "clean_host": 0.3785149834301851,
+        "oracle_z4_writeback": 0.40228385247734627,
+        "semantic_continuous": 0.26621144334187263,
+        "semantic_no_history": 0.265407684566198
+      },
+      "task_recovery": {
+        "host_c4_gap": 0.007185495776388884,
+        "oracle_z4_writeback_fraction_of_host_c4_gap": 4.922173876595205,
+        "oracle_z4_writeback_gain": 0.035368259600926544,
+        "semantic_continuous_fraction_of_host_c4_gap": -14.014920148649312,
+        "semantic_continuous_fraction_of_writeback_capacity": -2.8473029397213807,
+        "semantic_continuous_gain": -0.1007041495345471,
+        "semantic_no_history_fraction_of_host_c4_gap": -14.126778648144326,
+        "semantic_no_history_fraction_of_writeback_capacity": -2.8700283659861654,
+        "semantic_no_history_gain": -0.10150790831022172,
+        "temporal_memory_mIoU_gain": 0.0008037587756746234
+      }
+    }
+  },
+  "semantic_checkpoint": "/home/lin/predify/experiments/kitti_step_robust_semantic_reference/best_robust_semantic_reference.pt",
+  "sequence_count": 1,
+  "split": "val",
+  "variants": {
+    "blur_host": "Blurred host without correction",
+    "clean_c4_oracle": "Same-frame clean raw C4 replacing blurred C4 before decoder; host-level C4 upper bound",
+    "clean_host": "Clean C1 + clean C4 host",
+    "oracle_z4_writeback": "Same-frame clean Z4 - blurred Z4 residual through the current trained writeback; isolates writeback capacity",
+    "semantic_continuous": "Current continuous Semantic ConvGRU Z4 reference, written back only through Z4",
+    "semantic_no_history": "Current semantic Z4 reference with h4_sem/h1_sem reset at every predictor step, written back only through Z4"
+  }
+}
