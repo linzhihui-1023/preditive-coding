@@ -111,7 +111,7 @@ def evaluate(model, dataloader, device):
     loss_sum = 0.0
     frame_count = 0
     with torch.inference_mode():
-        for images, masks, _ in dataloader:
+        for batch_index, (images, masks, _) in enumerate(dataloader, 1):
             images = images.to(device, non_blocking=True)
             masks = masks.to(device, non_blocking=True)
             with torch.amp.autocast("cuda", enabled=device.type == "cuda"):
@@ -120,6 +120,8 @@ def evaluate(model, dataloader, device):
             update_confusion(confusion, logits, masks)
             loss_sum += float(loss.item())
             frame_count += int(images.shape[0])
+            if batch_index % 2000 == 0:
+                print(json.dumps({"val_batch": batch_index}, sort_keys=True), flush=True)
     miou, per_class_iou = miou_from_confusion(confusion)
     return {
         "mIoU": miou,
@@ -135,7 +137,7 @@ def train_one_epoch(model, dataloader, optimizer, scaler, device, aux_weight):
     criterion = nn.CrossEntropyLoss(ignore_index=VSPW_IGNORE_LABEL)
     loss_sum = 0.0
     frame_count = 0
-    for images, masks in dataloader:
+    for batch_index, (images, masks) in enumerate(dataloader, 1):
         images = images.to(device, non_blocking=True)
         masks = masks.to(device, non_blocking=True)
         optimizer.zero_grad(set_to_none=True)
@@ -148,6 +150,14 @@ def train_one_epoch(model, dataloader, optimizer, scaler, device, aux_weight):
         batch = int(images.shape[0])
         loss_sum += float(loss.detach().item()) * batch
         frame_count += batch
+        if batch_index % 1000 == 0:
+            print(
+                json.dumps(
+                    {"train_batch": batch_index, "train_loss_so_far": loss_sum / max(frame_count, 1)},
+                    sort_keys=True,
+                ),
+                flush=True,
+            )
     return loss_sum / max(frame_count, 1)
 
 
