@@ -1,0 +1,2 @@
+epoch,stage,mean_abs_error,mean_abs_delta_z4,update_gain,temporal_valid_ratio
+1,stage1,0.0288256452,0.0204678197,1.2470355150,5.3347902000
