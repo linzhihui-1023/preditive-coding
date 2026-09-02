@@ -4,7 +4,7 @@ This file intentionally leaves the model architecture untouched.  It adds the
 V2 training objective around the existing FAST-B predictor and keeps a strict
 zero-step checkpoint equivalence check before any backward pass.
 """
-import argparse, csv, json, math, random
+import argparse, copy, csv, json, math, random
 from pathlib import Path
 import torch
 from torch.nn import functional as F
@@ -24,7 +24,7 @@ from predify2021.mce_scores.train_kitti_step_temporal_joint import (
     FrozenRAFT, encode_clean, flow_grid, detach_state, C4_ADAPTER_INDEX, C4_WRITEBACK_KEY,
 )
 
-SEED=0; TBPTT=8; NUM_CLASSES=19; IGNORE=255
+SEED=0; TBPTT=8; NUM_CLASSES=19; IGNORE=255; SEGMENTATION_POSITIONS=(2,4,6,8)
 FAST_B="/home/lin/predify/experiments/kitti_step_semantic_v3_joint_c4_fast_ab_5754714/fast_b_joint_c4_weak_z4/best.pt"
 OUT="/home/lin/predify/experiments/kitti_step_temporal_joint_v2"
 RES="results/kitti_step_temporal_joint_v2"
@@ -39,14 +39,25 @@ def configure(model,predictor,stage=1):
         for n in ("z4_dyn_recurrent","z4_dyn_delta"): getattr(predictor,n).requires_grad_(True)
     model.eval(); predictor.train()
 
-def load_pair(args,stage=1):
-    def one():
-        m,_=load_components(STATIC_CHECKPOINT_DEFAULT,ADAPTER_CHECKPOINT_DEFAULT,args.dynamics_checkpoint,WRITEBACK_CHECKPOINT_DEFAULT)
-        pld=torch.load(args.fast_b_checkpoint,map_location="cpu",weights_only=False)
-        m.multi_layer_adapter.output_adapters[3].load_state_dict(pld["c4_output_adapter_state_dict"])
-        m.host_conditioned_writebacks["3"].load_state_dict(pld["c4_writeback_state_dict"])
-        p=ErrorRegulatedSemanticRestorationPredictor(use_error_temporal_stats=True).cuda(); p.load_state_dict(pld["model_state_dict"]); configure(m,p,stage); return m,p,pld
-    return one(), one()
+def load_student(args,stage=1):
+    m,_=load_components(STATIC_CHECKPOINT_DEFAULT,ADAPTER_CHECKPOINT_DEFAULT,args.dynamics_checkpoint,WRITEBACK_CHECKPOINT_DEFAULT)
+    pld=torch.load(args.fast_b_checkpoint,map_location="cpu",weights_only=False)
+    m.multi_layer_adapter.output_adapters[3].load_state_dict(pld["c4_output_adapter_state_dict"])
+    m.host_conditioned_writebacks["3"].load_state_dict(pld["c4_writeback_state_dict"])
+    p=ErrorRegulatedSemanticRestorationPredictor(use_error_temporal_stats=True).cuda()
+    p.load_state_dict(pld["model_state_dict"])
+    configure(m,p,stage)
+    return m,p,pld
+
+def build_frozen_teacher(model,predictor):
+    """Freeze the original FAST-B path without duplicating the frozen host."""
+    teacher_predictor=copy.deepcopy(predictor).eval()
+    teacher_predictor.requires_grad_(False)
+    teacher_c4_adapter=copy.deepcopy(model.multi_layer_adapter.output_adapters[3]).eval()
+    teacher_c4_adapter.requires_grad_(False)
+    teacher_c4_writeback=copy.deepcopy(model.host_conditioned_writebacks["3"]).eval()
+    teacher_c4_writeback.requires_grad_(False)
+    return teacher_predictor,teacher_c4_adapter,teacher_c4_writeback
 
 def logits_for(model,raw,obs,rest,size):
     z=zero_state(obs); d=UnifiedFeatures(z.z1,z.z2,z.z3,rest.z4-obs.z4)
@@ -54,6 +65,26 @@ def logits_for(model,raw,obs,rest,size):
     if torch.is_grad_enabled():
         return checkpoint(lambda x: model.decode_from_host_feature(HostFeature(x, hf.low_level, hf.output_size)), hf.tensor, use_reentrant=False)
     return model.decode_from_host_feature(hf)
+
+def teacher_logits_for(model,raw,obs,rest,size,teacher_c4_adapter,teacher_c4_writeback):
+    """Decode with frozen FAST-B C4 adapter/writeback and shared frozen decoder."""
+    delta_z4=rest.z4-obs.z4
+    high=raw.c4+teacher_c4_adapter(delta_z4)
+    if model.host_conditioned_writeback_enabled:
+        high=high+teacher_c4_writeback(raw.c4,delta_z4)
+    return model.decode_from_host_feature(HostFeature(high,raw.c1,size))
+
+def preserve_loss(student_logits,teacher_logits):
+    teacher_prob=teacher_logits.detach().softmax(1)
+    confident=teacher_prob.amax(1)>.7
+    if not confident.any():
+        return student_logits.sum()*0
+    per_pixel=F.kl_div(
+        student_logits.log_softmax(1),
+        teacher_prob,
+        reduction="none",
+    ).sum(1)
+    return per_pixel[confident].mean()
 
 def temporal_loss(cur,prev,flow,prev_mask,cur_mask):
     h,w=cur.shape[-2:]; grid,valid=flow_grid(flow,h,w)
@@ -93,47 +124,108 @@ def zero_step_check(model,predictor,groups,raft):
     return got
 
 def train_epoch(model,predictor,teacher,groups,raft,opt,stage):
-    totals={k:0. for k in ("Lseg","LTC","Lpreserve","Ldelta","Lpred","total","error_abs","delta_abs","gain","tc_valid_ratio")}; windows=0
+    teacher_predictor,teacher_c4_adapter,teacher_c4_writeback=teacher
+    totals={k:0. for k in ("Lseg","LTC","Lpreserve","Ldelta","Lpred","total","error_abs","delta_abs","gain","tc_valid_ratio")}
+    windows=0
     for samples in groups.values():
-        if len(samples)<2: continue
-        prev_img,obs,raw,size=encode_clean(model,samples[0]); tp_img,tobs,traw,tsize=encode_clean(teacher[0],samples[0]); pending,h4,h1=predictor.predict_next(obs,zero_state(obs),None,None); tpending,th4,th1=teacher[1].predict_next(tobs,zero_state(tobs),None,None); sh=predictor.initial_semantic_state(obs); es=predictor.initial_error_temporal_statistics(); tsh=teacher[1].initial_semantic_state(tobs); tes=teacher[1].initial_error_temporal_statistics(); prev_logits=None; tprev=None; prev_mask=semantic_mask_from_panoptic_png(samples[0]["mask_path"]).cuda(); records=[]
+        if len(samples)<2:
+            continue
+        prev_img,obs,raw,size=encode_clean(model,samples[0])
+        prev_mask=semantic_mask_from_panoptic_png(samples[0]["mask_path"]).cuda()
+        with torch.no_grad():
+            prev_student_logits=model.decode_from_host_feature(HostFeature(raw.c4,raw.c1,size)).detach()
+            pending,h4,h1=predictor.predict_next(obs,zero_state(obs),None,None)
+            tpending,th4,th1=teacher_predictor.predict_next(obs,zero_state(obs),None,None)
+        sh=predictor.initial_semantic_state(obs)
+        es=predictor.initial_error_temporal_statistics()
+        tsh=teacher_predictor.initial_semantic_state(obs)
+        tes=teacher_predictor.initial_error_temporal_statistics()
+
+        seg_losses=[]; tc_losses=[]; preserve_losses=[]; delta_losses=[]; tc_ratios=[]; error_values=[]
         for fi,s in enumerate(samples[1:],1):
-            img,obs,raw,size=encode_clean(model,s); er=error_state(obs,pending); rest,sh,diag=predictor.restore_current(obs,pending,sh,error_temporal_state=es); es=diag["error_temporal_state"]
+            img,obs,raw,size=encode_clean(model,s)
+            er=error_state(obs,pending)
+            rest,sh,diag=predictor.restore_current(obs,pending,sh,error_temporal_state=es)
+            es=diag["error_temporal_state"]
+            slog=logits_for(model,raw,obs,rest,size)
+            mask=semantic_mask_from_panoptic_png(s["mask_path"]).cuda()
+            flow=raft.current_to_previous(img,prev_img)
+
+            # True frozen FAST-B teacher: independent recurrent state and frozen
+            # semantic/C4 correction weights, while sharing only the frozen host.
             with torch.no_grad():
-                timg,tobs,traw,tsize=encode_clean(teacher[0],s)
-                ter=error_state(tobs,tpending)
-                trest,tsh,td=teacher[1].restore_current(tobs,tpending,tsh,error_temporal_state=tes)
-                tes=td["error_temporal_state"]
-                with_teacher=logits_for(teacher[0],traw,tobs,trest,tsize).detach()
-            slog=logits_for(model,raw,obs,rest,size); mask=semantic_mask_from_panoptic_png(s["mask_path"]).cuda(); flow=raft.current_to_previous(img,prev_img)
-            # Keep only the current decoder graph; earlier frames still
-            # contribute their detached probabilities to temporal statistics.
-            records=[(r[0].detach(),r[1],r[2],r[3],r[4],detach_state(r[5]),detach_state(r[6])) for r in records]
-            records.append((slog,with_teacher,mask,flow,prev_mask,rest,obs)); prev_img=img; prev_mask=mask; pending,h4,h1=predictor.predict_next(obs,er,h4,h1); tpending,th4,th1=teacher[1].predict_next(tobs,ter,th4,th1)
-            if len(records)<TBPTT and fi<len(samples)-1: continue
-            seg=records[-1][0]; sm=records[-1][2].unsqueeze(0); lseg=F.cross_entropy(seg,sm,ignore_index=IGNORE)
-            ltc=[]; ratios=[]; lp=[]
-            for j,r in enumerate(records):
-                q,ratio=temporal_loss(r[0],prev_logits if j==0 and prev_logits is not None else (records[j-1][0] if j else r[0].detach()),r[3],r[4],r[2]); ltc.append(q); ratios.append(ratio)
-                if j==len(records)-1:
-                    conf=r[1].softmax(1).amax(1)>.7; lp.append((F.kl_div(r[0].log_softmax(1),r[1].softmax(1),reduction="none").sum(1)[conf]).mean() if conf.any() else r[0].sum()*0)
-            ltc=torch.stack(ltc).mean(); lpres=torch.stack(lp).mean() if lp else lseg*0; ldelta=torch.stack([(r[5].z4-r[6].z4).abs().mean() for r in records]).mean(); lpred=lseg*0
+                ter=error_state(obs,tpending)
+                trest,tsh,tdiag=teacher_predictor.restore_current(
+                    obs,tpending,tsh,error_temporal_state=tes
+                )
+                tes=tdiag["error_temporal_state"]
+                tlog=teacher_logits_for(
+                    model,raw,obs,trest,size,teacher_c4_adapter,teacher_c4_writeback
+                )
+                tpending,th4,th1=teacher_predictor.predict_next(obs,ter,th4,th1)
+
+            local_position=((fi-1)%TBPTT)+1
+            if local_position in SEGMENTATION_POSITIONS or fi==len(samples)-1:
+                seg_losses.append(F.cross_entropy(slog,mask.unsqueeze(0),ignore_index=IGNORE))
+
+            # Always pair the current frame with the actual immediately previous
+            # student prediction.  Across TBPTT boundaries it is detached, not reset.
+            q,ratio=temporal_loss(slog,prev_student_logits,flow,prev_mask,mask)
+            tc_losses.append(q)
+            tc_ratios.append(ratio)
+            preserve_losses.append(preserve_loss(slog,tlog))
+            delta_losses.append((rest.z4-obs.z4).abs().mean())
+            error_values.append(er.z4.abs().mean())
+
+            prev_student_logits=slog.detach()
+            prev_img=img
+            prev_mask=mask
+            pending,h4,h1=predictor.predict_next(obs,er,h4,h1)
+
+            window_end=(local_position==TBPTT or fi==len(samples)-1)
+            if not window_end:
+                continue
+
+            lseg=torch.stack(seg_losses).mean() if seg_losses else slog.sum()*0
+            ltc=torch.stack(tc_losses).mean()
+            lpres=torch.stack(preserve_losses).mean()
+            ldelta=torch.stack(delta_losses).mean()
+            lpred=lseg*0
             total=lseg+1e-4*ltc+1e-3*lpres+1e-4*ldelta+(1e-2*lpred if stage==2 else 0)
-            opt.zero_grad(set_to_none=True); total.backward(); opt.step(); windows+=1
-            for k,v in (("Lseg",lseg),("LTC",ltc),("Lpreserve",lpres),("Ldelta",ldelta),("Lpred",lpred),("total",total)): totals[k]+=float(v.detach()); totals["tc_valid_ratio"]+=sum(ratios)/max(1,len(ratios)); totals["delta_abs"]+=float(ldelta.detach()); totals["error_abs"]+=float(er.z4.abs().mean().detach()); totals["gain"]+=float(rest.z4.abs().mean().detach()); records=[]; prev_logits=None; sh=sh.detach(); pending=detach_state(pending); h4=h4.detach() if h4 is not None else None; h1=h1.detach() if h1 is not None else None
-    for k in totals: totals[k]/=max(1,windows)
+
+            opt.zero_grad(set_to_none=True)
+            total.backward()
+            opt.step()
+            windows+=1
+
+            for k,v in (("Lseg",lseg),("LTC",ltc),("Lpreserve",lpres),("Ldelta",ldelta),("Lpred",lpred),("total",total)):
+                totals[k]+=float(v.detach())
+            totals["tc_valid_ratio"]+=sum(tc_ratios)/max(1,len(tc_ratios))
+            totals["delta_abs"]+=float(ldelta.detach())
+            totals["error_abs"]+=float(torch.stack(error_values).mean().detach())
+            totals["gain"]+=float(rest.z4.abs().mean().detach())
+
+            seg_losses=[]; tc_losses=[]; preserve_losses=[]; delta_losses=[]; tc_ratios=[]; error_values=[]
+            sh=sh.detach()
+            es=es.detach() if es is not None else None
+            pending=detach_state(pending)
+            h4=h4.detach() if h4 is not None else None
+            h1=h1.detach() if h1 is not None else None
+
+    for k in totals:
+        totals[k]/=max(1,windows)
     return totals
 
 def main(argv=None):
     ap=argparse.ArgumentParser(); ap.add_argument("--root",default="/home/lin/predify/kitti_step"); ap.add_argument("--fast-b-checkpoint",default=FAST_B); ap.add_argument("--dynamics-checkpoint",default=ROLE_PREDICTOR_CHECKPOINT_DEFAULT); ap.add_argument("--output",default=OUT); ap.add_argument("--result-output",default=RES); ap.add_argument("--stage1-epochs",type=int,default=1); ap.add_argument("--skip-training",action="store_true"); ap.add_argument("--skip-zero-step",action="store_true"); args=ap.parse_args(argv)
     random.seed(SEED); torch.manual_seed(SEED); torch.cuda.manual_seed_all(SEED)
-    ds=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"train"); train=sequence_groups(ds); vd=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"val"); allv=sequence_groups(vd); dev={k:allv[k] for k in DEV3}; raft=FrozenRAFT(); (model,predictor,_),(teacher,teacher_p,_)=load_pair(args,1)
-    teacher=(teacher, teacher_p); teacher[0].eval(); teacher[1].eval()
+    ds=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"train"); train=sequence_groups(ds); vd=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"val"); allv=sequence_groups(vd); dev={k:allv[k] for k in DEV3}; raft=FrozenRAFT(); model,predictor,_=load_student(args,1)
+    teacher=build_frozen_teacher(model,predictor)
     zero=REF if args.skip_zero_step else zero_step_check(model,predictor,dev,raft); print(json.dumps({"zero_step":zero},sort_keys=True),flush=True)
     if args.skip_training: return
     sem=[p for p in predictor.parameters() if p.requires_grad]; c4=[p for m in (model.multi_layer_adapter.output_adapters[3],model.host_conditioned_writebacks["3"]) for p in m.parameters() if p.requires_grad]; opt=torch.optim.AdamW([{"params":sem,"lr":2e-5},{"params":c4,"lr":1e-5}],weight_decay=.01); out=Path(args.output); out.mkdir(parents=True,exist_ok=True); rows=[]
     for epoch in range(1,args.stage1_epochs+1):
-        tr=train_epoch(model,predictor,(teacher[0],teacher[1]),train,raft,opt,1); val=evaluate(model,predictor,dev,raft); row={"epoch":epoch,"stage":1,"train":tr,"val":val}; rows.append(row); print(json.dumps(row,sort_keys=True),flush=True); torch.save({"experiment":"temporal_joint_v2","stage":1,"epoch":epoch,"model_state_dict":predictor.state_dict(),"c4_output_adapter_state_dict":model.multi_layer_adapter.output_adapters[3].state_dict(),"c4_writeback_state_dict":model.host_conditioned_writebacks["3"].state_dict(),"metrics":val},out/f"stage1_epoch_{epoch:03d}.pt")
+        tr=train_epoch(model,predictor,teacher,train,raft,opt,1); val=evaluate(model,predictor,dev,raft); row={"epoch":epoch,"stage":1,"train":tr,"val":val}; rows.append(row); print(json.dumps(row,sort_keys=True),flush=True); torch.save({"experiment":"temporal_joint_v2","stage":1,"epoch":epoch,"model_state_dict":predictor.state_dict(),"c4_output_adapter_state_dict":model.multi_layer_adapter.output_adapters[3].state_dict(),"c4_writeback_state_dict":model.host_conditioned_writebacks["3"].state_dict(),"metrics":val},out/f"stage1_epoch_{epoch:03d}.pt")
         if val["mIoU"]<.57: break
     res=Path(args.result_output); res.mkdir(parents=True,exist_ok=True); (res/"summary.json").write_text(json.dumps({"experiment":"Temporal Joint V2","zero_step":zero,"history":rows,"host":HOST,"original_fast_b":REF},indent=2)+"\n"); (res/"README.md").write_text("# Temporal Joint V2\nZero-step equivalence and controlled Stage 1 results.\n")
 
