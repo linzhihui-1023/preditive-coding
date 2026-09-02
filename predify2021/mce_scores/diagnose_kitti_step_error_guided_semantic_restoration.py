@@ -151,6 +151,7 @@ def evaluate_condition(model, predictor, groups, condition, max_effective_frames
             if len(samples) < 2:
                 continue
             onset = warmup_frame_count(len(samples))
+            sequence_effective_frames = 0
 
             first_clean = load_image(samples[0])
             first_blur = diagnostic_blur(first_clean, 0, len(samples), condition)
@@ -166,7 +167,7 @@ def evaluate_condition(model, predictor, groups, condition, max_effective_frames
             continuous_hidden = None
 
             for frame_index in range(1, len(samples)):
-                if max_effective_frames and effective_frames >= max_effective_frames:
+                if max_effective_frames and sequence_effective_frames >= max_effective_frames:
                     break
 
                 sample = samples[frame_index]
@@ -236,6 +237,7 @@ def evaluate_condition(model, predictor, groups, condition, max_effective_frames
                             mask,
                         )
                     effective_frames += 1
+                    sequence_effective_frames += 1
 
                 pending_prediction, h4_dyn, h1_dyn = predictor.predict_next(
                     observation,
@@ -243,9 +245,6 @@ def evaluate_condition(model, predictor, groups, condition, max_effective_frames
                     h4_dyn,
                     h1_dyn,
                 )
-
-            if max_effective_frames and effective_frames >= max_effective_frames:
-                break
 
     miou = {
         name: float(torch.nanmean(compute_iou(matrix)).item())
@@ -337,6 +336,7 @@ def evaluate_clean_identity(model, predictor, groups, max_effective_frames=0):
         for samples in groups.values():
             if len(samples) < 2:
                 continue
+            sequence_effective_frames = 0
 
             first_image = load_image(samples[0])
             first_raw = model.extract_backbone_features(first_image)
@@ -348,7 +348,7 @@ def evaluate_clean_identity(model, predictor, groups, max_effective_frames=0):
             continuous_hidden = None
 
             for frame_index in range(1, len(samples)):
-                if max_effective_frames and effective_frames >= max_effective_frames:
+                if max_effective_frames and sequence_effective_frames >= max_effective_frames:
                     break
 
                 sample = samples[frame_index]
@@ -386,13 +386,11 @@ def evaluate_clean_identity(model, predictor, groups, max_effective_frames=0):
                         confusion[name], value.argmax(1).squeeze(0).cpu(), mask
                     )
                 effective_frames += 1
+                sequence_effective_frames += 1
 
                 pending_prediction, h4_dyn, h1_dyn = predictor.predict_next(
                     observation, prediction_error, h4_dyn, h1_dyn
                 )
-
-            if max_effective_frames and effective_frames >= max_effective_frames:
-                break
 
     elements = max(element_count, 1)
     miou = {
@@ -441,6 +439,7 @@ def main():
         default="results/kitti_step_error_guided_semantic_restoration_diagnostic",
     )
     parser.add_argument("--sequence-limit", type=int, default=0)
+    parser.add_argument("--sequence-ids", nargs="+", default=None)
     parser.add_argument("--max-effective-frames", type=int, default=0)
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args()
@@ -477,7 +476,12 @@ def main():
         sequence_limit = 1
         max_effective_frames = 32
         output = output / "smoke"
-    if sequence_limit:
+    if args.sequence_ids:
+        missing = [sequence for sequence in args.sequence_ids if sequence not in groups]
+        if missing:
+            raise RuntimeError(f"Missing requested validation sequences: {missing}")
+        groups = {sequence: groups[sequence] for sequence in args.sequence_ids}
+    elif sequence_limit:
         groups = dict(list(groups.items())[:sequence_limit])
     output.mkdir(parents=True, exist_ok=True)
 

@@ -31,6 +31,7 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
 )
 
 SEED, MAX_EPOCHS, PATIENCE, TBPTT_STEPS, LEARNING_RATE, WEIGHT_DECAY = 0, 15, 3, 8, 1e-4, 0.01
+FAST_VALIDATION_SEQUENCES = ("0002", "0010", "0018")
 
 
 def slice_state(state, index):
@@ -106,12 +107,13 @@ def evaluate_condition(model, predictor, groups, condition, residual_aware=False
     with torch.inference_mode():
         for samples in groups.values():
             if len(samples) < 2: continue
+            sequence_steps = 0
             onset = warmup_frame_count(len(samples))
             first, _, _, _, _ = encode_pair(model, samples[0], condition, False)
             pending, h4, h1 = predictor.predict_next(first, zero_state(first), None, None)
             h_sem = predictor.initial_semantic_state(first)
             for frame in range(1, len(samples)):
-                if max_frames and sums["steps"] >= max_frames: break
+                if max_frames and sequence_steps >= max_frames: break
                 obs, clean, raw, clean_raw, output_size = encode_pair(model, samples[frame], condition, frame >= onset)
                 error = error_state(obs, pending)
                 restored, h_sem, _ = predictor.restore_current(obs, pending, h_sem)
@@ -123,9 +125,9 @@ def evaluate_condition(model, predictor, groups, condition, residual_aware=False
                     sums["restored"] += float((restored.z4.float() - clean.z4.float()).square().mean().item())
                     sums["state"] += float((h_sem.float() - clean.z4.float()).square().mean().item())
                     sums["steps"] += 1
+                    sequence_steps += 1
                     update_confusion_matrix(confusion["clean"], model.decode_from_host_feature(HostFeature(clean_raw.c4, clean_raw.c1, output_size)).argmax(1).squeeze(0).cpu(), mask)
                 pending, h4, h1 = predictor.predict_next(obs, error, h4, h1)
-            if max_frames and sums["steps"] >= max_frames: break
     count = max(sums["steps"], 1)
     metrics = {name: float(torch.nanmean(compute_iou(value)).item()) for name, value in confusion.items()}
     obs, restored, state = sums["obs"] / count, sums["restored"] / count, sums["state"] / count
@@ -166,7 +168,9 @@ def run_variant(args, variant):
     predictor = ErrorRegulatedSemanticRestorationPredictor().cuda(); predictor.load_dynamics_from_role_separated_state_dict(source.state_dict()); predictor.freeze_dynamics(); model.requires_grad_(False); model.eval()
     semantic_parameters = [p for p in predictor.semantic_parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(semantic_parameters, lr=args.learning_rate, weight_decay=args.weight_decay)
-    train = sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "train")); val = sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "val"))
+    train = sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "train")); val_all = sequence_groups(KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "val")); missing = [sequence for sequence in FAST_VALIDATION_SEQUENCES if sequence not in val_all]
+    if missing: raise RuntimeError(f"Missing fixed fast-validation sequences: {missing}")
+    val = {sequence: val_all[sequence] for sequence in FAST_VALIDATION_SEQUENCES}
     epochs, train_max, val_max = args.epochs, 0, 0; output = Path(args.output) / variant
     if args.smoke: train, val = dict(list(train.items())[:1]), dict(list(val.items())[:1]); epochs, train_max, val_max, output = 1, 16, 32, output / "smoke"
     output.mkdir(parents=True, exist_ok=True)
@@ -177,11 +181,13 @@ def run_variant(args, variant):
         conditions = {c: evaluate_condition(model, predictor, val, c, variant == "v3_full", val_max) for c in TRAIN_CONDITIONS}
         val_metrics = {"conditions": conditions, "mean_restored_mIoU": sum(v["restored_mIoU"] for v in conditions.values()) / 2, "mean_loss": sum(v["z4_loss"] for v in conditions.values()) / 2}
         row = {"epoch": epoch, "train": train_metrics, "val": val_metrics}; history.append(row); print(json.dumps({"variant": variant, **row}, sort_keys=True), flush=True)
+        checkpoint = {"model_state_dict": predictor.state_dict(), "source_dynamics_checkpoint": args.dynamics_checkpoint, "epoch": epoch}
+        torch.save(checkpoint, output / f"epoch_{epoch:03d}.pt")
         if best is None or (val_metrics["mean_restored_mIoU"], -val_metrics["mean_loss"]) > (best["val"]["mean_restored_mIoU"], -best["val"]["mean_loss"]):
             best = row; stale = 0; torch.save({"model_state_dict": predictor.state_dict(), "source_dynamics_checkpoint": args.dynamics_checkpoint, "epoch": epoch}, output / "best.pt")
         else: stale += 1
         if stale >= args.patience: break
-    summary = {"experiment": f"kitti_step_semantic_{variant}", "variant": variant, "checkpoint": str(output / "best.pt"), "trainable_parameter_count": sum(p.numel() for p in semantic_parameters), "dynamics_trainable_parameter_count": 0, "config": {"epochs": epochs, "patience": args.patience, "tbptt_steps": args.tbptt_steps, "learning_rate": args.learning_rate, "weight_decay": args.weight_decay, "loss": "ResidualAwareSmoothL1(beta=0.01)" if variant == "v3_full" else "SmoothL1"}, "smoke_checks": checks, "history": history, "best": best}
+    summary = {"experiment": f"kitti_step_semantic_{variant}", "variant": variant, "checkpoint": str(output / "best.pt"), "trainable_parameter_count": sum(p.numel() for p in semantic_parameters), "dynamics_trainable_parameter_count": 0, "config": {"epochs": epochs, "patience": args.patience, "tbptt_steps": args.tbptt_steps, "learning_rate": args.learning_rate, "weight_decay": args.weight_decay, "loss": "ResidualAwareSmoothL1(beta=0.01)" if variant == "v3_full" else "SmoothL1", "fast_validation_sequences": FAST_VALIDATION_SEQUENCES}, "smoke_checks": checks, "history": history, "best": best}
     (output / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n"); (output / "training_history.json").write_text(json.dumps(history, indent=2, sort_keys=True) + "\n")
     return summary
 

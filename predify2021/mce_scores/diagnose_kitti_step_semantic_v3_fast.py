@@ -26,6 +26,11 @@ def slice_state(state, index):
     return UnifiedFeatures(*(value[index:index + 1] for value in state.as_tuple()))
 
 
+def materialize_state(state):
+    """Copy inference-mode feature tensors into regular tensors for backprop."""
+    return UnifiedFeatures(*(torch.empty_like(value).copy_(value) for value in state.as_tuple()))
+
+
 def rms(x):
     return float(x.detach().float().square().mean().sqrt().item())
 
@@ -82,6 +87,7 @@ def run(model, predictor, groups, limit):
                     zero, hidden_zero[c], zd = predictor.restore_current(o, p, hidden_zero[c], zero_encoded_prediction_error=True)
                 oracle = clean.z4 - o.z4; delta = d["restoration_delta_z4"]; discrepancy = d["semantic_discrepancy"]
                 obs_mse = float(F.mse_loss(o.z4, clean.z4).item()); s["obs_sse"] += obs_mse; s["count"] += 1; s["frames"] += 1
+                add(s, "prediction_error_rms", rms(d["prediction_error_z4"])); add(s, "encoded_error_rms", rms(d["encoded_prediction_error"]))
                 for name, value in (("continuous", restored), ("nohistory", nohist), ("zeroerror", zero)):
                     s["variant_sse"][name] += float(F.mse_loss(value.z4, clean.z4).item())
                     add(s, f"{name}_direction", cosine(value.z4 - o.z4, oracle)); add(s, f"{name}_alpha", alpha(value.z4 - o.z4, oracle)); add(s, f"{name}_amplitude", rms(value.z4 - o.z4) / max(rms(oracle), EPS))
@@ -99,17 +105,18 @@ def run(model, predictor, groups, limit):
 
 def gradients(model, predictor, groups, steps):
     sequence, samples = next(iter(groups.items())); onset = warmup_frame_count(len(samples)); predictor.train(); predictor.zero_grad(set_to_none=True)
-    _, mid, maximum = batch_observations(model, samples[0], 0, len(samples)); pending = {c: (*predictor.predict_next(o, zero_state(o), None, None), None) for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum))}; hidden = {c: predictor.initial_semantic_state(o) for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum))}
+    _, mid, maximum = batch_observations(model, samples[0], 0, len(samples)); mid, maximum = materialize_state(mid), materialize_state(maximum); pending = {c: (*predictor.predict_next(o, zero_state(o), None, None), None) for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum))}; hidden = {c: predictor.initial_semantic_state(o) for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum))}
     for frame in range(1, onset):
         _, mid, maximum = batch_observations(model, samples[frame], frame, len(samples))
+        mid, maximum = materialize_state(mid), materialize_state(maximum)
         for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum)):
             p, h4, h1, _ = pending[c]; e = error_state(o, p)
             with torch.no_grad(): _, hidden[c], _ = predictor.restore_current(o, p, hidden[c]); pending[c] = (*predictor.predict_next(o, e, h4, h1), None)
     losses = []
     for frame in range(onset, onset + steps):
-        clean, mid, maximum = batch_observations(model, samples[frame], frame, len(samples))
+        clean, mid, maximum = batch_observations(model, samples[frame], frame, len(samples)); clean, mid, maximum = materialize_state(clean), materialize_state(mid), materialize_state(maximum)
         for c, o in (("Blur-Mid", mid), ("Blur-Max", maximum)):
-            p, h4, h1, _ = pending[c]; p = UnifiedFeatures(*(v.clone() for v in p.as_tuple())); restored, hidden[c], _ = predictor.restore_current(o, p, hidden[c]); losses.append(F.smooth_l1_loss(restored.z4, clean.z4.detach()))
+            p, h4, h1, _ = pending[c]; p = materialize_state(p); restored, hidden[c], _ = predictor.restore_current(o, p, hidden[c]); losses.append(F.smooth_l1_loss(restored.z4, clean.z4.detach()))
             with torch.no_grad(): pending[c] = (*predictor.predict_next(o, error_state(o, p), h4, h1), None)
     torch.stack(losses).mean().backward(); modules = {"semantic_error_encoder": predictor.semantic_error_encoder, "semantic_state_cell.candidate": predictor.semantic_state_cell.candidate, "semantic_state_cell.update_gain": predictor.semantic_state_cell.update_gain, "semantic_restoration_head": predictor.semantic_restoration_head}; result = {"sequence": sequence, "start_frame": onset, "step_count": steps, "optimizer_step_performed": False, "gradient_norms": {name: math.sqrt(sum(float(p.grad.detach().float().square().sum().item()) for p in module.parameters() if p.grad is not None)) for name, module in modules.items()}}; predictor.zero_grad(set_to_none=True); predictor.eval(); return result
 
