@@ -5,8 +5,10 @@ from predify2021.mce_scores.diagnose_kitti_step_semantic_innovation_bottleneck i
     oracle_projection_scale,
     residual_energy_fractions,
 )
+from predify2021.mce_scores.train_kitti_step_semantic_v3 import residual_aware_loss
 from predify2021.model_factory.deeplabv3plus_resnet50 import (
     ErrorGuidedSemanticRestorationPredictor,
+    ErrorRegulatedSemanticRestorationPredictor,
     UnifiedFeatures,
 )
 
@@ -53,3 +55,58 @@ def test_restoration_diagnostics_expose_every_innovation_stage():
     assert diagnostics["error_drive"].shape == hidden.shape
     assert diagnostics["context_modulation"].shape == hidden.shape
     assert diagnostics["state_innovation"].shape == hidden.shape
+
+
+def test_v3_frame_zero_state_is_observation_and_error_only_changes_gain():
+    predictor = ErrorRegulatedSemanticRestorationPredictor()
+    observation = unified(torch.randn(1, 128, 2, 3))
+    initial = predictor.initial_semantic_state(observation)
+    assert torch.equal(initial, observation.z4)
+
+    hidden = torch.randn_like(observation.z4)
+    first = torch.randn_like(observation.z4)
+    second = torch.randn_like(observation.z4)
+    _, diagnostics_first = predictor.semantic_state_cell(observation.z4, first, hidden)
+    _, diagnostics_second = predictor.semantic_state_cell(observation.z4, second, hidden)
+    assert torch.equal(
+        diagnostics_first["semantic_candidate"],
+        diagnostics_second["semantic_candidate"],
+    )
+    assert not torch.equal(
+        diagnostics_first["semantic_update_gain"],
+        diagnostics_second["semantic_update_gain"],
+    )
+
+
+def test_v3_restoration_is_discrepancy_only_and_dynamics_can_be_frozen():
+    predictor = ErrorRegulatedSemanticRestorationPredictor()
+    predictor.freeze_dynamics()
+    observation = unified(torch.randn(1, 128, 2, 3))
+    prediction = unified(torch.randn(1, 128, 2, 3))
+    restored, _, diagnostics = predictor.restore_current(
+        observation,
+        prediction,
+        predictor.initial_semantic_state(observation),
+    )
+    expected = predictor.semantic_restoration_head(
+        diagnostics["semantic_discrepancy"]
+    )
+    assert torch.allclose(diagnostics["restoration_delta_z4"], expected)
+    assert sum(
+        p.numel()
+        for name in predictor.DYNAMICS_MODULES
+        for p in getattr(predictor, name).parameters()
+        if p.requires_grad
+    ) == 0
+    assert restored.z4.shape == observation.z4.shape
+
+
+def test_v3_residual_aware_loss_is_finite_and_single_scalar():
+    prediction = torch.randn(1, 128, 2, 3, requires_grad=True)
+    target = torch.zeros_like(prediction)
+    target[..., 0, 0] = 10.0
+    loss = residual_aware_loss(prediction, target)
+    assert loss.ndim == 0
+    assert torch.isfinite(loss)
+    loss.backward()
+    assert prediction.grad is not None

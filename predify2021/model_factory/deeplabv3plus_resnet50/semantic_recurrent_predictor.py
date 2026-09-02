@@ -274,3 +274,159 @@ class ErrorGuidedSemanticRestorationPredictor(nn.Module):
             observation.z4 + self.z4_dyn_delta(h4_dyn),
         )
         return next_prediction, h4_dyn, h1_dyn
+
+
+class ErrorRegulatedSemanticStateCell(nn.Module):
+    """Observation-centered semantic state with error-only update regulation."""
+
+    def __init__(self, channels=UNIFIED_STATE_CHANNELS):
+        super().__init__()
+        self.channels = channels
+        self.candidate = nn.Sequential(
+            nn.Conv2d(2 * channels, channels, 3, padding=1),
+            nn.GELU(),
+            nn.Conv2d(channels, channels, 3, padding=1),
+        )
+        nn.init.zeros_(self.candidate[-1].weight)
+        nn.init.zeros_(self.candidate[-1].bias)
+        self.update_gain = nn.Sequential(
+            nn.Conv2d(3 * channels, channels, 3, padding=1),
+            nn.GELU(),
+            nn.Conv2d(channels, channels, 3, padding=1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, observation_z4, encoded_prediction_error, hidden):
+        if hidden is None:
+            hidden = observation_z4
+        candidate_residual = self.candidate(torch.cat((hidden, observation_z4), dim=1))
+        semantic_candidate = observation_z4 + candidate_residual
+        update_gain = self.update_gain(
+            torch.cat((hidden, observation_z4, encoded_prediction_error), dim=1)
+        )
+        semantic_hidden = (1.0 - update_gain) * hidden + update_gain * semantic_candidate
+        return semantic_hidden, {
+            "semantic_candidate": semantic_candidate,
+            "semantic_update_gain": update_gain,
+            "semantic_discrepancy": semantic_hidden - observation_z4,
+            "candidate_residual": candidate_residual,
+        }
+
+
+class SemanticDiscrepancyRestorationHead(nn.Module):
+    """Map temporal semantic discrepancy to a same-frame Z4 residual."""
+
+    def __init__(self, channels=UNIFIED_STATE_CHANNELS):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(channels, channels, 3, padding=1),
+            nn.GELU(),
+            nn.Conv2d(channels, channels, 3, padding=1),
+        )
+        nn.init.dirac_(self.net[-1].weight)
+        nn.init.zeros_(self.net[-1].bias)
+        self.net[-1].weight.data.mul_(0.1)
+
+    def forward(self, semantic_discrepancy):
+        return self.net(semantic_discrepancy)
+
+
+class ErrorRegulatedSemanticRestorationPredictor(nn.Module):
+    """V3 predictor: observation content, historical context, error regulation."""
+
+    DYNAMICS_MODULES = ErrorGuidedSemanticRestorationPredictor.DYNAMICS_MODULES
+
+    def __init__(self, hidden_channels=128):
+        super().__init__()
+        self.z4_dyn_recurrent = ConvGRUCell(2 * UNIFIED_STATE_CHANNELS, hidden_channels)
+        self.z1_dyn_recurrent = ConvGRUCell(3 * UNIFIED_STATE_CHANNELS, hidden_channels)
+        self.z4_dyn_delta = nn.Conv2d(hidden_channels, UNIFIED_STATE_CHANNELS, 3, padding=1)
+        self.z1_dyn_delta = nn.Conv2d(hidden_channels, UNIFIED_STATE_CHANNELS, 3, padding=1)
+        self.semantic_error_encoder = SemanticPredictionErrorEncoder()
+        self.semantic_state_cell = ErrorRegulatedSemanticStateCell()
+        self.semantic_restoration_head = SemanticDiscrepancyRestorationHead()
+
+    def initial_dynamics_state(self):
+        return None, None
+
+    def initial_semantic_state(self, observation=None):
+        return None if observation is None else observation.z4.detach()
+
+    def load_dynamics_from_role_separated_state_dict(self, state_dict):
+        for module_name in self.DYNAMICS_MODULES:
+            prefix = module_name + "."
+            module_state = {
+                key[len(prefix):]: value
+                for key, value in state_dict.items()
+                if key.startswith(prefix)
+            }
+            if not module_state:
+                raise RuntimeError(f"Missing dynamics module in source checkpoint: {module_name}")
+            getattr(self, module_name).load_state_dict(module_state, strict=True)
+
+    def freeze_dynamics(self):
+        for module_name in self.DYNAMICS_MODULES:
+            getattr(self, module_name).requires_grad_(False)
+
+    def semantic_parameters(self):
+        modules = (
+            self.semantic_error_encoder,
+            self.semantic_state_cell,
+            self.semantic_restoration_head,
+        )
+        return [parameter for module in modules for parameter in module.parameters()]
+
+    def restore_current(
+        self,
+        observation,
+        current_prediction,
+        semantic_hidden=None,
+        prediction_error_override=None,
+    ):
+        prediction_error_z4 = (
+            observation.z4 - current_prediction.z4
+            if prediction_error_override is None
+            else prediction_error_override
+        )
+        encoded_prediction_error = self.semantic_error_encoder(prediction_error_z4)
+        semantic_hidden, state_diagnostics = self.semantic_state_cell(
+            observation.z4,
+            encoded_prediction_error,
+            semantic_hidden,
+        )
+        restoration_delta_z4 = self.semantic_restoration_head(
+            state_diagnostics["semantic_discrepancy"]
+        )
+        restored = UnifiedFeatures(
+            observation.z1,
+            observation.z2,
+            observation.z3,
+            observation.z4 + restoration_delta_z4,
+        )
+        diagnostics = {
+            "prediction_error_z4": prediction_error_z4,
+            "encoded_prediction_error": encoded_prediction_error,
+            "semantic_hidden": semantic_hidden,
+            "restoration_delta_z4": restoration_delta_z4,
+            **state_diagnostics,
+        }
+        return restored, semantic_hidden, diagnostics
+
+    def predict_next(self, observation, prediction_error, h4_dyn=None, h1_dyn=None):
+        dyn4_input = torch.cat((observation.z4, prediction_error.z4), dim=1)
+        h4_dyn = self.z4_dyn_recurrent(dyn4_input, h4_dyn)
+        h4_dyn_up = F.interpolate(
+            h4_dyn,
+            size=observation.z1.shape[-2:],
+            mode="bilinear",
+            align_corners=False,
+        )
+        dyn1_input = torch.cat((observation.z1, prediction_error.z1, h4_dyn_up), dim=1)
+        h1_dyn = self.z1_dyn_recurrent(dyn1_input, h1_dyn)
+        next_prediction = UnifiedFeatures(
+            observation.z1 + self.z1_dyn_delta(h1_dyn),
+            observation.z2,
+            observation.z3,
+            observation.z4 + self.z4_dyn_delta(h4_dyn),
+        )
+        return next_prediction, h4_dyn, h1_dyn

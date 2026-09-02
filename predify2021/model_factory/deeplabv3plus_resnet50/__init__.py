@@ -13,10 +13,13 @@ from .host import (
 from .semantic_recurrent_predictor import (
     ErrorGuidedSemanticRecurrentCell,
     ErrorGuidedSemanticRestorationPredictor,
+    ErrorRegulatedSemanticStateCell,
+    ErrorRegulatedSemanticRestorationPredictor,
     RoleSeparatedRecurrentPredictor,
     SemanticPredictionErrorEncoder,
     SemanticRecurrentPredictor,
     SemanticRestorationHead,
+    SemanticDiscrepancyRestorationHead,
 )
 from .adapters import (
     HOST_STAGE_CHANNELS,
@@ -83,6 +86,9 @@ __all__ = [
     "ErrorGuidedSemanticRecurrentCell",
     "SemanticRestorationHead",
     "ErrorGuidedSemanticRestorationPredictor",
+    "ErrorRegulatedSemanticStateCell",
+    "SemanticDiscrepancyRestorationHead",
+    "ErrorRegulatedSemanticRestorationPredictor",
     "DecoupledLocalFeatureCorrelation",
     "DecoupledTemporalErrorEncoder",
     "LocalFeatureCorrelation",
