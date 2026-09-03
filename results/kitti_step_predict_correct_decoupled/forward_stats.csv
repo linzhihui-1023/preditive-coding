@@ -1,0 +1,2 @@
+epoch,mean_abs_prediction_error_z4,mean_abs_delta_z4,semantic_update_gain_mean,temporal_valid_ratio
+1,0.0048138939,0.0026842337,0.2075171554,0.8900278920

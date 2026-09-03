@@ -1,0 +1,4 @@
+loss,semantic_error_encoder,semantic_state,dynamics_z4
+Lseg,1.649e-6,1.245e-1,0
+LTC,3.955e-7,1.993e-2,0
+Lpreserve,1.950e-12,3.760e-8,0
