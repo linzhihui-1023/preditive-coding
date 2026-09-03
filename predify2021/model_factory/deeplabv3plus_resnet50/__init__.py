@@ -23,6 +23,12 @@ from .semantic_recurrent_predictor import (
     SemanticRestorationHead,
     SemanticDiscrepancyRestorationHead,
 )
+from .predictive_semantic_v2 import (
+    PredictiveSemanticV2,
+    Z4PredictiveSemanticEncoder,
+    Z4PredictiveTemporalPredictor,
+    Z4TemporalUpdateHead,
+)
 from .adapters import (
     HOST_STAGE_CHANNELS,
     UNIFIED_STATE_CHANNELS,
@@ -93,6 +99,10 @@ __all__ = [
     "ErrorRegulatedSemanticStateCell",
     "SemanticDiscrepancyRestorationHead",
     "ErrorRegulatedSemanticRestorationPredictor",
+    "PredictiveSemanticV2",
+    "Z4PredictiveSemanticEncoder",
+    "Z4PredictiveTemporalPredictor",
+    "Z4TemporalUpdateHead",
     "DecoupledLocalFeatureCorrelation",
     "DecoupledTemporalErrorEncoder",
     "LocalFeatureCorrelation",
