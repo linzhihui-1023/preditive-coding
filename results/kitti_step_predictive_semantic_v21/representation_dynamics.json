@@ -1,0 +1,11 @@
+{
+  "experiment": "V2.1 representation dynamics supplementary diagnosis",
+  "inference_only": true,
+  "pairs": 2972,
+  "rows": [
+    {"epoch": 0, "Rpred": 1.0, "pred_motion_ratio": 0.0, "pred_delta_rms": 0.0, "true_delta_rms": 0.0015479141952986326, "copy_mse": 2.3960383560070132e-06, "state_rms": 0.04179017172163463, "state_std": 0.04153045254744807},
+    {"epoch": 1, "Rpred": 1.0005164704414389, "pred_motion_ratio": 0.03120181672686989, "pred_delta_rms": 7.86386693179221e-05, "true_delta_rms": 0.002520323415982419, "copy_mse": 6.352030121149289e-06, "state_rms": 0.3498654286459923, "state_std": 0.349675242141444},
+    {"epoch": 2, "Rpred": 1.0023985709158854, "pred_motion_ratio": 0.050551431255451085, "pred_delta_rms": 0.00018451565752266542, "true_delta_rms": 0.0036500580288271983, "copy_mse": 1.3322923613805893e-05, "state_rms": 0.5703483241710515, "state_std": 0.569837816786902},
+    {"epoch": 3, "Rpred": 1.0037944610253193, "pred_motion_ratio": 0.06295899614652645, "pred_delta_rms": 0.00023145161710440903, "true_delta_rms": 0.003676227882759509, "copy_mse": 1.3514651445978463e-05, "state_rms": 0.578525068935073, "state_std": 0.5780044295411109}
+  ]
+}
