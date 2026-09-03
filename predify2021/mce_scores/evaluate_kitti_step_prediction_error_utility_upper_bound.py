@@ -104,7 +104,8 @@ def decode_beta_batch(model, raw, observation, error_z4, output_size):
 def direct_metrics(groups, model, predictor, raft):
     names = tuple(f"beta_{beta:g}" for beta in BETAS) + ("oracle",)
     confusion = {name: torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64) for name in names}
-    mvc = {name: VideoConsistency() for name in names}
+    mvc_sums = {name: {8: 0.0, 16: 0.0} for name in names}
+    mvc_counts = {name: {8: 0, 16: 0} for name in names}
     mtc_sum = {name: 0.0 for name in names}
     mtc_count = {name: 0 for name in names}
     per_sequence = {}
@@ -122,7 +123,7 @@ def direct_metrics(groups, model, predictor, raft):
         host_logits = model.decode_from_host_feature(HostFeature(raw.c4, raw.c1, output_size))
         mask = semantic_mask_from_panoptic_png(samples[0]["mask_path"])
         predictions = {name: host_logits.argmax(1) for name in names}
-        _accumulate(names, predictions, mask, confusion, seq_confusion, mvc, seq_vc)
+        _accumulate(names, predictions, mask, confusion, seq_confusion, seq_vc)
         previous_image = image
         previous_predictions = {name: pred.detach() for name, pred in predictions.items()}
 
@@ -155,7 +156,7 @@ def direct_metrics(groups, model, predictor, raft):
             }
             beta_predictions["oracle"] = logits[oracle_index:oracle_index + 1].argmax(1)
             predictions = beta_predictions
-            _accumulate(names, predictions, mask, confusion, seq_confusion, mvc, seq_vc)
+            _accumulate(names, predictions, mask, confusion, seq_confusion, seq_vc)
 
             backward_flow = raft.backward_flow(image, previous_image)
             for name in names:
@@ -169,6 +170,11 @@ def direct_metrics(groups, model, predictor, raft):
             previous_predictions = {name: pred.detach() for name, pred in predictions.items()}
             pending_z4, hidden = z4_predict_next(predictor, observation.z4, error_z4, hidden)
 
+        for name in names:
+            stats = seq_vc[name].stats()
+            for length in (8, 16):
+                mvc_sums[name][length] += stats[length]["sum"]
+                mvc_counts[name][length] += stats[length]["count"]
         per_sequence[sequence] = {
             name: {
                 "mIoU": float(torch.nanmean(compute_iou(seq_confusion[name])).item()),
@@ -182,11 +188,10 @@ def direct_metrics(groups, model, predictor, raft):
 
     metrics = {}
     for name in names:
-        mvc_stats = mvc[name].stats()
         metrics[name] = {
             "mIoU": float(torch.nanmean(compute_iou(confusion[name])).item()),
-            "mVC8": mvc_stats[8]["sum"] / max(mvc_stats[8]["count"], 1),
-            "mVC16": mvc_stats[16]["sum"] / max(mvc_stats[16]["count"], 1),
+            "mVC8": mvc_sums[name][8] / max(mvc_counts[name][8], 1),
+            "mVC16": mvc_sums[name][16] / max(mvc_counts[name][16], 1),
             "mTC": mtc_sum[name] / max(mtc_count[name], 1),
             "valid_frame_pairs": mtc_count[name],
         }
@@ -208,12 +213,11 @@ def _encode(model, sample):
     return image, observation, raw, tuple(image.shape[-2:])
 
 
-def _accumulate(names, predictions, mask, confusion, seq_confusion, mvc, seq_vc):
+def _accumulate(names, predictions, mask, confusion, seq_confusion, seq_vc):
     for name in names:
         prediction = predictions[name][0].cpu()
         update_confusion_matrix(confusion[name], prediction, mask)
         update_confusion_matrix(seq_confusion[name], prediction, mask)
-        mvc[name].update(mask, prediction)
         seq_vc[name].update(mask, prediction)
 
 
