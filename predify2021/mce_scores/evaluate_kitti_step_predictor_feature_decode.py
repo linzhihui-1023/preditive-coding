@@ -128,7 +128,6 @@ def evaluate(model, predictors, groups, raft):
     names = tuple(f"epoch_{epoch:03d}" for epoch in EPOCHS)
     all_names = ("host",) + names
     confusion = {name: torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64) for name in all_names}
-    vc = {name: VideoConsistency() for name in all_names}
     mvc_sums = {name: {8: 0.0, 16: 0.0} for name in all_names}; mvc_counts = {name: {8: 0, 16: 0} for name in all_names}
     mtc_sum = {name: 0.0 for name in all_names}; mtc_count = {name: 0 for name in all_names}
     pred_sum = {name: 0.0 for name in names}; copy_sum = {name: 0.0 for name in names}; frame_count = {name: 0 for name in names}
@@ -151,7 +150,7 @@ def evaluate(model, predictors, groups, raft):
         previous_observation = observation.z4
         previous_image = image; previous_predictions = {name: pred.detach() for name, pred in predictions.items()}
         for name, prediction in predictions.items():
-            update_confusion_matrix(confusion[name], prediction[0].cpu(), mask); update_confusion_matrix(seq_conf[name], prediction[0].cpu(), mask); vc[name].update(mask, prediction[0].cpu()); seq_vc[name].update(mask, prediction[0].cpu())
+            update_confusion_matrix(confusion[name], prediction[0].cpu(), mask); update_confusion_matrix(seq_conf[name], prediction[0].cpu(), mask); seq_vc[name].update(mask, prediction[0].cpu())
         for sample in samples[1:]:
             image, observation, raw, output_size = encode(model, sample)
             mask = semantic_mask_from_panoptic_png(sample["mask_path"])
@@ -168,7 +167,7 @@ def evaluate(model, predictors, groups, raft):
                 pred_sum[f"epoch_{epoch:03d}"] += pred_mse; copy_sum[f"epoch_{epoch:03d}"] += copy_mse; frame_count[f"epoch_{epoch:03d}"] += 1
                 seq_pred_sum[f"epoch_{epoch:03d}"] += pred_mse; seq_copy_sum[f"epoch_{epoch:03d}"] += copy_mse; seq_frames[f"epoch_{epoch:03d}"] += 1
             for name, prediction in predictions.items():
-                update_confusion_matrix(confusion[name], prediction[0].cpu(), mask); update_confusion_matrix(seq_conf[name], prediction[0].cpu(), mask); vc[name].update(mask, prediction[0].cpu()); seq_vc[name].update(mask, prediction[0].cpu())
+                update_confusion_matrix(confusion[name], prediction[0].cpu(), mask); update_confusion_matrix(seq_conf[name], prediction[0].cpu(), mask); seq_vc[name].update(mask, prediction[0].cpu())
             backward_flow = raft.backward_flow(image, previous_image)
             for name, prediction in predictions.items():
                 score = pair_mtc(previous_predictions[name], prediction, backward_flow)
