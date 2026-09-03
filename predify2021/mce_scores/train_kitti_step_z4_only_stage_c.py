@@ -62,7 +62,9 @@ SEED = 0
 NUM_CLASSES = 19
 IGNORE = 255
 TBPTT = 16
-SEGMENTATION_POSITIONS = (4, 8, 12, 16)
+# Lseg and Lsafe are dense within every TBPTT window.  Decoder logits and the
+# frozen Host logits are already produced for every frame.
+SEGMENTATION_SUPERVISION = "every_frame"
 MAX_EPOCHS = 15
 PATIENCE = 3
 LEARNING_RATE = 1e-5
@@ -71,6 +73,7 @@ HOST_CONFIDENCE = 0.70
 TARGET_TC_GRAD_RATIO = 0.40
 TARGET_SAFE_GRAD_RATIO = 0.20
 MVC16_FLOOR_DELTA = -0.002
+MIN_MTC_DELTA = 0.002
 DEV3 = ("0002", "0010", "0018")
 
 STAGE_P_DEFAULT = (
@@ -380,18 +383,17 @@ def _clip_loss_probe(model, predictor, raft, samples):
         frozen_host_logits = host_logits(model, raw, output_size)
         backward_flow = raft.backward_flow(image, previous_image)
 
-        if local in SEGMENTATION_POSITIONS or local == len(clip) - 1:
-            seg_losses.append(
-                F.cross_entropy(
-                    student_logits,
-                    mask.unsqueeze(0),
-                    ignore_index=IGNORE,
-                )
+        # Dense task and Host-correct protection: every frame contributes
+        # Lseg and Lsafe, while LTC below is also evaluated every frame.
+        seg_losses.append(
+            F.cross_entropy(
+                student_logits,
+                mask.unsqueeze(0),
+                ignore_index=IGNORE,
             )
-            safe, _ = safe_host_loss(
-                student_logits, frozen_host_logits, mask
-            )
-            safe_losses.append(safe)
+        )
+        safe, _ = safe_host_loss(student_logits, frozen_host_logits, mask)
+        safe_losses.append(safe)
 
         tc, _ = temporal_loss(
             student_logits,
@@ -533,24 +535,22 @@ def train_sequence(
         backward_flow = raft.backward_flow(image, previous_image)
 
         local_position = ((frame_index - 1) % TBPTT) + 1
-        if (
-            local_position in SEGMENTATION_POSITIONS
-            or frame_index == len(samples) - 1
-        ):
-            seg_losses.append(
-                F.cross_entropy(
-                    student_logits,
-                    mask.unsqueeze(0),
-                    ignore_index=IGNORE,
-                )
-            )
-            safe, safe_ratio = safe_host_loss(
+        # Dense Lseg/Lsafe supervision; do not leave 12/16 frames protected
+        # only by temporal consistency.
+        seg_losses.append(
+            F.cross_entropy(
                 student_logits,
-                frozen_host_logits,
-                mask,
+                mask.unsqueeze(0),
+                ignore_index=IGNORE,
             )
-            safe_losses.append(safe)
-            safe_ratios.append(safe_ratio)
+        )
+        safe, safe_ratio = safe_host_loss(
+            student_logits,
+            frozen_host_logits,
+            mask,
+        )
+        safe_losses.append(safe)
+        safe_ratios.append(safe_ratio)
 
         tc, tc_ratio = temporal_loss(
             student_logits,
@@ -920,9 +920,29 @@ def gate_pass(metrics):
     delta = metrics["delta"]
     return bool(
         delta["mIoU"] >= 0.0
-        and delta["mTC"] > 0.0
+        and delta["mTC"] >= MIN_MTC_DELTA
         and delta["mVC16"] >= MVC16_FLOOR_DELTA
     )
+
+
+def annotate_full9_deltas(metrics):
+    """Add per-sequence host deltas and non-degradation counts."""
+    mtc_non_degradation = 0
+    miou_non_degradation = 0
+    for row in metrics["per_sequence"].values():
+        delta = {
+            key: row["ours"][key] - row["host"][key]
+            for key in ("mIoU", "mVC8", "mVC16", "mTC")
+        }
+        row["delta"] = delta
+        miou_non_degradation += int(delta["mIoU"] >= 0.0)
+        mtc_non_degradation += int(delta["mTC"] >= 0.0)
+    metrics["nondegradation_sequences"] = {
+        "mIoU": miou_non_degradation,
+        "mTC": mtc_non_degradation,
+        "total": len(metrics["per_sequence"]),
+    }
+    return metrics
 
 
 def progress_rank(metrics):
@@ -1130,6 +1150,26 @@ def main(argv=None):
         if stale >= args.patience:
             break
 
+    full9 = None
+    if best_gate is not None:
+        # Re-load the selected Gate checkpoint before the one permitted Full9
+        # evaluation, so Full9 cannot accidentally use the final epoch state.
+        best_payload = torch.load(
+            output / "best.pt", map_location="cpu", weights_only=False
+        )
+        predictor.load_state_dict(best_payload["model_state_dict"], strict=True)
+        model.multi_layer_adapter.output_adapters[3].load_state_dict(
+            best_payload["c4_output_adapter_state_dict"], strict=True
+        )
+        model.host_conditioned_writebacks["3"].load_state_dict(
+            best_payload["c4_writeback_state_dict"], strict=True
+        )
+        full9 = annotate_full9_deltas(
+            evaluate(model, predictor, all_val_groups, raft)
+        )
+        best_gate["full9"] = full9
+        print(json.dumps({"stage_c_full9": full9}, sort_keys=True), flush=True)
+
     result = {
         "experiment": "Predify Z4-only Stage C",
         "stage_p_checkpoint": args.stage_p_checkpoint,
@@ -1148,7 +1188,8 @@ def main(argv=None):
             "C4 host-conditioned writeback",
         ],
         "tbptt": TBPTT,
-        "segmentation_supervision_positions": SEGMENTATION_POSITIONS,
+        "segmentation_supervision": SEGMENTATION_SUPERVISION,
+        "safe_loss_supervision": "every_frame",
         "max_epochs": args.epochs,
         "patience": args.patience,
         "loss_calibration": calibration,
@@ -1156,11 +1197,12 @@ def main(argv=None):
         "history": history,
         "best_progress": best_progress,
         "best_gate": best_gate,
+        "full9": full9,
         "gate": {
             "passed": best_gate is not None,
             "requirements": {
                 "delta_mIoU_gte": 0.0,
-                "delta_mTC_gt": 0.0,
+                "delta_mTC_gte": MIN_MTC_DELTA,
                 "delta_mVC16_gte": MVC16_FLOOR_DELTA,
             },
         },
@@ -1172,8 +1214,10 @@ def main(argv=None):
         "# Z4-only Stage C\n"
         "Stage C freezes the Stage-P Z4 predictor and trains only the semantic "
         "error encoder, semantic state cell and restoration head. RAFT is used "
-        "only for training/evaluation temporal supervision. The C4 interface "
-        "and DeepLabV3+ Host remain frozen.\n"
+        "only for training/evaluation temporal supervision. Lseg and Lsafe are "
+        "computed on every frame. The C4 interface and DeepLabV3+ Host remain "
+        "frozen. A passing dev3 Gate reloads best.pt and triggers one Full9 "
+        "evaluation.\n"
     )
 
 
