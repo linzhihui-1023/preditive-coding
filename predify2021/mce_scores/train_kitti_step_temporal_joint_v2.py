@@ -24,7 +24,10 @@ from predify2021.mce_scores.train_kitti_step_temporal_joint import (
     FrozenRAFT, encode_clean, flow_grid, detach_state, C4_ADAPTER_INDEX, C4_WRITEBACK_KEY,
 )
 
-SEED=0; TBPTT=8; NUM_CLASSES=19; IGNORE=255; SEGMENTATION_POSITIONS=(2,4,6,8)
+SEED=0; TBPTT=8; NUM_CLASSES=19; IGNORE=255
+# Dense task/safety supervision: every frame in each TBPTT window contributes
+# to the segmentation objective.  The decoder is already evaluated per frame.
+SEGMENTATION_SUPERVISION="every_frame"
 FAST_B="/home/lin/predify/experiments/kitti_step_semantic_v3_joint_c4_fast_ab_5754714/fast_b_joint_c4_weak_z4/best.pt"
 OUT="/home/lin/predify/experiments/kitti_step_temporal_joint_v2"
 RES="results/kitti_step_temporal_joint_v2"
@@ -32,6 +35,22 @@ DEV3=("0002","0010","0018")
 REF={"mIoU":0.5788293035364273,"mVC8":0.945077080607307,"mVC16":0.9421164431668695,"mTC":0.7050058541840838}
 HOST={"mIoU":0.5802101104390269,"mVC8":0.9345485965278791,"mVC16":0.9273142366723673,"mTC":0.7009239766436142}
 LAMBDA_SEG=3e-4; LAMBDA_TC=1e-4; LAMBDA_PRESERVE=1e-2
+MIN_MTC_DELTA=0.002
+
+def stage_c_gate(delta):
+    """Return the fixed dev3 Stage C decision in metric (not pp) units."""
+    return {
+        "mIoU_nonnegative": delta["mIoU"] >= 0.0,
+        "mTC_min_delta": MIN_MTC_DELTA,
+        "mTC_threshold_passed": delta["mTC"] >= MIN_MTC_DELTA,
+        "mVC16_floor": -0.002,
+        "mVC16_threshold_passed": delta["mVC16"] >= -0.002,
+        "passed": (
+            delta["mIoU"] >= 0.0
+            and delta["mTC"] >= MIN_MTC_DELTA
+            and delta["mVC16"] >= -0.002
+        ),
+    }
 
 def configure(model,predictor,stage=1):
     model.requires_grad_(False); predictor.requires_grad_(False)
@@ -75,7 +94,7 @@ def teacher_logits_for(model,raw,obs,rest,size,teacher_c4_adapter,teacher_c4_wri
         high=high+teacher_c4_writeback(raw.c4,delta_z4)
     return model.decode_from_host_feature(HostFeature(high,raw.c1,size))
 
-def preserve_loss(student_logits,teacher_logits):
+def safe_loss(student_logits,teacher_logits):
     teacher_prob=teacher_logits.detach().softmax(1)
     confident=teacher_prob.amax(1)>.7
     if not confident.any():
@@ -158,8 +177,8 @@ def gradient_boundary_test(model,predictor,teacher,samples,raft):
             logits=logits_for(model,raw,observation,restored,output_size)
             mask=semantic_mask_from_panoptic_png(sample["mask_path"]).cuda()
             flow=raft.current_to_previous(image,prev_img)
-            if local in SEGMENTATION_POSITIONS:
-                segs.append(F.cross_entropy(logits,mask.unsqueeze(0),ignore_index=IGNORE))
+            # Lseg and Lsafe/Lpreserve are dense; every frame is supervised.
+            segs.append(F.cross_entropy(logits,mask.unsqueeze(0),ignore_index=IGNORE))
             tc,_=temporal_loss(logits,prev_logits,flow,prev_mask,mask); tcs.append(tc)
             with torch.no_grad():
                 teacher_error=error_state(observation,tpending)
@@ -167,7 +186,7 @@ def gradient_boundary_test(model,predictor,teacher,samples,raft):
                 tes=teacher_diag["error_temporal_state"]
                 teacher_logits=teacher_logits_for(model,raw,observation,teacher_restored,output_size,teacher[1],teacher[2])
                 tpending,th4,th1=teacher[0].predict_next(observation,teacher_error,th4,th1)
-            preserves.append(preserve_loss(logits,teacher_logits))
+            preserves.append(safe_loss(logits,teacher_logits))
             prev_img=image; prev_mask=mask; prev_logits=logits.detach()
             pending,h4,h1=predictor.predict_next(observation,error,h4,h1)
         losses={"Lseg":torch.stack(segs).mean(),"LTC":torch.stack(tcs).mean(),"Lpreserve":torch.stack(preserves).mean()}
@@ -233,15 +252,16 @@ def train_epoch(model,predictor,teacher,groups,raft,opt,stage):
                 tpending,th4,th1=teacher_predictor.predict_next(obs,ter,th4,th1)
 
             local_position=((fi-1)%TBPTT)+1
-            if local_position in SEGMENTATION_POSITIONS or fi==len(samples)-1:
-                seg_losses.append(F.cross_entropy(slog,mask.unsqueeze(0),ignore_index=IGNORE))
+            # Protect every frame against changing a Host-correct prediction;
+            # this is intentionally dense rather than sparse 4/16 supervision.
+            seg_losses.append(F.cross_entropy(slog,mask.unsqueeze(0),ignore_index=IGNORE))
 
             # Always pair the current frame with the actual immediately previous
             # student prediction.  Across TBPTT boundaries it is detached, not reset.
             q,ratio=temporal_loss(slog,prev_student_logits,flow,prev_mask,mask)
             tc_losses.append(q)
             tc_ratios.append(ratio)
-            preserve_losses.append(preserve_loss(slog,tlog))
+            preserve_losses.append(safe_loss(slog,tlog))
             delta_losses.append((rest.z4-obs.z4).abs().mean())
             error_values.append(er.z4.abs().mean())
 
@@ -288,14 +308,29 @@ def main(argv=None):
     ap=argparse.ArgumentParser(); ap.add_argument("--root",default="/home/lin/predify/kitti_step"); ap.add_argument("--fast-b-checkpoint",default=FAST_B); ap.add_argument("--dynamics-checkpoint",default=ROLE_PREDICTOR_CHECKPOINT_DEFAULT); ap.add_argument("--output",default=OUT); ap.add_argument("--result-output",default=RES); ap.add_argument("--stage1-epochs",type=int,default=1); ap.add_argument("--skip-training",action="store_true"); ap.add_argument("--skip-zero-step",action="store_true"); args=ap.parse_args(argv)
     random.seed(SEED); torch.manual_seed(SEED); torch.cuda.manual_seed_all(SEED)
     ds=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"train"); train=sequence_groups(ds); vd=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"val"); allv=sequence_groups(vd); dev={k:allv[k] for k in DEV3}; raft=FrozenRAFT(); model,predictor,_=load_student(args,1)
+    args.lambda_tc = LAMBDA_TC
     teacher=build_frozen_teacher(model,predictor)
     boundary=gradient_boundary_test(model,predictor,teacher,next(iter(train.values())),raft)
     zero=REF if args.skip_zero_step else zero_step_check(model,predictor,dev,raft); print(json.dumps({"gradient_boundary":boundary,"zero_step":zero},sort_keys=True),flush=True)
     if args.skip_training: return
-    sem=[p for m in (predictor.semantic_error_encoder,predictor.semantic_state_cell) for p in m.parameters() if p.requires_grad]; opt=torch.optim.AdamW([{"params":sem,"lr":1e-5}],weight_decay=.01); out=Path(args.output); out.mkdir(parents=True,exist_ok=True); rows=[]
+    sem=[p for m in (predictor.semantic_error_encoder,predictor.semantic_state_cell) for p in m.parameters() if p.requires_grad]; opt=torch.optim.AdamW([{"params":sem,"lr":1e-5}],weight_decay=.01); out=Path(args.output); out.mkdir(parents=True,exist_ok=True); rows=[]; best=None
     for epoch in range(1,args.stage1_epochs+1):
-        tr=train_epoch(model,predictor,teacher,train,raft,opt,1); val=evaluate(model,predictor,dev,raft); row={"epoch":epoch,"stage":1,"train":tr,"val":val}; rows.append(row); print(json.dumps(row,sort_keys=True),flush=True); torch.save({"experiment":"temporal_joint_v2","stage":1,"epoch":epoch,"model_state_dict":predictor.state_dict(),"c4_output_adapter_state_dict":model.multi_layer_adapter.output_adapters[3].state_dict(),"c4_writeback_state_dict":model.host_conditioned_writebacks["3"].state_dict(),"metrics":val},out/f"stage1_epoch_{epoch:03d}.pt")
+        tr=train_epoch(model,predictor,teacher,train,raft,opt,1); val=evaluate(model,predictor,dev,raft)
+        delta={key: val[key]-REF[key] for key in ("mIoU","mTC","mVC16")}; gate=stage_c_gate(delta)
+        row={"epoch":epoch,"stage":1,"train":tr,"val":val,"stage_c_delta":delta,"stage_c_gate":gate}; rows.append(row); print(json.dumps(row,sort_keys=True),flush=True)
+        payload={"experiment":"temporal_joint_v2","stage":1,"epoch":epoch,"model_state_dict":predictor.state_dict(),"c4_output_adapter_state_dict":model.multi_layer_adapter.output_adapters[3].state_dict(),"c4_writeback_state_dict":model.host_conditioned_writebacks["3"].state_dict(),"metrics":val}
+        torch.save(payload,out/f"stage1_epoch_{epoch:03d}.pt")
+        if gate["passed"] and (best is None or val["mIoU"] > best["val"]["mIoU"]):
+            best={"epoch":epoch,"val":val,"delta":delta,"gate":gate}; torch.save(payload,out/"best.pt")
         if val["mIoU"]<.57: break
-    res=Path(args.result_output); res.mkdir(parents=True,exist_ok=True); (res/"summary.json").write_text(json.dumps({"experiment":"Temporal Joint V2","zero_step":zero,"history":rows,"host":HOST,"original_fast_b":REF},indent=2)+"\n"); (res/"README.md").write_text("# Temporal Joint V2\nZero-step equivalence and controlled Stage 1 results.\n")
+    full9=None
+    if best is not None:
+        best_payload=torch.load(out/"best.pt",map_location="cuda",weights_only=False)
+        predictor.load_state_dict(best_payload["model_state_dict"],strict=True)
+        model.multi_layer_adapter.output_adapters[3].load_state_dict(best_payload["c4_output_adapter_state_dict"],strict=True)
+        model.host_conditioned_writebacks["3"].load_state_dict(best_payload["c4_writeback_state_dict"],strict=True)
+        full9=evaluate(model,predictor,allv,raft)
+        best["full9"]=full9
+    res=Path(args.result_output); res.mkdir(parents=True,exist_ok=True); summary={"experiment":"Temporal Joint V2","zero_step":zero,"history":rows,"host":HOST,"original_fast_b":REF,"segmentation_supervision":SEGMENTATION_SUPERVISION,"safe_loss_supervision":"every_frame","min_mtc_delta":MIN_MTC_DELTA,"best":best,"full9_evaluation_after_gate":True}; (res/"summary.json").write_text(json.dumps(summary,indent=2)+"\n"); (res/"README.md").write_text("# Temporal Joint V2\nDense Lseg/Lsafe supervision, strict Stage C mTC gate, and Full9 evaluation after a passing gate.\n")
 
 if __name__=="__main__": main()

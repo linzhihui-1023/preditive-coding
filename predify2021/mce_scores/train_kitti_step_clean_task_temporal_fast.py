@@ -35,7 +35,8 @@ EPOCHS = 3
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.01
 TBPTT_STEPS = 8
-SEGMENTATION_SUPERVISION_POSITIONS = (2, 4, 6, 8)
+# Dense supervision: every decoded frame contributes to the task objective.
+SEGMENTATION_SUPERVISION_POSITIONS = "every_frame"
 VALIDATION_SEQUENCES = ("0002", "0010", "0018")
 OUTPUT_DEFAULT = "/home/lin/predify/experiments/kitti_step_clean_task_temporal_fast"
 RESULT_DEFAULT = "results/kitti_step_clean_task_temporal_fast"
@@ -158,8 +159,7 @@ def train_sequence(model, predictor, samples, optimizer, max_steps=0):
         error_stats = diag["error_temporal_state"]
         losses.append(None)  # the sole objective is assembled from segmentation records
         local_position = len(losses)
-        if local_position in SEGMENTATION_SUPERVISION_POSITIONS or (local_position == TBPTT_STEPS or offset + 1 == steps):
-            records.append((raw, observation, restored, size, semantic_mask_from_panoptic_png(samples[offset + 1]["mask_path"])))
+        records.append((raw, observation, restored, size, semantic_mask_from_panoptic_png(samples[offset + 1]["mask_path"])))
         add_diag(metrics["diagnostics"], diagnostics_row(diag, model, raw, observation, restored))
         metrics["steps"] += 1
         with torch.no_grad():
