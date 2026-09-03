@@ -20,7 +20,7 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import ErrorRegulatedSeman
 FAST_B_DEFAULT="/home/lin/predify/experiments/kitti_step_semantic_v3_joint_c4_fast_ab_5754714/fast_b_joint_c4_weak_z4/best.pt"
 OUTPUT_DEFAULT="/home/lin/predify/experiments/kitti_step_z4_only_stage_p"
 RESULT_DEFAULT="results/kitti_step_z4_only_stage_p"
-TBPTT=16; LR=1e-5; WEIGHT_DECAY=.01; Z1_WEIGHT=.0
+TBPTT=16; LR=1e-5; WEIGHT_DECAY=.01; Z1_WEIGHT=.0; MAX_EPOCHS=15; PATIENCE=3
 
 def load_fast_b(args):
     model,_=load_components(STATIC_CHECKPOINT_DEFAULT,ADAPTER_CHECKPOINT_DEFAULT,args.dynamics_checkpoint,WRITEBACK_CHECKPOINT_DEFAULT)
@@ -44,27 +44,48 @@ def assert_z4_only_contract(model,predictor):
     for name in ("z1_dyn_recurrent","z1_dyn_delta"):
         if any(p.requires_grad for p in getattr(predictor,name).parameters()): raise RuntimeError("Z1 predictor must be frozen")
     if any(p.requires_grad for p in model.parameters()): raise RuntimeError("Host must remain frozen")
+    allowed={"z4_dyn_recurrent","z4_dyn_delta"}
+    unexpected=[name for name,p in predictor.named_parameters() if p.requires_grad and name.split(".",1)[0] not in allowed]
+    if unexpected: raise RuntimeError(f"Unexpected trainable predictor parameters: {unexpected[:5]}")
+
+@torch.no_grad()
+def zero_step_equivalence(model,predictor,sample):
+    image=load_image(sample); raw=model.extract_backbone_features(image); obs=model.encode_backbone_features(raw)
+    error=torch.randn_like(obs.z4)*0.01
+    full_error=type(obs)(torch.zeros_like(obs.z1),torch.zeros_like(obs.z2),torch.zeros_like(obs.z3),error)
+    legacy,legacy_h4,_=predictor.predict_next(obs,full_error,None,None)
+    z4,z4_h=z4_predict_next(predictor,obs.z4,error,None)
+    diff=float((legacy.z4-z4).abs().max().item())
+    if diff>1e-6: raise RuntimeError(f"Z4_ONLY_ZERO_STEP_FAIL max_abs={diff}")
+    return {"max_abs_z4_difference":diff}
 
 def train_sequence(model,predictor,samples,optimizer):
     if len(samples)<2: return {"windows":0,"pred_loss":0.,"pred_mse":0.,"copy_mse":0.,"ratio":float("nan")}
-    hidden=None; pending=None; losses=[]; pred_mse=[]; copy_mse=[]; totals={"windows":0,"pred_loss":0.,"pred_mse":0.,"copy_mse":0.,"ratio":float("nan")}
+    hidden=None; losses=[]; pred_mse=[]; copy_mse=[]; totals={"windows":0,"pred_loss":0.,"pred_mse":0.,"copy_mse":0.,"ratio":float("nan")}
     with torch.no_grad():
         image=load_image(samples[0]); raw=model.extract_backbone_features(image); obs=model.encode_backbone_features(raw); previous=obs.z4.detach()
-    pending=previous
+    pending,hidden=z4_predict_next(predictor,previous,torch.zeros_like(previous),hidden)
     for step,sample in enumerate(samples[1:],1):
         with torch.no_grad():
             image=load_image(sample); raw=model.extract_backbone_features(image); obs=model.encode_backbone_features(raw)
-        error=obs.z4-pending
-        prediction,hidden=z4_predict_next(predictor,previous,error,hidden)
-        losses.append(F.smooth_l1_loss(prediction,obs.z4.detach()))
-        pred_mse.append(F.mse_loss(prediction,obs.z4.detach())); copy_mse.append(F.mse_loss(previous,obs.z4.detach()))
-        pending=prediction.detach(); previous=obs.z4.detach()
+        target=obs.z4.detach(); losses.append(F.smooth_l1_loss(pending,target))
+        pred_mse.append(F.mse_loss(pending,target)); copy_mse.append(F.mse_loss(previous,target))
+        error=target-pending
+        hidden_input=hidden.detach() if hidden is not None else None
+        next_pending,next_hidden=z4_predict_next(target,error,hidden)
+        previous=target
+        pending,hidden=next_pending,next_hidden
         if len(losses)<TBPTT and step < len(samples)-1: continue
         loss=torch.stack(losses).mean()
         if not torch.isfinite(loss): raise FloatingPointError("Non-finite Z4 prediction loss")
         optimizer.zero_grad(set_to_none=True); loss.backward(); optimizer.step(); totals["windows"]+=1
         totals["pred_loss"]+=float(loss.detach()); totals["pred_mse"]+=float(torch.stack(pred_mse).mean().detach()); totals["copy_mse"]+=float(torch.stack(copy_mse).mean().detach())
-        hidden=hidden.detach(); losses=[]; pred_mse=[]; copy_mse=[]
+        hidden=hidden_input
+        # Recompute the next prediction after the parameter update.  This
+        # prevents the first prediction in the next TBPTT window from being
+        # produced by stale pre-update weights.
+        pending,hidden=z4_predict_next(previous,error.detach(),hidden)
+        losses=[]; pred_mse=[]; copy_mse=[]
     if totals["windows"]:
         for key in ("pred_loss","pred_mse","copy_mse"): totals[key]/=totals["windows"]
         totals["ratio"]=totals["pred_mse"]/max(totals["copy_mse"],1e-12)
@@ -76,30 +97,33 @@ def measure_sequence(model,predictor,samples):
     hidden=None; previous=None; pending=None; pm=[]; cm=[]
     for index,sample in enumerate(samples):
         image=load_image(sample); raw=model.extract_backbone_features(image); obs=model.encode_backbone_features(raw)
-        if index==0: previous=obs.z4; pending=previous; continue
-        error=obs.z4-pending; prediction,hidden=z4_predict_next(predictor,previous,error,hidden)
-        pm.append(F.mse_loss(prediction,obs.z4).item()); cm.append(F.mse_loss(previous,obs.z4).item()); previous=obs.z4; pending=prediction
-    p=sum(pm)/len(pm); c=sum(cm)/len(cm); return {"pred_mse":p,"copy_mse":c,"ratio":p/max(c,1e-12),"frames":len(pm)}
+        if index==0:
+            previous=obs.z4; pending,hidden=z4_predict_next(predictor,previous,torch.zeros_like(previous),hidden); continue
+        target=obs.z4; pm.append(F.mse_loss(pending,target).item()); cm.append(F.mse_loss(previous,target).item()); error=target-pending; previous=target; pending,hidden=z4_predict_next(predictor,previous,error,hidden)
+    p=sum(pm)/len(pm); c=sum(cm)/len(cm); return {"pred_mse":p,"copy_mse":c,"pred_sum":sum(pm),"copy_sum":sum(cm),"ratio":p/max(c,1e-12),"frames":len(pm)}
 
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--root",default="/home/lin/predify/kitti_step"); ap.add_argument("--fast-b-checkpoint",default=FAST_B_DEFAULT); ap.add_argument("--dynamics-checkpoint",default=ROLE_PREDICTOR_CHECKPOINT_DEFAULT); ap.add_argument("--output",default=OUTPUT_DEFAULT); ap.add_argument("--result-output",default=RESULT_DEFAULT); ap.add_argument("--epochs",type=int,default=1); args=ap.parse_args()
+    ap=argparse.ArgumentParser(); ap.add_argument("--root",default="/home/lin/predify/kitti_step"); ap.add_argument("--fast-b-checkpoint",default=FAST_B_DEFAULT); ap.add_argument("--dynamics-checkpoint",default=ROLE_PREDICTOR_CHECKPOINT_DEFAULT); ap.add_argument("--output",default=OUTPUT_DEFAULT); ap.add_argument("--result-output",default=RESULT_DEFAULT); ap.add_argument("--epochs",type=int,default=MAX_EPOCHS); ap.add_argument("--patience",type=int,default=PATIENCE); args=ap.parse_args()
     if not torch.cuda.is_available(): raise RuntimeError("CUDA is required")
     random.seed(0); torch.manual_seed(0); torch.cuda.manual_seed_all(0)
     model,predictor,source=load_fast_b(args); assert_z4_only_contract(model,predictor)
     dataset=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"train"); groups=sequence_groups(dataset)
     val_dataset=KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root),"val"); val_groups=sequence_groups(val_dataset)
+    zero_check=zero_step_equivalence(model,predictor,next(iter(val_groups.values()))[0]); print(json.dumps({"zero_step_equivalence":zero_check},sort_keys=True),flush=True)
     optimizer=torch.optim.AdamW([p for n in ("z4_dyn_recurrent","z4_dyn_delta") for p in getattr(predictor,n).parameters()],lr=LR,weight_decay=WEIGHT_DECAY)
-    history=[]
+    history=[]; best=None
     for epoch in range(1,args.epochs+1):
         train={"pred_loss":0.,"pred_mse":0.,"copy_mse":0.,"windows":0}
         for samples in groups.values():
             row=train_sequence(model,predictor,samples,optimizer)
             for key in train: train[key]+=row[key]
         eval_rows={seq:measure_sequence(model,predictor,samples) for seq,samples in val_groups.items()}
-        better=sum(row["ratio"]<1.0 for row in eval_rows.values()); mean_pred=sum(row["pred_mse"] for row in eval_rows.values())/len(eval_rows); mean_copy=sum(row["copy_mse"] for row in eval_rows.values())/len(eval_rows)
-        record={"epoch":epoch,"stage":"P","train":train,"full9_prediction":{"mean_pred_mse":mean_pred,"mean_copy_mse":mean_copy,"ratio":mean_pred/max(mean_copy,1e-12),"sequences_better_than_persistence":better,"sequence_count":len(eval_rows),"per_sequence":eval_rows}}; history.append(record); print(json.dumps(record,sort_keys=True),flush=True)
-        out=Path(args.output); out.mkdir(parents=True,exist_ok=True); torch.save({"experiment":"z4_only_stage_p","epoch":epoch,"model_state_dict":predictor.state_dict(),"metrics":record},out/f"epoch_{epoch:03d}.pt")
-    result={"experiment":"Predify Z4-only Stage P","source_fast_b_checkpoint":args.fast_b_checkpoint,"tbptt":TBPTT,"lr":LR,"trainable_modules":["z4_dyn_recurrent","z4_dyn_delta"],"unused_formal_modules":["all Z1 paths","Dynamics Error"],"history":history,"gate":{"ratio_lt_1":history[-1]["full9_prediction"]["ratio"]<1.0,"sequences_better_than_persistence":history[-1]["full9_prediction"]["sequences_better_than_persistence"],"required_sequences":6}}
+        better=sum(row["ratio"]<1.0 for row in eval_rows.values()); total_frames=sum(row["frames"] for row in eval_rows.values()); mean_pred=sum(row["pred_sum"] for row in eval_rows.values())/max(total_frames,1); mean_copy=sum(row["copy_sum"] for row in eval_rows.values())/max(total_frames,1); ratio=mean_pred/max(mean_copy,1e-12)
+        record={"epoch":epoch,"stage":"P","train":train,"full9_prediction":{"mean_pred_mse":mean_pred,"mean_copy_mse":mean_copy,"ratio":ratio,"sequences_better_than_persistence":better,"sequence_count":len(eval_rows),"effective_frames":total_frames,"per_sequence":eval_rows}}; history.append(record); print(json.dumps(record,sort_keys=True),flush=True)
+        out=Path(args.output); out.mkdir(parents=True,exist_ok=True); payload={"experiment":"z4_only_stage_p","epoch":epoch,"model_state_dict":predictor.state_dict(),"metrics":record}; torch.save(payload,out/f"epoch_{epoch:03d}.pt")
+        if best is None or (ratio, -better) < (best["ratio"], -best["better"]): best={"epoch":epoch,"ratio":ratio,"better":better,"metrics":record["full9_prediction"]}; torch.save(payload,out/"best.pt")
+        if best["epoch"]<epoch and epoch-best["epoch"]>=args.patience: break
+    result={"experiment":"Predify Z4-only Stage P","source_fast_b_checkpoint":args.fast_b_checkpoint,"tbptt":TBPTT,"lr":LR,"max_epochs":args.epochs,"patience":args.patience,"zero_step_equivalence":zero_check,"trainable_modules":["z4_dyn_recurrent","z4_dyn_delta"],"unused_formal_modules":["all Z1 paths","Dynamics Error"],"history":history,"best":best,"gate":{"ratio_lt_1":best["ratio"]<1.0,"sequences_better_than_persistence":best["better"],"required_sequences":6}}
     result_dir=Path(args.result_output); result_dir.mkdir(parents=True,exist_ok=True); (result_dir/"summary.json").write_text(json.dumps(result,indent=2,sort_keys=True)+"\n"); (result_dir/"README.md").write_text("# Z4-only Stage P\nStage P trains only the existing Z4 predictor; Stage C/W/J are not automatic.\n")
 
 if __name__=="__main__": main()
