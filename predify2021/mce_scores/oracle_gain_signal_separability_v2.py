@@ -35,6 +35,9 @@ from predify2021.mce_scores.train_kitti_step_z4_adaptive_gain import (
 from predify2021.mce_scores.train_kitti_step_z4_only import (
     FAST_B_DEFAULT,
 )
+from predify2021.mce_scores.role_separated_dynamic_error_correction import (
+    ROLE_PREDICTOR_CHECKPOINT_DEFAULT,
+)
 from predify2021.model_factory.deeplabv3plus_resnet50 import HostFeature
 from predify2021.datasets.kitti_step import KITTISTEPSegmentationDataset
 
@@ -152,7 +155,7 @@ def main(argv=None):
     parser.add_argument("--first-pass-result", default=V1_RESULT_DEFAULT)
     parser.add_argument("--stage-p-checkpoint", default=CHECKPOINT_DEFAULT)
     parser.add_argument("--fast-b-checkpoint", default=FAST_B_DEFAULT)
-    parser.add_argument("--dynamics-checkpoint", default="/home/lin/predify/experiments/kitti_step_z4_only_stage_p/best.pt")
+    parser.add_argument("--dynamics-checkpoint", default=ROLE_PREDICTOR_CHECKPOINT_DEFAULT)
     parser.add_argument("--result-output", default=RESULT_DEFAULT)
     args = parser.parse_args(argv)
     if not torch.cuda.is_available():
