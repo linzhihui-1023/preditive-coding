@@ -103,7 +103,7 @@ def prediction_state(observation, pending_z4):
     )
 
 
-def corrected_logits(model, raw, observation, restored, output_size):
+def corrected_logits(model, raw, observation, restored, output_size, correction_scale=1.0):
     """Use the frozen validated C4 adapter/writeback and frozen Host decoder."""
     zero_z1 = torch.zeros_like(observation.z1)
     zero_z2 = torch.zeros_like(observation.z2)
@@ -112,7 +112,7 @@ def corrected_logits(model, raw, observation, restored, output_size):
         zero_z1,
         zero_z2,
         zero_z3,
-        restored.z4 - observation.z4,
+        correction_scale * (restored.z4 - observation.z4),
     )
     host_feature = residual_writeback_host_feature(
         model, raw, delta, output_size
@@ -781,7 +781,7 @@ def pair_mtc(previous_prediction, current_prediction, backward_flow):
 
 
 @torch.inference_mode()
-def evaluate(model, predictor, groups, raft):
+def evaluate(model, predictor, groups, raft, correction_scale=1.0):
     predictor.eval()
     confusion = {
         "host": torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64),
@@ -863,7 +863,8 @@ def evaluate(model, predictor, groups, raft):
             )
             error_stats = diagnostics["error_temporal_state"]
             ours_logits = corrected_logits(
-                model, raw, observation, restored, output_size
+                model, raw, observation, restored, output_size,
+                correction_scale=correction_scale,
             )
             ours_prediction = ours_logits.argmax(1)
             predictions = {
