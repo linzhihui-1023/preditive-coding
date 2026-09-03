@@ -1,0 +1,216 @@
+{
+  "benefit_definition": "B_t = CE(K=1 Host) - min(CE(K=0), CE(K=.5), CE(K=.75))",
+  "candidate_K": [
+    0.0,
+    0.5,
+    0.75,
+    1.0
+  ],
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_z4_only_stage_p/best.pt",
+  "checkpoint_epoch": 15,
+  "experiment": "Prediction Error causal signal separability",
+  "helpful_count": 1653,
+  "host_preferred_count": 1319,
+  "inference_only": true,
+  "input_restrictions": {
+    "GT_used_only_for_offline_B_label": true,
+    "RAFT_used_as_classifier_input": false,
+    "classifier_inputs": [
+      "error_magnitude",
+      "relative_error",
+      "error_change",
+      "cosine_discrepancy"
+    ],
+    "future_frame_used": false,
+    "oracle_K_used_as_classifier_input": false
+  },
+  "label_definition": "Prediction-helpful iff B_t > 0; otherwise Host-preferred",
+  "logistic_loso": {
+    "folds": [
+      {
+        "balanced_accuracy": 0.5096525096525096,
+        "held_out_sequence": "0002",
+        "pr_auc": 0.6541248721994402,
+        "roc_auc": 0.538931788931789,
+        "test_count": 232,
+        "test_helpful_fraction": 0.6379310344827587
+      },
+      {
+        "balanced_accuracy": 0.7047146401985112,
+        "held_out_sequence": "0006",
+        "pr_auc": 0.8924032929470977,
+        "roc_auc": 0.72837646224743,
+        "test_count": 269,
+        "test_helpful_fraction": 0.8066914498141264
+      },
+      {
+        "balanced_accuracy": 0.5365472856598167,
+        "held_out_sequence": "0007",
+        "pr_auc": 0.44409691627650455,
+        "roc_auc": 0.5585400807268042,
+        "test_count": 799,
+        "test_helpful_fraction": 0.39173967459324155
+      },
+      {
+        "balanced_accuracy": 0.5684846523169876,
+        "held_out_sequence": "0008",
+        "pr_auc": 0.6056492554565223,
+        "roc_auc": 0.5662728596860334,
+        "test_count": 389,
+        "test_helpful_fraction": 0.570694087403599
+      },
+      {
+        "balanced_accuracy": 0.5266766159873146,
+        "held_out_sequence": "0010",
+        "pr_auc": 0.5158430564363402,
+        "roc_auc": 0.5359108292136927,
+        "test_count": 293,
+        "test_helpful_fraction": 0.48464163822525597
+      },
+      {
+        "balanced_accuracy": 0.47692147034252297,
+        "held_out_sequence": "0013",
+        "pr_auc": 0.48983557066260464,
+        "roc_auc": 0.49258563074352546,
+        "test_count": 339,
+        "test_helpful_fraction": 0.49557522123893805
+      },
+      {
+        "balanced_accuracy": 0.5571428571428572,
+        "held_out_sequence": "0014",
+        "pr_auc": 0.7229537736128488,
+        "roc_auc": 0.5718367346938775,
+        "test_count": 105,
+        "test_helpful_fraction": 0.6666666666666666
+      },
+      {
+        "balanced_accuracy": 0.5,
+        "held_out_sequence": "0016",
+        "pr_auc": 0.6803912718752834,
+        "roc_auc": 0.49306418219461695,
+        "test_count": 208,
+        "test_helpful_fraction": 0.6634615384615384
+      },
+      {
+        "balanced_accuracy": 0.521813674860566,
+        "held_out_sequence": "0018",
+        "pr_auc": 0.6736961717216713,
+        "roc_auc": 0.48973352613096466,
+        "test_count": 338,
+        "test_helpful_fraction": 0.6952662721893491
+      }
+    ],
+    "mean": {
+      "balanced_accuracy": 0.5446615229067873,
+      "fold_count": 9,
+      "pr_auc": 0.6309993534653681,
+      "roc_auc": 0.5528057882854148
+    }
+  },
+  "record_count": 2972,
+  "sequences": [
+    "0002",
+    "0006",
+    "0007",
+    "0008",
+    "0010",
+    "0013",
+    "0014",
+    "0016",
+    "0018"
+  ],
+  "signal_distributions": {
+    "cosine_discrepancy": {
+      "Host-preferred": {
+        "count": 1319,
+        "mean": 4.818305723408662e-06,
+        "p25": 2.9802322387695312e-06,
+        "p50": 4.172325134277344e-06,
+        "p75": 5.841255187988281e-06,
+        "std": 2.8588423384292065e-06
+      },
+      "Prediction-helpful": {
+        "count": 1653,
+        "mean": 4.37270203144422e-06,
+        "p25": 2.5033950805664062e-06,
+        "p50": 3.5762786865234375e-06,
+        "p75": 5.245208740234375e-06,
+        "std": 2.849663641016558e-06
+      },
+      "auc": 0.43067031385947024,
+      "spearman_vs_B": -0.09884835820556219
+    },
+    "error_change": {
+      "Host-preferred": {
+        "count": 1319,
+        "mean": 0.0002649106010102679,
+        "p25": 7.930584251880646e-05,
+        "p50": 0.0001855660229921341,
+        "p75": 0.0003511488903313875,
+        "std": 0.00029188129260724715
+      },
+      "Prediction-helpful": {
+        "count": 1653,
+        "mean": 0.00023865291574959747,
+        "p25": 6.242049857974052e-05,
+        "p50": 0.00015163514763116837,
+        "p75": 0.0003155502490699291,
+        "std": 0.0002960287555773477
+      },
+      "auc": 0.4538328776635584,
+      "spearman_vs_B": -0.07797623887673903
+    },
+    "error_magnitude": {
+      "Host-preferred": {
+        "count": 1319,
+        "mean": 0.00529706350838733,
+        "p25": 0.004568536765873432,
+        "p50": 0.005313480272889137,
+        "p75": 0.006005475763231516,
+        "std": 0.0013794003123531948
+      },
+      "Prediction-helpful": {
+        "count": 1653,
+        "mean": 0.004648389071702204,
+        "p25": 0.0037585601676255465,
+        "p50": 0.004781678784638643,
+        "p75": 0.005554793402552605,
+        "std": 0.0014553814278609862
+      },
+      "auc": 0.3734214952298002,
+      "spearman_vs_B": -0.22650362004843802
+    },
+    "relative_error": {
+      "Host-preferred": {
+        "count": 1319,
+        "mean": 0.03601419845478746,
+        "p25": 0.029897015541791916,
+        "p50": 0.035253044217824936,
+        "p75": 0.04120870493352413,
+        "std": 0.010318109519324707
+      },
+      "Prediction-helpful": {
+        "count": 1653,
+        "mean": 0.031439063606329636,
+        "p25": 0.02536405622959137,
+        "p50": 0.03167243301868439,
+        "p75": 0.03739921376109123,
+        "std": 0.010184058498996071
+      },
+      "auc": 0.37697305929853,
+      "spearman_vs_B": -0.22375935501383254
+    }
+  },
+  "single_signal_auc": {
+    "cosine_discrepancy": 0.43067031385947024,
+    "error_change": 0.4538328776635584,
+    "error_magnitude": 0.3734214952298002,
+    "relative_error": 0.37697305929853
+  },
+  "spearman_vs_B": {
+    "cosine_discrepancy": -0.09884835820556219,
+    "error_change": -0.07797623887673903,
+    "error_magnitude": -0.22650362004843802,
+    "relative_error": -0.22375935501383254
+  }
+}
