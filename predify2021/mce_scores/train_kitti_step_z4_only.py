@@ -72,7 +72,7 @@ def train_sequence(model,predictor,samples,optimizer):
         pred_mse.append(F.mse_loss(pending,target)); copy_mse.append(F.mse_loss(previous,target))
         error=target-pending
         hidden_input=hidden.detach() if hidden is not None else None
-        next_pending,next_hidden=z4_predict_next(target,error,hidden)
+        next_pending,next_hidden=z4_predict_next(predictor,target,error,hidden)
         previous=target
         pending,hidden=next_pending,next_hidden
         if len(losses)<TBPTT and step < len(samples)-1: continue
@@ -84,7 +84,7 @@ def train_sequence(model,predictor,samples,optimizer):
         # Recompute the next prediction after the parameter update.  This
         # prevents the first prediction in the next TBPTT window from being
         # produced by stale pre-update weights.
-        pending,hidden=z4_predict_next(previous,error.detach(),hidden)
+        pending,hidden=z4_predict_next(predictor,previous,error.detach(),hidden)
         losses=[]; pred_mse=[]; copy_mse=[]
     if totals["windows"]:
         for key in ("pred_loss","pred_mse","copy_mse"): totals[key]/=totals["windows"]
