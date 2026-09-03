@@ -10,7 +10,7 @@ forward for inference compatibility where required, but only the Z4 predictive
 coding path participates in temporal prediction.
 
 Training objective:
-  L = L_seg + lambda_tc * L_TC + lambda_safe * L_safe
+  L = G_seg * L_seg + G_TC * L_TC + G_safe * L_safe + G_delta * L_delta
 
 RAFT is training/evaluation-only. It is not part of inference.
 """
@@ -65,13 +65,15 @@ TBPTT = 16
 # Lseg and Lsafe are dense within every TBPTT window.  Decoder logits and the
 # frozen Host logits are already produced for every frame.
 SEGMENTATION_SUPERVISION = "every_frame"
-MAX_EPOCHS = 15
+MAX_EPOCHS = 3
 PATIENCE = 3
 LEARNING_RATE = 1e-5
 WEIGHT_DECAY = 0.01
 HOST_CONFIDENCE = 0.70
-TARGET_TC_GRAD_RATIO = 0.40
-TARGET_SAFE_GRAD_RATIO = 0.20
+TARGET_SEG_GRAD_RATIO = 1.00
+TARGET_TC_GRAD_RATIO = 0.15
+TARGET_SAFE_GRAD_RATIO = 0.50
+TARGET_DELTA_GRAD_RATIO = 0.05
 MVC16_FLOOR_DELTA = -0.002
 MIN_MTC_DELTA = 0.002
 DEV3 = ("0002", "0010", "0018")
@@ -79,8 +81,8 @@ DEV3 = ("0002", "0010", "0018")
 STAGE_P_DEFAULT = (
     "/home/lin/predify/experiments/kitti_step_z4_only_stage_p/best.pt"
 )
-OUTPUT_DEFAULT = "/home/lin/predify/experiments/kitti_step_z4_only_stage_c"
-RESULT_DEFAULT = "results/kitti_step_z4_only_stage_c"
+OUTPUT_DEFAULT = "/home/lin/predify/experiments/kitti_step_z4_only_stage_c_balance"
+RESULT_DEFAULT = "results/kitti_step_z4_only_stage_c_balance"
 
 
 def encode_clean(model, sample):
@@ -365,6 +367,7 @@ def _clip_loss_probe(model, predictor, raft, samples):
     seg_losses = []
     tc_losses = []
     safe_losses = []
+    delta_losses = []
 
     for local, sample in enumerate(clip[1:], 1):
         image, observation, raw, output_size = encode_clean(model, sample)
@@ -394,6 +397,7 @@ def _clip_loss_probe(model, predictor, raft, samples):
         )
         safe, _ = safe_host_loss(student_logits, frozen_host_logits, mask)
         safe_losses.append(safe)
+        delta_losses.append((restored.z4 - observation.z4).abs().mean())
 
         tc, _ = temporal_loss(
             student_logits,
@@ -420,45 +424,54 @@ def _clip_loss_probe(model, predictor, raft, samples):
         torch.stack(seg_losses).mean(),
         torch.stack(tc_losses).mean(),
         torch.stack(safe_losses).mean(),
+        torch.stack(delta_losses).mean(),
     )
 
 
 def calibrate_loss_weights(model, predictor, raft, samples):
     parameters = semantic_parameters(predictor)
     predictor.zero_grad(set_to_none=True)
-    lseg, ltc, lsafe = _clip_loss_probe(
+    lseg, ltc, lsafe, ldelta = _clip_loss_probe(
         model, predictor, raft, samples
     )
     gseg = _grad_norm(lseg, parameters)
     gtc = _grad_norm(ltc, parameters)
     gsafe = _grad_norm(lsafe, parameters)
+    gdelta = _grad_norm(ldelta, parameters)
     predictor.zero_grad(set_to_none=True)
-    if gseg <= 0 or gtc <= 0 or gsafe <= 0:
+    if gseg <= 0 or gtc <= 0 or gsafe <= 0 or gdelta <= 0:
         raise RuntimeError(
             "Stage C gradient calibration failed: "
-            f"gseg={gseg}, gtc={gtc}, gsafe={gsafe}"
+            f"gseg={gseg}, gtc={gtc}, gsafe={gsafe}, gdelta={gdelta}"
         )
     lambda_tc = TARGET_TC_GRAD_RATIO * gseg / gtc
     lambda_safe = TARGET_SAFE_GRAD_RATIO * gseg / gsafe
+    lambda_delta = TARGET_DELTA_GRAD_RATIO * gseg / gdelta
     lambda_tc = float(min(max(lambda_tc, 1e-3), 100.0))
     lambda_safe = float(min(max(lambda_safe, 1e-3), 100.0))
+    lambda_delta = float(min(max(lambda_delta, 1e-3), 100.0))
     return {
         "raw_losses": {
             "Lseg": float(lseg.detach().item()),
             "LTC": float(ltc.detach().item()),
             "Lsafe": float(lsafe.detach().item()),
+            "Ldelta": float(ldelta.detach().item()),
         },
         "raw_gradient_norms": {
             "Lseg": gseg,
             "LTC": gtc,
             "Lsafe": gsafe,
+            "Ldelta": gdelta,
         },
         "target_gradient_ratios": {
+            "seg_vs_seg": TARGET_SEG_GRAD_RATIO,
             "TC_vs_seg": TARGET_TC_GRAD_RATIO,
             "safe_vs_seg": TARGET_SAFE_GRAD_RATIO,
+            "delta_vs_seg": TARGET_DELTA_GRAD_RATIO,
         },
         "lambda_tc": lambda_tc,
         "lambda_safe": lambda_safe,
+        "lambda_delta": lambda_delta,
     }
 
 
@@ -470,6 +483,7 @@ def train_sequence(
     optimizer,
     lambda_tc,
     lambda_safe,
+    lambda_delta,
 ):
     totals = {
         "windows": 0,
@@ -477,6 +491,7 @@ def train_sequence(
         "Lseg": 0.0,
         "LTC": 0.0,
         "Lsafe": 0.0,
+        "Ldelta": 0.0,
         "total": 0.0,
         "prediction_error_abs": 0.0,
         "delta_z4_abs": 0.0,
@@ -510,6 +525,7 @@ def train_sequence(
     seg_losses = []
     tc_losses = []
     safe_losses = []
+    delta_losses = []
     error_values = []
     delta_values = []
     gain_values = []
@@ -551,6 +567,7 @@ def train_sequence(
         )
         safe_losses.append(safe)
         safe_ratios.append(safe_ratio)
+        delta_losses.append((restored.z4 - observation.z4).abs().mean())
 
         tc, tc_ratio = temporal_loss(
             student_logits,
@@ -602,7 +619,13 @@ def train_sequence(
             if safe_losses
             else student_logits.sum() * 0.0
         )
-        total = lseg + lambda_tc * ltc + lambda_safe * lsafe
+        ldelta = torch.stack(delta_losses).mean()
+        total = (
+            lseg
+            + lambda_tc * ltc
+            + lambda_safe * lsafe
+            + lambda_delta * ldelta
+        )
         if not torch.isfinite(total):
             raise FloatingPointError("Non-finite Stage C objective")
 
@@ -614,6 +637,7 @@ def train_sequence(
         totals["Lseg"] += float(lseg.detach().item())
         totals["LTC"] += float(ltc.detach().item())
         totals["Lsafe"] += float(lsafe.detach().item())
+        totals["Ldelta"] += float(ldelta.detach().item())
         totals["total"] += float(total.detach().item())
         totals["prediction_error_abs"] += float(
             torch.stack(error_values).mean().item()
@@ -641,6 +665,7 @@ def train_sequence(
         seg_losses = []
         tc_losses = []
         safe_losses = []
+        delta_losses = []
         error_values = []
         delta_values = []
         gain_values = []
@@ -651,6 +676,7 @@ def train_sequence(
         "Lseg",
         "LTC",
         "Lsafe",
+        "Ldelta",
         "total",
         "prediction_error_abs",
         "delta_z4_abs",
@@ -670,6 +696,7 @@ def train_epoch(
     optimizer,
     lambda_tc,
     lambda_safe,
+    lambda_delta,
 ):
     predictor.train()
     aggregate = {
@@ -679,6 +706,7 @@ def train_epoch(
         "Lseg": 0.0,
         "LTC": 0.0,
         "Lsafe": 0.0,
+        "Ldelta": 0.0,
         "total": 0.0,
         "prediction_error_abs": 0.0,
         "delta_z4_abs": 0.0,
@@ -695,6 +723,7 @@ def train_epoch(
             optimizer,
             lambda_tc,
             lambda_safe,
+            lambda_delta,
         )
         aggregate["sequences"] += 1
         aggregate["windows"] += row["windows"]
@@ -703,6 +732,7 @@ def train_epoch(
             "Lseg",
             "LTC",
             "Lsafe",
+            "Ldelta",
             "total",
             "prediction_error_abs",
             "delta_z4_abs",
@@ -716,6 +746,7 @@ def train_epoch(
         "Lseg",
         "LTC",
         "Lsafe",
+        "Ldelta",
         "total",
         "prediction_error_abs",
         "delta_z4_abs",
@@ -974,7 +1005,7 @@ def save_checkpoint(
 ):
     torch.save(
         {
-            "experiment": "z4_only_stage_c",
+            "experiment": "z4_only_stage_c_balance",
             "epoch": epoch,
             "model_state_dict": predictor.state_dict(),
             "c4_output_adapter_state_dict":
@@ -1083,6 +1114,7 @@ def main(argv=None):
             optimizer,
             calibration["lambda_tc"],
             calibration["lambda_safe"],
+            calibration["lambda_delta"],
         )
         metrics = evaluate(model, predictor, dev3, raft)
         record = {
@@ -1171,7 +1203,7 @@ def main(argv=None):
         print(json.dumps({"stage_c_full9": full9}, sort_keys=True), flush=True)
 
     result = {
-        "experiment": "Predify Z4-only Stage C",
+        "experiment": "Predify Z4-only Stage C-Balance",
         "stage_p_checkpoint": args.stage_p_checkpoint,
         "stage_p_epoch": stage_p_payload.get("epoch"),
         "source_fast_b_checkpoint": args.fast_b_checkpoint,
@@ -1190,6 +1222,12 @@ def main(argv=None):
         "tbptt": TBPTT,
         "segmentation_supervision": SEGMENTATION_SUPERVISION,
         "safe_loss_supervision": "every_frame",
+        "gradient_targets": {
+            "Gseg": TARGET_SEG_GRAD_RATIO,
+            "GTC": TARGET_TC_GRAD_RATIO,
+            "Gsafe": TARGET_SAFE_GRAD_RATIO,
+            "Gdelta": TARGET_DELTA_GRAD_RATIO,
+        },
         "max_epochs": args.epochs,
         "patience": args.patience,
         "loss_calibration": calibration,
@@ -1211,7 +1249,7 @@ def main(argv=None):
         json.dumps(result, indent=2, sort_keys=True) + "\n"
     )
     (result_output / "README.md").write_text(
-        "# Z4-only Stage C\n"
+        "# Z4-only Stage C-Balance\n"
         "Stage C freezes the Stage-P Z4 predictor and trains only the semantic "
         "error encoder, semantic state cell and restoration head. RAFT is used "
         "only for training/evaluation temporal supervision. Lseg and Lsafe are "
