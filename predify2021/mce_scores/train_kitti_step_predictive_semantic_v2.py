@@ -1,4 +1,4 @@
-"""Train and validate the minimal task-aware predictive semantic state (V2).
+"""Train and validate the minimal task-aware predictive semantic state (V2.1).
 
 The Host, C4 adapter/writeback and decoder are frozen.  Only the new
 predictive semantic encoder, residual ConvGRU predictor and Z4 update head are
@@ -48,7 +48,7 @@ SEED = 0
 NUM_CLASSES = 19
 IGNORE = 255
 TBPTT = 16
-MAX_EPOCHS = 15
+MAX_EPOCHS = 3
 PATIENCE = 3
 LEARNING_RATE = 1e-5
 WEIGHT_DECAY = 0.01
@@ -57,8 +57,8 @@ LAMBDA_TC = 0.1
 HOST_CONFIDENCE = 0.70
 DEV3 = ("0002", "0010", "0018")
 FULL9 = ("0002", "0006", "0007", "0008", "0010", "0013", "0014", "0016", "0018")
-OUTPUT_DEFAULT = "/home/lin/predify/experiments/kitti_step_predictive_semantic_v2"
-RESULT_DEFAULT = "results/kitti_step_predictive_semantic_v2"
+OUTPUT_DEFAULT = "/home/lin/predify/experiments/kitti_step_predictive_semantic_v21"
+RESULT_DEFAULT = "results/kitti_step_predictive_semantic_v21"
 
 
 def encode_host(model, sample):
@@ -183,7 +183,7 @@ def zero_update_sanity(host, plugin, samples):
     sample = samples[0]
     _, observation, raw, output_size = encode_host(host, sample)
     state = plugin.encode(observation.z4)
-    predicted, hidden = plugin.predict_next(state, torch.zeros_like(state), None)
+    predicted, hidden = plugin.predict_next(state.detach(), torch.zeros_like(state), None)
     post, error, delta = plugin.update(observation.z4, state, predicted)
     with torch.no_grad():
         host_out = host_logits(host, raw, output_size)
@@ -210,7 +210,7 @@ def train_sequence(host, plugin, raft, samples, optimizer):
     previous_mask = semantic_mask_from_panoptic_png(samples[0]["mask_path"]).cuda()
     previous_logits = host_logits(host, raw, output_size).detach()
     state = plugin.encode(observation.z4)
-    pending, hidden = plugin.predict_next(state, torch.zeros_like(state), None)
+    pending, hidden = plugin.predict_next(state.detach(), torch.zeros_like(state), None)
     previous_state = state.detach()
     losses = {key: [] for key in ("seg", "pred", "tc")}
     stats = {key: [] for key in ("delta_abs", "delta_rms", "delta_rel", "state_rms", "state_std", "state_temporal_mse", "copy_mse")}
@@ -236,7 +236,7 @@ def train_sequence(host, plugin, raft, samples, optimizer):
         # a TBPTT boundary it is reused after the optimizer step; reusing
         # next_hidden would consume (R_t,e_t) twice.
         hidden_input = hidden.detach() if hidden is not None else None
-        next_pending, next_hidden = plugin.predict_next(state, error, hidden)
+        next_pending, next_hidden = plugin.predict_next(state.detach(), error.detach(), hidden)
         previous_image, previous_mask, previous_logits = image, mask, logits.detach()
         previous_state = state.detach()
         hidden = next_hidden
@@ -316,7 +316,7 @@ def evaluate(host, plugin, groups, raft):
         seq_vc = {name: VideoConsistency() for name in names}; seq_mtc_sum = {name: 0.0 for name in names}; seq_mtc_count = {name: 0 for name in names}
         image, observation, raw, output_size = encode_host(host, samples[0]); mask = semantic_mask_from_panoptic_png(samples[0]["mask_path"])
         hlogits = host_logits(host, raw, output_size); predictions = {"host": hlogits.argmax(1), "ours": hlogits.argmax(1)}
-        state = plugin.encode(observation.z4); pending, hidden = plugin.predict_next(state, torch.zeros_like(state), None)
+        state = plugin.encode(observation.z4); pending, hidden = plugin.predict_next(state.detach(), torch.zeros_like(state), None)
         state_rms_sum += state.square().mean().sqrt().item(); state_std_sum += state.std().item(); state_frame_count += 1
         seq_state_rms_sum = state.square().mean().sqrt().item(); seq_state_std_sum = state.std().item(); seq_state_frame_count = 1
         previous_observation = state; previous_image = image; previous_predictions = {k: v.detach() for k, v in predictions.items()}
@@ -344,7 +344,7 @@ def evaluate(host, plugin, groups, raft):
             seq_state_rms_sum += state.square().mean().sqrt().item(); seq_state_std_sum += state.std().item(); seq_state_temporal_sum += copy_value; seq_state_frame_count += 1
             update_sum += delta.abs().mean().item(); update_rms += delta.square().mean().sqrt().item(); update_rel += (delta.square().mean().sqrt() / (observation.z4.square().mean().sqrt() + 1e-8)).item(); update_frames += 1
             seq_update_sum += delta.abs().mean().item(); seq_update_rms += delta.square().mean().sqrt().item(); seq_update_rel += (delta.square().mean().sqrt() / (observation.z4.square().mean().sqrt() + 1e-8)).item()
-            pending, hidden = plugin.predict_next(state, error, hidden); previous_observation = state; previous_image = image; previous_predictions = {k: v.detach() for k, v in predictions.items()}
+            pending, hidden = plugin.predict_next(state.detach(), error.detach(), hidden); previous_observation = state; previous_image = image; previous_predictions = {k: v.detach() for k, v in predictions.items()}
         for name in names:
             stats = seq_vc[name].stats()
             for length in (8, 16): mvc_sums[name][length] += stats[length]["sum"]; mvc_counts[name][length] += stats[length]["count"]
@@ -391,21 +391,22 @@ def main(argv=None):
     }
     print(json.dumps({"zero_update_metrics": sanity["full9_metrics"]}, sort_keys=True), flush=True)
     optimizer = torch.optim.AdamW(plugin.trainable_parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-    history = []; best = None
+    history = [{"epoch": 0, "train": None, "validation": zero_metrics}]; best = None
+    print(json.dumps({"epoch": 0, "validation": zero_metrics}, sort_keys=True), flush=True)
     for epoch in range(1, args.epochs + 1):
         train = train_epoch(host, plugin, raft, train_groups, optimizer)
         metrics = evaluate(host, plugin, val_groups, raft)
         row = {"epoch": epoch, "train": train, "validation": metrics}
         history.append(row); print(json.dumps(row, sort_keys=True), flush=True)
         out = Path(args.output); out.mkdir(parents=True, exist_ok=True)
-        payload = {"experiment": "predictive_semantic_v2", "epoch": epoch, "model_state_dict": plugin.state_dict(), "metrics": metrics, "config": {"lambda_pred": LAMBDA_PRED, "lambda_tc": LAMBDA_TC, "tbptt": TBPTT, "lr": LEARNING_RATE}}
+        payload = {"experiment": "predictive_semantic_v21", "epoch": epoch, "model_state_dict": plugin.state_dict(), "metrics": metrics, "config": {"lambda_pred": LAMBDA_PRED, "lambda_tc": LAMBDA_TC, "tbptt": TBPTT, "lr": LEARNING_RATE}}
         torch.save(payload, out / f"epoch_{epoch:03d}.pt")
         score = metrics["ours"]["mIoU"]
         if best is None or score > best["mIoU"] or (score == best["mIoU"] and metrics["ours"]["mTC"] > best["mTC"]):
             best = {"epoch": epoch, "mIoU": score, "mTC": metrics["ours"]["mTC"]}; torch.save(payload, out / "best.pt")
         if epoch - best["epoch"] >= args.patience: break
-    result = {"experiment": "Predify V2-Minimal predictive semantic state", "source_fast_b_checkpoint": args.fast_b_checkpoint, "trainable_modules": ["encoder", "predictor", "update_head"], "frozen": ["Host", "C4 adapter", "C4 writeback", "decoder"], "tbptt": TBPTT, "lambda_pred": LAMBDA_PRED, "lambda_tc": LAMBDA_TC, "lr": LEARNING_RATE, "max_epochs": args.epochs, "patience": args.patience, "zero_update_sanity": sanity, "history": history, "best": best}
-    result_dir = Path(args.result_output); result_dir.mkdir(parents=True, exist_ok=True); (result_dir / "summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n"); (result_dir / "README.md").write_text("# Predify V2-Minimal\nTask-aware predictive semantic state with causal Rhat -> R -> error -> next prediction.\n")
+    result = {"experiment": "Predify V2.1 predictive semantic state", "source_fast_b_checkpoint": args.fast_b_checkpoint, "trainable_modules": ["encoder", "predictor", "update_head"], "frozen": ["Host", "C4 adapter", "C4 writeback", "decoder"], "tbptt": TBPTT, "lambda_pred": LAMBDA_PRED, "lambda_tc": LAMBDA_TC, "lr": LEARNING_RATE, "max_epochs": args.epochs, "patience": args.patience, "zero_update_sanity": sanity, "epoch0_metrics": zero_metrics, "history": history, "best": best}
+    result_dir = Path(args.result_output); result_dir.mkdir(parents=True, exist_ok=True); (result_dir / "summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n"); (result_dir / "README.md").write_text("# Predify V2.1\nTask-aware predictive semantic state with causal Rhat -> R -> error -> next prediction. Task losses are detached from Predictor inputs.\n")
 
 
 if __name__ == "__main__":

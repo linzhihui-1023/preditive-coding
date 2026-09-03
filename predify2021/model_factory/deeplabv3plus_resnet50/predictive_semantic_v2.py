@@ -35,6 +35,9 @@ class Z4PredictiveTemporalPredictor(nn.Module):
         super().__init__()
         self.recurrent = ConvGRUCell(2 * state_channels, hidden_channels)
         self.delta = nn.Conv2d(hidden_channels, state_channels, 3, padding=1)
+        # Start exactly from persistence in the predictive representation.
+        nn.init.zeros_(self.delta.weight)
+        nn.init.zeros_(self.delta.bias)
 
     def forward(self, state, error, hidden=None):
         hidden = self.recurrent(torch.cat((state, error), dim=1), hidden)
@@ -97,7 +100,11 @@ class PredictiveSemanticV2(nn.Module):
         caller sends ``delta`` through the validated C4 residual writeback.
         """
         error = state - predicted_state
-        delta_z4 = self.update_head(state, predicted_state, error)
+        # Task losses may train the encoder/update head, but must not train the
+        # Predictor through this task-update path.
+        pred_for_update = predicted_state.detach()
+        error_for_update = error.detach()
+        delta_z4 = self.update_head(state, pred_for_update, error_for_update)
         return z4 + delta_z4, error, delta_z4
 
     def trainable_parameters(self):
