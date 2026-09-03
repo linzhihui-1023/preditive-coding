@@ -35,9 +35,6 @@ class Z4PredictiveTemporalPredictor(nn.Module):
         super().__init__()
         self.recurrent = ConvGRUCell(2 * state_channels, hidden_channels)
         self.delta = nn.Conv2d(hidden_channels, state_channels, 3, padding=1)
-        # Start from persistence in the new representation.
-        nn.init.zeros_(self.delta.weight)
-        nn.init.zeros_(self.delta.bias)
 
     def forward(self, state, error, hidden=None):
         hidden = self.recurrent(torch.cat((state, error), dim=1), hidden)
@@ -59,7 +56,12 @@ class Z4TemporalUpdateHead(nn.Module):
         nn.init.zeros_(self.body[-1].bias)
 
     def forward(self, state, predicted_state, error):
-        return self.body(torch.cat((state, predicted_state, error), dim=1))
+        command = self.body(torch.cat((state, predicted_state, error), dim=1))
+        # The prediction error is a necessary carrier for every task update.
+        # Broadcasting its mean magnitude keeps the head lightweight while
+        # enforcing the causal contract e=0 => delta_z4=0.
+        error_scale = error.abs().mean(dim=1, keepdim=True)
+        return command * error_scale
 
 
 class PredictiveSemanticV2(nn.Module):
@@ -89,10 +91,14 @@ class PredictiveSemanticV2(nn.Module):
         return self.predictor(state, error, hidden)
 
     def update(self, z4, state, predicted_state):
+        """Return the conceptual post-Z4, error and writeback command.
+
+        The frozen host decoder does not consume ``z4 + delta`` directly: the
+        caller sends ``delta`` through the validated C4 residual writeback.
+        """
         error = state - predicted_state
         delta_z4 = self.update_head(state, predicted_state, error)
         return z4 + delta_z4, error, delta_z4
 
     def trainable_parameters(self):
         return [parameter for parameter in self.parameters() if parameter.requires_grad]
-

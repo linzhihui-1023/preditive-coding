@@ -136,7 +136,7 @@ def temporal_loss(current_logits, previous_logits, backward_flow, previous_mask,
     )[0, 0] > 0.5
     keep = (
         valid[0] & (warped_previous_mask != IGNORE) & (current_mask != IGNORE)
-        & (warped_previous_mask == current_mask) & warped_confident
+        & warped_confident
     )
     if not keep.any():
         return current_logits.sum() * 0.0
@@ -201,7 +201,9 @@ def zero_update_sanity(host, plugin, samples):
 
 def train_sequence(host, plugin, raft, samples, optimizer):
     totals = {"windows": 0, "frames": 0, "Lseg": 0.0, "Lpred": 0.0, "LTC": 0.0, "total": 0.0,
-              "delta_abs": 0.0, "delta_rms": 0.0, "delta_rel": 0.0}
+              "delta_abs": 0.0, "delta_rms": 0.0, "delta_rel": 0.0,
+              "state_rms": 0.0, "state_std": 0.0, "state_temporal_mse": 0.0,
+              "copy_mse": 0.0}
     if len(samples) < 2:
         return totals
     previous_image, observation, raw, output_size = encode_host(host, samples[0])
@@ -209,8 +211,9 @@ def train_sequence(host, plugin, raft, samples, optimizer):
     previous_logits = host_logits(host, raw, output_size).detach()
     state = plugin.encode(observation.z4)
     pending, hidden = plugin.predict_next(state, torch.zeros_like(state), None)
+    previous_state = state.detach()
     losses = {key: [] for key in ("seg", "pred", "tc")}
-    stats = {key: [] for key in ("delta_abs", "delta_rms", "delta_rel")}
+    stats = {key: [] for key in ("delta_abs", "delta_rms", "delta_rel", "state_rms", "state_std", "state_temporal_mse", "copy_mse")}
 
     for frame_index, sample in enumerate(samples[1:], 1):
         image, observation, raw, output_size = encode_host(host, sample)
@@ -220,13 +223,22 @@ def train_sequence(host, plugin, raft, samples, optimizer):
         logits = post_logits(host, raw, observation, delta, output_size)
         hlogits = host_logits(host, raw, output_size)
         losses["seg"].append(F.cross_entropy(logits, mask.unsqueeze(0), ignore_index=IGNORE))
-        losses["pred"].append(F.smooth_l1_loss(pending, state))
+        losses["pred"].append(F.smooth_l1_loss(pending, state.detach()))
         losses["tc"].append(temporal_loss(logits, previous_logits, raft.backward_flow(image, previous_image), previous_mask, mask))
         stats["delta_abs"].append(delta.detach().abs().mean())
         stats["delta_rms"].append(delta.detach().square().mean().sqrt())
         stats["delta_rel"].append(delta.detach().square().mean().sqrt() / (observation.z4.detach().square().mean().sqrt() + 1e-8))
+        stats["state_rms"].append(state.detach().square().mean().sqrt())
+        stats["state_std"].append(state.detach().std())
+        stats["state_temporal_mse"].append(F.mse_loss(state.detach(), previous_state.detach()))
+        stats["copy_mse"].append(F.mse_loss(previous_state.detach(), state.detach()))
+        # Preserve the predictor input state before consuming this frame.  At
+        # a TBPTT boundary it is reused after the optimizer step; reusing
+        # next_hidden would consume (R_t,e_t) twice.
+        hidden_input = hidden.detach() if hidden is not None else None
         next_pending, next_hidden = plugin.predict_next(state, error, hidden)
         previous_image, previous_mask, previous_logits = image, mask, logits.detach()
+        previous_state = state.detach()
         hidden = next_hidden
         pending = next_pending
         totals["frames"] += 1
@@ -238,7 +250,7 @@ def train_sequence(host, plugin, raft, samples, optimizer):
         if not torch.isfinite(total):
             raise FloatingPointError("Non-finite V2 objective")
         # Rebuild the first pending prediction after the update with current weights.
-        state_boundary, error_boundary, hidden_boundary = state.detach(), error.detach(), next_hidden.detach()
+        state_boundary, error_boundary, hidden_boundary = state.detach(), error.detach(), hidden_input
         optimizer.zero_grad(set_to_none=True)
         total.backward()
         optimizer.step()
@@ -253,20 +265,23 @@ def train_sequence(host, plugin, raft, samples, optimizer):
         losses = {key: [] for key in losses}
         stats = {key: [] for key in stats}
 
-    for key in ("Lseg", "Lpred", "LTC", "total", "delta_abs", "delta_rms", "delta_rel"):
+    for key in ("Lseg", "Lpred", "LTC", "total", "delta_abs", "delta_rms", "delta_rel", "state_rms", "state_std", "state_temporal_mse", "copy_mse"):
         totals[key] /= max(totals["windows"], 1)
     return totals
 
 
 def train_epoch(host, plugin, raft, groups, optimizer):
     aggregate = {"sequences": 0, "windows": 0, "frames": 0, "Lseg": 0.0, "Lpred": 0.0, "LTC": 0.0, "total": 0.0,
-                 "delta_abs": 0.0, "delta_rms": 0.0, "delta_rel": 0.0}
+                 "delta_abs": 0.0, "delta_rms": 0.0, "delta_rel": 0.0,
+                 "state_rms": 0.0, "state_std": 0.0, "state_temporal_mse": 0.0,
+                 "copy_mse": 0.0}
+    plugin.train()
     for samples in groups.values():
         row = train_sequence(host, plugin, raft, samples, optimizer)
         aggregate["sequences"] += 1; aggregate["windows"] += row["windows"]; aggregate["frames"] += row["frames"]
-        for key in ("Lseg", "Lpred", "LTC", "total", "delta_abs", "delta_rms", "delta_rel"):
+        for key in ("Lseg", "Lpred", "LTC", "total", "delta_abs", "delta_rms", "delta_rel", "state_rms", "state_std", "state_temporal_mse", "copy_mse"):
             aggregate[key] += row[key] * row["windows"]
-    for key in ("Lseg", "Lpred", "LTC", "total", "delta_abs", "delta_rms", "delta_rel"):
+    for key in ("Lseg", "Lpred", "LTC", "total", "delta_abs", "delta_rms", "delta_rel", "state_rms", "state_std", "state_temporal_mse", "copy_mse"):
         aggregate[key] /= max(aggregate["windows"], 1)
     return aggregate
 
@@ -290,6 +305,8 @@ def evaluate(host, plugin, groups, raft):
     mvc_sums = {name: {8: 0.0, 16: 0.0} for name in names}; mvc_counts = {name: {8: 0, 16: 0} for name in names}
     mtc_sum = {name: 0.0 for name in names}; mtc_count = {name: 0 for name in names}
     pred_sum = copy_sum = frame_count = 0.0
+    state_rms_sum = state_std_sum = state_temporal_sum = 0.0
+    state_frame_count = 0
     update_sum = update_rms = update_rel = 0.0; update_frames = 0
     per_sequence = {}
     for sequence in FULL9:
@@ -300,10 +317,13 @@ def evaluate(host, plugin, groups, raft):
         image, observation, raw, output_size = encode_host(host, samples[0]); mask = semantic_mask_from_panoptic_png(samples[0]["mask_path"])
         hlogits = host_logits(host, raw, output_size); predictions = {"host": hlogits.argmax(1), "ours": hlogits.argmax(1)}
         state = plugin.encode(observation.z4); pending, hidden = plugin.predict_next(state, torch.zeros_like(state), None)
+        state_rms_sum += state.square().mean().sqrt().item(); state_std_sum += state.std().item(); state_frame_count += 1
+        seq_state_rms_sum = state.square().mean().sqrt().item(); seq_state_std_sum = state.std().item(); seq_state_frame_count = 1
         previous_observation = state; previous_image = image; previous_predictions = {k: v.detach() for k, v in predictions.items()}
         for name, prediction in predictions.items():
             update_confusion_matrix(confusion[name], prediction[0].cpu(), mask); update_confusion_matrix(seq_conf[name], prediction[0].cpu(), mask); seq_vc[name].update(mask, prediction[0].cpu())
         seq_pred_sum = seq_copy_sum = 0.0; seq_frames = 0
+        seq_state_temporal_sum = 0.0
         seq_update_sum = seq_update_rms = seq_update_rel = 0.0
         for sample in samples[1:]:
             image, observation, raw, output_size = encode_host(host, sample); mask = semantic_mask_from_panoptic_png(sample["mask_path"])
@@ -319,6 +339,9 @@ def evaluate(host, plugin, groups, raft):
                 if math.isfinite(score): mtc_sum[name] += score; mtc_count[name] += 1; seq_mtc_sum[name] += score; seq_mtc_count[name] += 1
             pred_value = F.mse_loss(pending, state).item(); copy_value = F.mse_loss(previous_observation, state).item()
             pred_sum += pred_value; copy_sum += copy_value; frame_count += 1; seq_pred_sum += pred_value; seq_copy_sum += copy_value; seq_frames += 1
+            state_rms_sum += state.square().mean().sqrt().item(); state_std_sum += state.std().item(); state_frame_count += 1
+            state_temporal_sum += copy_value
+            seq_state_rms_sum += state.square().mean().sqrt().item(); seq_state_std_sum += state.std().item(); seq_state_temporal_sum += copy_value; seq_state_frame_count += 1
             update_sum += delta.abs().mean().item(); update_rms += delta.square().mean().sqrt().item(); update_rel += (delta.square().mean().sqrt() / (observation.z4.square().mean().sqrt() + 1e-8)).item(); update_frames += 1
             seq_update_sum += delta.abs().mean().item(); seq_update_rms += delta.square().mean().sqrt().item(); seq_update_rel += (delta.square().mean().sqrt() / (observation.z4.square().mean().sqrt() + 1e-8)).item()
             pending, hidden = plugin.predict_next(state, error, hidden); previous_observation = state; previous_image = image; previous_predictions = {k: v.detach() for k, v in predictions.items()}
@@ -328,9 +351,9 @@ def evaluate(host, plugin, groups, raft):
         per_sequence[sequence] = {}
         for name in names:
             per_sequence[sequence][name] = {"mIoU": float(torch.nanmean(compute_iou(seq_conf[name])).item()), "mVC8": seq_vc[name].values()[8], "mVC16": seq_vc[name].values()[16], "mTC": seq_mtc_sum[name] / max(seq_mtc_count[name], 1), "valid_frame_pairs": seq_mtc_count[name]}
-        per_sequence[sequence]["ours"].update({"Rpred": seq_pred_sum / max(seq_copy_sum, 1e-12), "update_abs": seq_update_sum / max(seq_frames, 1), "update_rms": seq_update_rms / max(seq_frames, 1), "update_rel": seq_update_rel / max(seq_frames, 1)})
+        per_sequence[sequence]["ours"].update({"Rpred": seq_pred_sum / max(seq_copy_sum, 1e-12), "update_abs": seq_update_sum / max(seq_frames, 1), "update_rms": seq_update_rms / max(seq_frames, 1), "update_rel": seq_update_rel / max(seq_frames, 1), "state_rms": seq_state_rms_sum / max(seq_state_frame_count, 1), "state_std": seq_state_std_sum / max(seq_state_frame_count, 1), "state_temporal_mse": seq_state_temporal_sum / max(seq_frames, 1), "copy_mse": seq_copy_sum / max(seq_frames, 1)})
     metrics = {name: {"mIoU": float(torch.nanmean(compute_iou(confusion[name])).item()), "mVC8": mvc_sums[name][8] / max(mvc_counts[name][8], 1), "mVC16": mvc_sums[name][16] / max(mvc_counts[name][16], 1), "mTC": mtc_sum[name] / max(mtc_count[name], 1), "valid_frame_pairs": mtc_count[name]} for name in names}
-    metrics["ours"].update({"Rpred": pred_sum / max(copy_sum, 1e-12), "pred_mse": pred_sum / max(frame_count, 1), "copy_mse": copy_sum / max(frame_count, 1), "update_abs": update_sum / max(update_frames, 1), "update_rms": update_rms / max(update_frames, 1), "update_rel": update_rel / max(update_frames, 1)})
+    metrics["ours"].update({"Rpred": pred_sum / max(copy_sum, 1e-12), "pred_mse": pred_sum / max(frame_count, 1), "copy_mse": copy_sum / max(frame_count, 1), "update_abs": update_sum / max(update_frames, 1), "update_rms": update_rms / max(update_frames, 1), "update_rel": update_rel / max(update_frames, 1), "state_rms": state_rms_sum / max(state_frame_count, 1), "state_std": state_std_sum / max(state_frame_count, 1), "state_temporal_mse": state_temporal_sum / max(frame_count, 1)})
     metrics["delta"] = {key: metrics["ours"][key] - metrics["host"][key] for key in ("mIoU", "mVC8", "mVC16", "mTC")}; metrics["per_sequence"] = per_sequence
     return metrics
 
