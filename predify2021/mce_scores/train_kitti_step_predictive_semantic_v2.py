@@ -354,6 +354,19 @@ def main(argv=None):
     sanity = zero_update_sanity(host, plugin, next(iter(val_groups.values())))
     print(json.dumps({"zero_update_sanity": sanity}, sort_keys=True), flush=True)
     raft = FrozenRAFT()
+    zero_metrics = evaluate(host, plugin, val_groups, raft)
+    zero_delta = zero_metrics["delta"]
+    if abs(zero_delta["mIoU"]) > 1e-4 or abs(zero_delta["mTC"]) > 1e-4:
+        raise RuntimeError(
+            "Zero-update metric identity failed: "
+            f"delta_mIoU={zero_delta['mIoU']}, delta_mTC={zero_delta['mTC']}"
+        )
+    sanity["full9_metrics"] = {
+        "host": zero_metrics["host"],
+        "ours": zero_metrics["ours"],
+        "delta": zero_delta,
+    }
+    print(json.dumps({"zero_update_metrics": sanity["full9_metrics"]}, sort_keys=True), flush=True)
     optimizer = torch.optim.AdamW(plugin.trainable_parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     history = []; best = None
     for epoch in range(1, args.epochs + 1):
@@ -374,4 +387,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
-
