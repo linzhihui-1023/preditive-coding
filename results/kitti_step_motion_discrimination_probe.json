@@ -1,0 +1,285 @@
+{
+  "experiment": "C4/P4/Z4/T motion-discrimination linear probe",
+  "features": [
+    "C4",
+    "P4",
+    "Z4",
+    "T"
+  ],
+  "full9": [
+    "0002",
+    "0006",
+    "0007",
+    "0008",
+    "0010",
+    "0013",
+    "0014",
+    "0016",
+    "0018"
+  ],
+  "motion_threshold_px": 1.0,
+  "results": {
+    "C4": {
+      "folds": [
+        {
+          "auroc": 0.5275231407913554,
+          "held_out_sequence": "0002",
+          "test_samples": 1796
+        },
+        {
+          "auroc": 0.4999379465811618,
+          "held_out_sequence": "0006",
+          "test_samples": 1989
+        },
+        {
+          "auroc": 0.4964140384905215,
+          "held_out_sequence": "0007",
+          "test_samples": 5488
+        },
+        {
+          "auroc": 0.49615881591860717,
+          "held_out_sequence": "0008",
+          "test_samples": 3070
+        },
+        {
+          "auroc": 0.5177409167870052,
+          "held_out_sequence": "0010",
+          "test_samples": 2323
+        },
+        {
+          "auroc": 0.5175795719346453,
+          "held_out_sequence": "0013",
+          "test_samples": 2670
+        },
+        {
+          "auroc": 0.4995490620490621,
+          "held_out_sequence": "0014",
+          "test_samples": 684
+        },
+        {
+          "auroc": 0.48677451229659763,
+          "held_out_sequence": "0016",
+          "test_samples": 1664
+        },
+        {
+          "auroc": 0.48703695142998027,
+          "held_out_sequence": "0018",
+          "test_samples": 2696
+        }
+      ],
+      "loso_auroc_mean": 0.5031905506976595,
+      "loso_auroc_std": 0.013582927998283933
+    },
+    "P4": {
+      "folds": [
+        {
+          "auroc": 0.4886009256316542,
+          "held_out_sequence": "0002",
+          "test_samples": 1796
+        },
+        {
+          "auroc": 0.4946827340939794,
+          "held_out_sequence": "0006",
+          "test_samples": 1989
+        },
+        {
+          "auroc": 0.49814012716593825,
+          "held_out_sequence": "0007",
+          "test_samples": 5488
+        },
+        {
+          "auroc": 0.48380878722327686,
+          "held_out_sequence": "0008",
+          "test_samples": 3070
+        },
+        {
+          "auroc": 0.5104175624104874,
+          "held_out_sequence": "0010",
+          "test_samples": 2323
+        },
+        {
+          "auroc": 0.4945537730723814,
+          "held_out_sequence": "0013",
+          "test_samples": 2670
+        },
+        {
+          "auroc": 0.49154040404040406,
+          "held_out_sequence": "0014",
+          "test_samples": 684
+        },
+        {
+          "auroc": 0.48788109051405326,
+          "held_out_sequence": "0016",
+          "test_samples": 1664
+        },
+        {
+          "auroc": 0.5051879710834037,
+          "held_out_sequence": "0018",
+          "test_samples": 2696
+        }
+      ],
+      "loso_auroc_mean": 0.49497926391506436,
+      "loso_auroc_std": 0.008031129455736348
+    },
+    "T": {
+      "folds": [
+        {
+          "auroc": 0.4932278424439854,
+          "held_out_sequence": "0002",
+          "test_samples": 1796
+        },
+        {
+          "auroc": 0.5011352723839906,
+          "held_out_sequence": "0006",
+          "test_samples": 1989
+        },
+        {
+          "auroc": 0.5154826495597682,
+          "held_out_sequence": "0007",
+          "test_samples": 5488
+        },
+        {
+          "auroc": 0.4761828758493988,
+          "held_out_sequence": "0008",
+          "test_samples": 3070
+        },
+        {
+          "auroc": 0.5121522166509016,
+          "held_out_sequence": "0010",
+          "test_samples": 2323
+        },
+        {
+          "auroc": 0.4965904958176749,
+          "held_out_sequence": "0013",
+          "test_samples": 2670
+        },
+        {
+          "auroc": 0.5246933621933622,
+          "held_out_sequence": "0014",
+          "test_samples": 684
+        },
+        {
+          "auroc": 0.5244097286427515,
+          "held_out_sequence": "0016",
+          "test_samples": 1664
+        },
+        {
+          "auroc": 0.5202681433150184,
+          "held_out_sequence": "0018",
+          "test_samples": 2696
+        }
+      ],
+      "loso_auroc_mean": 0.5071269540952057,
+      "loso_auroc_std": 0.015537314368361912
+    },
+    "Z4": {
+      "folds": [
+        {
+          "auroc": 0.47985484864134753,
+          "held_out_sequence": "0002",
+          "test_samples": 1796
+        },
+        {
+          "auroc": 0.49969278471329287,
+          "held_out_sequence": "0006",
+          "test_samples": 1989
+        },
+        {
+          "auroc": 0.506280620190596,
+          "held_out_sequence": "0007",
+          "test_samples": 5488
+        },
+        {
+          "auroc": 0.49182650022243124,
+          "held_out_sequence": "0008",
+          "test_samples": 3070
+        },
+        {
+          "auroc": 0.5233926278677393,
+          "held_out_sequence": "0010",
+          "test_samples": 2323
+        },
+        {
+          "auroc": 0.485334361516323,
+          "held_out_sequence": "0013",
+          "test_samples": 2670
+        },
+        {
+          "auroc": 0.48799603174603173,
+          "held_out_sequence": "0014",
+          "test_samples": 684
+        },
+        {
+          "auroc": 0.4676044170673077,
+          "held_out_sequence": "0016",
+          "test_samples": 1664
+        },
+        {
+          "auroc": 0.5064405246196112,
+          "held_out_sequence": "0018",
+          "test_samples": 2696
+        }
+      ],
+      "loso_auroc_mean": 0.49426919073163117,
+      "loso_auroc_std": 0.015684173249608198
+    }
+  },
+  "ridge": 0.01,
+  "sample_counts": {
+    "0002": {
+      "C4": 1796,
+      "P4": 1796,
+      "T": 1796,
+      "Z4": 1796
+    },
+    "0006": {
+      "C4": 1989,
+      "P4": 1989,
+      "T": 1989,
+      "Z4": 1989
+    },
+    "0007": {
+      "C4": 5488,
+      "P4": 5488,
+      "T": 5488,
+      "Z4": 5488
+    },
+    "0008": {
+      "C4": 3070,
+      "P4": 3070,
+      "T": 3070,
+      "Z4": 3070
+    },
+    "0010": {
+      "C4": 2323,
+      "P4": 2323,
+      "T": 2323,
+      "Z4": 2323
+    },
+    "0013": {
+      "C4": 2670,
+      "P4": 2670,
+      "T": 2670,
+      "Z4": 2670
+    },
+    "0014": {
+      "C4": 684,
+      "P4": 684,
+      "T": 684,
+      "Z4": 684
+    },
+    "0016": {
+      "C4": 1664,
+      "P4": 1664,
+      "T": 1664,
+      "Z4": 1664
+    },
+    "0018": {
+      "C4": 2696,
+      "P4": 2696,
+      "T": 2696,
+      "Z4": 2696
+    }
+  },
+  "samples_per_pair_per_class": 4
+}
