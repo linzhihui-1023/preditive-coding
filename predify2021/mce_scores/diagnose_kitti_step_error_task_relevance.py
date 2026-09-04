@@ -149,7 +149,9 @@ def evaluate(model, encoder, predictor, groups, raft):
                 valid = gt != 255
                 host_wrong_image = valid & (host_prediction != gt)
                 boundary_image = boundary_mask(gt)
-                motion_image = flow.square().sum(dim=1).sqrt()[0] > MOTION_THRESHOLD_PX
+                motion_image = (
+                    flow.square().sum(dim=1).sqrt()[0] > MOTION_THRESHOLD_PX
+                ).cpu()
                 feature_size = error_magnitude.shape
                 masks = {
                     "all": resize_mask(valid, feature_size),
