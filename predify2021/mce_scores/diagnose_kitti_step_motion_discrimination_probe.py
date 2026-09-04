@@ -36,7 +36,10 @@ FAST_B_CHECKPOINT_DEFAULT = (
 )
 STAGE_T_CHECKPOINT_DEFAULT = "/home/lin/predify/experiments/kitti_step_v2_auxiliary_stage_t/best.pt"
 MOTION_THRESHOLD_PX = 1.0
-MAX_SAMPLES_PER_CLASS_PER_SEQUENCE = 2000
+# Keep the full-resolution C4 vectors bounded while preserving samples from
+# every adjacent pair.  Four pixels per class/pair gives roughly 24k samples
+# over Full9 and is ample for this lightweight diagnostic probe.
+SAMPLES_PER_PAIR_PER_CLASS = 4
 RIDGE = 1e-2
 
 
@@ -82,7 +85,7 @@ def sample_pair(features, labels, rng):
     for cls in (0, 1):
         indices = np.flatnonzero(labels == cls)
         if not len(indices): continue
-        count = min(len(indices), MAX_SAMPLES_PER_CLASS_PER_SEQUENCE)
+        count = min(len(indices), SAMPLES_PER_PAIR_PER_CLASS)
         chosen = rng.choice(indices, size=count, replace=False)
         result_x.append(values.reshape(-1, values.shape[-1])[chosen]); result_y.append(np.full(count, cls, dtype=np.int64))
     return (np.concatenate(result_x), np.concatenate(result_y)) if result_x else (None, None)
@@ -164,7 +167,7 @@ def main(argv=None):
     collected = collect(model, encoder, sequence_groups(dataset), FrozenRAFT())
     result = {"experiment": "C4/P4/Z4/T motion-discrimination linear probe", "full9": FULL9,
               "features": FEATURES, "motion_threshold_px": MOTION_THRESHOLD_PX,
-              "max_samples_per_class_per_sequence": MAX_SAMPLES_PER_CLASS_PER_SEQUENCE,
+              "samples_per_pair_per_class": SAMPLES_PER_PAIR_PER_CLASS,
               "ridge": RIDGE, "results": evaluate(collected),
               "sample_counts": {s: {name: int(len(collected[s][name]["y"])) for name in FEATURES} for s in FULL9}}
     output = Path(args.result_output); output.parent.mkdir(parents=True, exist_ok=True)
