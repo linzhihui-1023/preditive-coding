@@ -133,7 +133,11 @@ def train_sequence(model, encoder, predictor, samples, optimizer, max_steps=0):
     limit = min(len(samples) - 1, max_steps) if max_steps else len(samples) - 1
     _, first_observation, _, _ = encode_clean(model, samples[0])
     previous_state = encoder(first_observation.z4)
-    pending, hidden = predictor.predict_next(previous_state.detach(), torch.zeros_like(previous_state), None)
+    # Keep the encoder output attached inside a TBPTT window.  Only prediction
+    # targets are stop-gradient; this lets the next-frame prediction loss train
+    # the preceding temporal state encoder.
+    pending, hidden = predictor.predict_next(previous_state, torch.zeros_like(previous_state), None)
+    previous_observation_z4 = first_observation.z4.detach()
     losses = []
     totals = {"frames": 0, "windows": 0, "prediction_loss": 0.0, "anchor_loss": 0.0, "total_loss": 0.0,
               "pred_mse_sum": 0.0, "copy_mse_sum": 0.0, "state_rms_sum": 0.0, "state_std_sum": 0.0,
@@ -149,33 +153,36 @@ def train_sequence(model, encoder, predictor, samples, optimizer, max_steps=0):
         totals["prediction_loss"] += float(prediction_loss.detach().item())
         totals["anchor_loss"] += float(anchor_loss.detach().item())
         totals["pred_mse_sum"] += float(F.mse_loss(pending.detach(), target).item())
-        totals["copy_mse_sum"] += float(F.mse_loss(previous_state, target).item())
+        totals["copy_mse_sum"] += float(F.mse_loss(previous_state.detach(), target).item())
         totals["state_rms_sum"] += _rms_sum(state)
         totals["state_std_sum"] += float(state.detach().std().item())
-        totals["true_delta_sq_sum"] += float((target - previous_state).detach().square().mean().item())
+        totals["true_delta_sq_sum"] += float((target - previous_state.detach()).square().mean().item())
         totals["state_sq_sum"] += float(target.square().mean().item())
-        totals["raw_delta_sq_sum"] += float((observation.z4.detach() - previous_observation_z4).square().mean().item()) if offset > 0 else 0.0
-        totals["pred_motion_sq_sum"] += float((pending.detach() - previous_state).square().mean().item())
+        totals["raw_delta_sq_sum"] += float((observation.z4.detach() - previous_observation_z4).square().mean().item())
+        totals["pred_motion_sq_sum"] += float((pending.detach() - previous_state.detach()).square().mean().item())
         error = target - pending.detach()
-        previous_state = target
-        previous_observation_z4 = observation.z4.detach()
         boundary = len(losses) == TBPTT_STEPS or offset == limit - 1
-        if not boundary:
+        if boundary:
+            total_loss = torch.stack(losses).mean()
+            if not torch.isfinite(total_loss):
+                raise FloatingPointError("Non-finite V2-Auxiliary Stage T loss")
+            optimizer.zero_grad(set_to_none=True)
+            total_loss.backward()
+            optimizer.step()
+            totals["windows"] += 1
+            totals["total_loss"] += float(total_loss.detach().item())
+            hidden = hidden.detach() if hidden is not None else None
+            # Recompute after the update from detached boundary inputs.  The
+            # current frame is consumed exactly once in the next state.
+            previous_state = state.detach()
             pending, hidden = predictor.predict_next(previous_state, error, hidden)
-            continue
-        total_loss = torch.stack(losses).mean()
-        if not torch.isfinite(total_loss):
-            raise FloatingPointError("Non-finite V2-Auxiliary Stage T loss")
-        optimizer.zero_grad(set_to_none=True)
-        total_loss.backward()
-        optimizer.step()
-        totals["windows"] += 1
-        totals["total_loss"] += float(total_loss.detach().item())
-        hidden = hidden.detach() if hidden is not None else None
-        # Recompute the first prediction after the optimizer update.  This is
-        # the causal TBPTT boundary: no state is consumed twice.
-        pending, hidden = predictor.predict_next(previous_state, error, hidden)
-        losses = []
+            losses = []
+        else:
+            # Within a window retain state -> predictor -> next prediction
+            # gradients; the target remains detached above.
+            pending, hidden = predictor.predict_next(state, error, hidden)
+            previous_state = state
+        previous_observation_z4 = observation.z4.detach()
     for key in ("prediction_loss", "anchor_loss", "total_loss", "state_rms_sum", "state_std_sum"):
         totals[key] /= max(totals["frames"], 1) if key != "total_loss" else max(totals["windows"], 1)
     return totals
@@ -339,8 +346,17 @@ def main(argv=None):
                   "true_delta_sq_sum": 0.0, "state_sq_sum": 0.0, "raw_delta_sq_sum": 0.0, "pred_motion_sq_sum": 0.0}
         for samples in train_groups.values():
             row = train_sequence(model, encoder, predictor, samples, optimizer, args.max_train_steps)
+            frame_count = row["frames"]; window_count = row["windows"]
             for key in totals:
-                totals[key] += row[key]
+                if key in ("frames", "windows"):
+                    continue
+                if key in ("prediction_loss", "anchor_loss", "state_rms_sum", "state_std_sum"):
+                    totals[key] += row[key] * frame_count
+                elif key == "total_loss":
+                    totals[key] += row[key] * window_count
+                else:
+                    totals[key] += row[key]
+            totals["frames"] += frame_count; totals["windows"] += window_count
         for key in ("prediction_loss", "anchor_loss", "state_rms_sum", "state_std_sum"):
             totals[key] /= max(totals["frames"], 1)
         totals["total_loss"] /= max(totals["windows"], 1)
@@ -361,8 +377,10 @@ def main(argv=None):
         output = Path(args.output); output.mkdir(parents=True, exist_ok=True)
         payload = {"experiment": "v2_auxiliary_stage_t", "epoch": epoch, "encoder_state_dict": encoder.state_dict(), "predictor_state_dict": predictor.state_dict(), "metrics": record}
         torch.save(payload, output / f"epoch_{epoch:03d}.pt")
-        ratio = record["Rpred"]; dynamic_ok = record["dynamic_ratio"] >= 0.5
-        if dynamic_ok and (best is None or ratio < best["Rpred"]):
+        ratio = record["Rpred"]
+        dynamic_ok = record["dynamic_ratio"] >= 0.5
+        sequences_ok = record["sequences_better_than_persistence"] >= 6
+        if dynamic_ok and sequences_ok and (best is None or ratio < best["Rpred"]):
             best = {"epoch": epoch, "Rpred": ratio, "dynamic_ratio": record["dynamic_ratio"], "metrics": metrics}; torch.save(payload, output / "best.pt"); stale = 0
         else:
             stale += 1
@@ -375,7 +393,11 @@ def main(argv=None):
         "frozen_modules": ["Host", "Adapter", "Writeback", "Segmentation Decoder"],
         "zero_step": zero_step, "history": history, "best": best,
         "gate": {"Rpred_lt_1": bool(best and best["Rpred"] < 1.0), "Rpred_lt_raw_z4": bool(best and best["Rpred"] < 0.9451),
-                 "dynamic_ratio_ge_0.5": bool(best and best["dynamic_ratio"] >= 0.5), "sequences_required": 6},
+                 "dynamic_ratio_ge_0.5": bool(best and best["dynamic_ratio"] >= 0.5),
+                 "sequences_better_than_persistence": int(best["metrics"]["temporal_statistics"]["sequences_better_than_persistence"]) if best else 0,
+                 "sequences_gate_passed": bool(best and best["metrics"]["temporal_statistics"]["sequences_better_than_persistence"] >= 6),
+                 "sequences_required": 6,
+                 "stage_t_go": bool(best and best["Rpred"] < 1.0 and best["dynamic_ratio"] >= 0.5 and best["metrics"]["temporal_statistics"]["sequences_better_than_persistence"] >= 6)},
     }
     result_dir = Path(args.result_output); result_dir.mkdir(parents=True, exist_ok=True)
     (result_dir / "summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
