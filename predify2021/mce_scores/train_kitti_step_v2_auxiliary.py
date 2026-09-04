@@ -204,7 +204,7 @@ def evaluate(model, encoder, predictor, groups, raft):
     vc = {name: VideoConsistency() for name in names}
     mtc_sum = {name: 0.0 for name in names}; mtc_count = {name: 0 for name in names}
     temporal_keys = ("pred_mse", "copy_mse", "true_delta_sq", "state_sq", "raw_delta_sq", "pred_motion_sq")
-    temporal_sum = {key: 0.0 for key in temporal_keys}; temporal_pairs = 0; better_sequences = 0
+    temporal_sum = {key: 0.0 for key in temporal_keys}; temporal_pairs = 0; state_rms_sum = 0.0; state_std_sum = 0.0; state_frames = 0; better_sequences = 0
     per_sequence = {}
     predictor.eval(); encoder.eval()
     for sequence in FULL9:
@@ -219,6 +219,7 @@ def evaluate(model, encoder, predictor, groups, raft):
         for index, sample in enumerate(samples):
             image, observation, raw, output_size = encode_clean(model, sample)
             state = encoder(observation.z4)
+            state_rms_sum += float(state.square().mean().sqrt().item()); state_std_sum += float(state.std().item()); state_frames += 1
             if index == 0:
                 pending, hidden = predictor.predict_next(state, torch.zeros_like(state), None)
             mask = semantic_mask_from_panoptic_png(sample["mask_path"])
@@ -291,6 +292,8 @@ def evaluate(model, encoder, predictor, groups, raft):
         "true_delta_rms": math.sqrt(true_delta),
         "temporal_to_state_ratio": math.sqrt(true_delta) / math.sqrt(state_sq + 1e-12),
         "dynamic_ratio": math.sqrt(true_delta) / math.sqrt(raw_delta + 1e-12),
+        "state_rms": state_rms_sum / max(state_frames, 1),
+        "state_std": state_std_sum / max(state_frames, 1),
         "sequences_better_than_persistence": better_sequences,
         "sequence_count": len(FULL9), "valid_pairs": temporal_pairs,
     }
@@ -349,6 +352,7 @@ def main(argv=None):
             "true_delta_rms": temporal["true_delta_rms"],
             "temporal_to_state_ratio": temporal["temporal_to_state_ratio"],
             "dynamic_ratio": temporal["dynamic_ratio"],
+            "state_rms": temporal["state_rms"], "state_std": temporal["state_std"],
             "sequences_better_than_persistence": temporal["sequences_better_than_persistence"],
             "reference_Rpred_Z4": 0.9451,
             "final_output_is_host": True,
