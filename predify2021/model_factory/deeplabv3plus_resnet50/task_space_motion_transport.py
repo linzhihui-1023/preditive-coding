@@ -80,30 +80,46 @@ def warp_low_logits(previous_logits_low, backward_flow_low):
         align_corners=True,
     )
     # Never use the current Host as an invalid-flow fallback: that would leak
-    # target-frame information into the historical prior.  Use same-coordinate
+    # target-frame information into the historical prior. Use same-coordinate
     # previous logits instead.
     warped = torch.where(valid.unsqueeze(1), warped, previous_logits_low.float())
     return warped.to(previous_logits_low.dtype), valid
 
 
 def downsample_backward_flow(full_flow, low_size):
-    """Convert full-resolution pixel flow to low-resolution pixel units."""
+    """Convert full-resolution pixel flow to low-resolution align-corners units."""
     low_h, low_w = low_size
     full_h, full_w = full_flow.shape[-2:]
     low = F.interpolate(full_flow, size=low_size, mode="bilinear", align_corners=True).clone()
-    low[:, 0] *= low_w / full_w
-    low[:, 1] *= low_h / full_h
+    # flow_grid/grid_sample both use align_corners=True, so one endpoint-to-endpoint
+    # pixel displacement scales with (size - 1), not size.
+    x_scale = (low_w - 1) / max(full_w - 1, 1)
+    y_scale = (low_h - 1) / max(full_h - 1, 1)
+    low[:, 0] *= x_scale
+    low[:, 1] *= y_scale
     return low
 
 
+def teacher_reachable_mask(teacher_flow, max_displacement):
+    """Teacher locations that are spatially valid and reachable by the predictor."""
+    _, spatial_valid = low_flow_grid(teacher_flow)
+    scale = max(float(max_displacement), 0.0)
+    reachable = (
+        spatial_valid
+        & (teacher_flow[:, 0].abs() <= scale)
+        & (teacher_flow[:, 1].abs() <= scale)
+    )
+    return reachable, spatial_valid
+
+
 def normalized_flow_distillation_loss(predicted_flow, teacher_flow, max_displacement):
-    """Smooth-L1 RAFT distillation on teacher-valid locations in reachable range."""
-    _, teacher_valid = low_flow_grid(teacher_flow)
-    valid = teacher_valid.unsqueeze(1).expand_as(predicted_flow)
+    """Smooth-L1 RAFT distillation only on spatially valid reachable teacher flow."""
+    reachable, _ = teacher_reachable_mask(teacher_flow, max_displacement)
+    valid = reachable.unsqueeze(1).expand_as(predicted_flow)
     if not bool(valid.any()):
         return predicted_flow.sum() * 0.0
     scale = max(float(max_displacement), 1e-6)
-    teacher_target = teacher_flow.detach().clamp(-scale, scale)
+    teacher_target = teacher_flow.detach()
     return F.smooth_l1_loss(
         predicted_flow[valid] / scale,
         teacher_target[valid] / scale,
