@@ -42,7 +42,10 @@ BASELINE_REFERENCE = {
     "mVC8": 0.93904899,
     "mVC16": 0.93213566,
 }
-BASELINE_TOLERANCE = 1e-6
+# The stored reference is rounded to 8 decimal places.  Full-frame CUDA/RAFT
+# evaluation can vary at the 1e-5 level across kernels, so this check rejects
+# path/checkpoint mismatches while allowing that reproducible numerical drift.
+BASELINE_TOLERANCE = 2e-5
 
 
 def encode_clean(model, sample):
