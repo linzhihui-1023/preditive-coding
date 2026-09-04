@@ -110,6 +110,40 @@ class SemanticPredictionErrorEncoder(nn.Module):
         return self.net(prediction_error_z4)
 
 
+class AuxiliaryTemporalStateEncoder(nn.Module):
+    """Residual 128-channel encoder for the V2 auxiliary temporal state."""
+
+    def __init__(self, channels=UNIFIED_STATE_CHANNELS):
+        super().__init__()
+        self.residual = nn.Sequential(
+            nn.Conv2d(channels, channels, 1),
+            nn.SiLU(),
+            nn.Conv2d(channels, channels, 3, padding=1),
+        )
+        # Epoch zero is exactly the semantic anchor: T_0 = Z_4.
+        nn.init.zeros_(self.residual[-1].weight)
+        nn.init.zeros_(self.residual[-1].bias)
+
+    def forward(self, z4):
+        return z4 + self.residual(z4)
+
+
+class AuxiliaryTemporalPredictor(nn.Module):
+    """Causal 128-channel predictor for the V2 auxiliary temporal state."""
+
+    def __init__(self, channels=UNIFIED_STATE_CHANNELS, hidden_channels=128):
+        super().__init__()
+        self.recurrent = ConvGRUCell(2 * channels, hidden_channels)
+        self.delta = nn.Conv2d(hidden_channels, channels, 3, padding=1)
+        # Persistence is the exact E0 starting point: T_hat_{t+1} = T_t.
+        nn.init.zeros_(self.delta.weight)
+        nn.init.zeros_(self.delta.bias)
+
+    def predict_next(self, state, error, hidden=None):
+        hidden = self.recurrent(torch.cat((state, error), dim=1), hidden)
+        return state + self.delta(hidden), hidden
+
+
 ERROR_STATS_SAMPLE_TIME = 0.1035
 ERROR_STATS_LONG_TIME_CONSTANT = 1.5
 ERROR_STATS_SHORT_TIME_CONSTANT = 0.5
