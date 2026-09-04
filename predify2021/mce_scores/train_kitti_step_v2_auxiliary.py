@@ -203,6 +203,8 @@ def evaluate(model, encoder, predictor, groups, raft):
     confusion = {name: torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64) for name in names}
     vc = {name: VideoConsistency() for name in names}
     mtc_sum = {name: 0.0 for name in names}; mtc_count = {name: 0 for name in names}
+    temporal_keys = ("pred_mse", "copy_mse", "true_delta_sq", "state_sq", "raw_delta_sq", "pred_motion_sq")
+    temporal_sum = {key: 0.0 for key in temporal_keys}; temporal_pairs = 0; better_sequences = 0
     per_sequence = {}
     predictor.eval(); encoder.eval()
     for sequence in FULL9:
@@ -212,6 +214,8 @@ def evaluate(model, encoder, predictor, groups, raft):
         seq_mtc_sum = {name: 0.0 for name in names}; seq_mtc_count = {name: 0 for name in names}
         previous_image = None; previous_predictions = {}
         previous_state = None; pending = None; hidden = None
+        previous_observation_z4 = None
+        seq_temporal = {key: 0.0 for key in temporal_keys}; seq_pairs = 0
         for index, sample in enumerate(samples):
             image, observation, raw, output_size = encode_clean(model, sample)
             state = encoder(observation.z4)
@@ -236,11 +240,24 @@ def evaluate(model, encoder, predictor, groups, raft):
             previous_image = image
             previous_predictions = predictions
             if index > 0:
+                increments = {
+                    "pred_mse": float(F.mse_loss(pending, state).item()),
+                    "copy_mse": float(F.mse_loss(previous_state, state).item()),
+                    "true_delta_sq": float((state - previous_state).square().mean().item()),
+                    "state_sq": float(state.square().mean().item()),
+                    "raw_delta_sq": float((observation.z4 - previous_observation_z4).square().mean().item()),
+                    "pred_motion_sq": float((pending - previous_state).square().mean().item()),
+                }
+                for key, value in increments.items():
+                    temporal_sum[key] += value; seq_temporal[key] += value
+                temporal_pairs += 1; seq_pairs += 1
                 error = state - pending
                 previous_state = state
+                previous_observation_z4 = observation.z4
                 pending, hidden = predictor.predict_next(previous_state, error, hidden)
             else:
                 previous_state = state
+                previous_observation_z4 = observation.z4
         per_sequence[sequence] = {}
         for name in names:
             values = seq_vc[name].values(); iou = compute_iou(seq_conf[name])
@@ -248,6 +265,11 @@ def evaluate(model, encoder, predictor, groups, raft):
                 "mIoU": float(torch.nanmean(iou).item()), "mVC8": values[8], "mVC16": values[16],
                 "mTC": seq_mtc_sum[name] / seq_mtc_count[name] if seq_mtc_count[name] else float("nan"),
             }
+        if seq_pairs:
+            sequence_ratio = seq_temporal["pred_mse"] / max(seq_temporal["copy_mse"], 1e-12)
+            per_sequence[sequence]["Rpred"] = sequence_ratio
+            if sequence_ratio < 1.0:
+                better_sequences += 1
         per_sequence[sequence]["valid_frame_pairs"] = seq_mtc_count["host"]
     metrics = {}
     for name in names:
@@ -256,6 +278,22 @@ def evaluate(model, encoder, predictor, groups, raft):
                          "mTC": mtc_sum[name] / mtc_count[name] if mtc_count[name] else float("nan"),
                          "valid_frame_pairs": mtc_count[name]}
     metrics["per_sequence"] = per_sequence
+    pred_mse = temporal_sum["pred_mse"] / max(temporal_pairs, 1)
+    copy_mse = temporal_sum["copy_mse"] / max(temporal_pairs, 1)
+    true_delta = temporal_sum["true_delta_sq"] / max(temporal_pairs, 1)
+    state_sq = temporal_sum["state_sq"] / max(temporal_pairs, 1)
+    raw_delta = temporal_sum["raw_delta_sq"] / max(temporal_pairs, 1)
+    pred_motion = temporal_sum["pred_motion_sq"] / max(temporal_pairs, 1)
+    metrics["temporal_statistics"] = {
+        "Rpred": pred_mse / max(copy_mse, 1e-12),
+        "mean_pred_mse": pred_mse, "mean_copy_mse": copy_mse,
+        "pred_motion_ratio": math.sqrt(pred_motion) / math.sqrt(true_delta + 1e-12),
+        "true_delta_rms": math.sqrt(true_delta),
+        "temporal_to_state_ratio": math.sqrt(true_delta) / math.sqrt(state_sq + 1e-12),
+        "dynamic_ratio": math.sqrt(true_delta) / math.sqrt(raw_delta + 1e-12),
+        "sequences_better_than_persistence": better_sequences,
+        "sequence_count": len(FULL9), "valid_pairs": temporal_pairs,
+    }
     return metrics
 
 
@@ -304,14 +342,14 @@ def main(argv=None):
             totals[key] /= max(totals["frames"], 1)
         totals["total_loss"] /= max(totals["windows"], 1)
         metrics = evaluate(model, encoder, predictor, val_groups, raft)
-        pred = metrics["predicted_t"]
+        temporal = metrics["temporal_statistics"]
         record = {
             "epoch": epoch, "stage": "T", "train": totals, "metrics": metrics,
-            "Rpred": totals["pred_mse_sum"] / max(totals["copy_mse_sum"], 1e-12),
-            "pred_motion_ratio": math.sqrt(totals["pred_motion_sq_sum"] / max(totals["frames"], 1)) / math.sqrt(totals["true_delta_sq_sum"] / max(totals["frames"], 1) + 1e-12),
-            "true_delta_rms": math.sqrt(totals["true_delta_sq_sum"] / max(totals["frames"], 1)),
-            "temporal_to_state_ratio": math.sqrt(totals["true_delta_sq_sum"] / max(totals["frames"], 1)) / math.sqrt(totals["state_sq_sum"] / max(totals["frames"], 1) + 1e-12),
-            "dynamic_ratio": math.sqrt(totals["true_delta_sq_sum"] / max(totals["frames"], 1)) / math.sqrt(totals["raw_delta_sq_sum"] / max(totals["frames"] - len(train_groups), 1) + 1e-12),
+            "Rpred": temporal["Rpred"], "pred_motion_ratio": temporal["pred_motion_ratio"],
+            "true_delta_rms": temporal["true_delta_rms"],
+            "temporal_to_state_ratio": temporal["temporal_to_state_ratio"],
+            "dynamic_ratio": temporal["dynamic_ratio"],
+            "sequences_better_than_persistence": temporal["sequences_better_than_persistence"],
             "reference_Rpred_Z4": 0.9451,
             "final_output_is_host": True,
         }
