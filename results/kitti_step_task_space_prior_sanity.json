@@ -1,0 +1,116 @@
+{
+  "definitions": {
+    "A_host_native": "Current-frame Host logits decoded at native output resolution",
+    "B_current_low_then_upsample": "Current Host logits downsampled to raw C1 resolution then upsampled",
+    "C_previous_low_persistence": "Previous frame C1 logits upsampled at current frame (causal persistence)"
+  },
+  "experiment": "C-only Task-space Prior Low-resolution Sanity Diagnostic",
+  "full9": [
+    "0002",
+    "0006",
+    "0007",
+    "0008",
+    "0010",
+    "0013",
+    "0014",
+    "0016",
+    "0018"
+  ],
+  "results": {
+    "causal_sequence_first_frames_excluded": true,
+    "delta_vs_A": {
+      "B_current_low_then_upsample": -0.0008731706133783268,
+      "C_previous_low_persistence": -0.14502503050752702
+    },
+    "metrics": {
+      "A_host_native": {
+        "frames": 2981,
+        "mIoU": 0.6541174065367945
+      },
+      "B_current_low_then_upsample": {
+        "frames": 2981,
+        "mIoU": 0.6532442359234162
+      },
+      "C_previous_low_persistence": {
+        "frames": 2972,
+        "mIoU": 0.5090923760292675
+      }
+    },
+    "per_sequence": {
+      "0002": {
+        "frames": 233,
+        "mIoU": {
+          "A_host_native": 0.5299478306492617,
+          "B_current_low_then_upsample": 0.5288774402850529,
+          "C_previous_low_persistence": 0.45099487116723036
+        }
+      },
+      "0006": {
+        "frames": 270,
+        "mIoU": {
+          "A_host_native": 0.48021890055460603,
+          "B_current_low_then_upsample": 0.47929654528075655,
+          "C_previous_low_persistence": 0.4113005351622977
+        }
+      },
+      "0007": {
+        "frames": 800,
+        "mIoU": {
+          "A_host_native": 0.5095172311317954,
+          "B_current_low_then_upsample": 0.5079438439063391,
+          "C_previous_low_persistence": 0.365723332649284
+        }
+      },
+      "0008": {
+        "frames": 390,
+        "mIoU": {
+          "A_host_native": 0.39956804366821375,
+          "B_current_low_then_upsample": 0.39909499116898584,
+          "C_previous_low_persistence": 0.2824785154173645
+        }
+      },
+      "0010": {
+        "frames": 294,
+        "mIoU": {
+          "A_host_native": 0.5155959138226346,
+          "B_current_low_then_upsample": 0.5156389949271504,
+          "C_previous_low_persistence": 0.3360310378540861
+        }
+      },
+      "0013": {
+        "frames": 340,
+        "mIoU": {
+          "A_host_native": 0.45964091939645724,
+          "B_current_low_then_upsample": 0.4585651521338796,
+          "C_previous_low_persistence": 0.3102954864331192
+        }
+      },
+      "0014": {
+        "frames": 106,
+        "mIoU": {
+          "A_host_native": 0.4450716155240012,
+          "B_current_low_then_upsample": 0.44378791185378513,
+          "C_previous_low_persistence": 0.30029229424076026
+        }
+      },
+      "0016": {
+        "frames": 209,
+        "mIoU": {
+          "A_host_native": 0.5335461650405007,
+          "B_current_low_then_upsample": 0.5315474209130078,
+          "C_previous_low_persistence": 0.46730051700483727
+        }
+      },
+      "0018": {
+        "frames": 339,
+        "mIoU": {
+          "A_host_native": 0.39567697286467857,
+          "B_current_low_then_upsample": 0.39470631987503213,
+          "C_previous_low_persistence": 0.34301714409320117
+        }
+      }
+    }
+  },
+  "training": false,
+  "weights_modified": false
+}

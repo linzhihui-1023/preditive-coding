@@ -561,6 +561,28 @@ def main(argv=None):
             "repair_oracle_delta_mIoU_gt_stage_t_proxy": bool(
                 best and best["metrics"]["delta_vs_host"]["repair_only_label_oracle"]["mIoU"] > 0.020257415304355098
             ),
+            # Mandatory minimum C gate: learned history must beat simple
+            # semantic persistence in both accuracy and temporal consistency,
+            # while leaving at least 0.4 pp oracle temporal headroom.
+            "prior_mIoU_gt_persistence": bool(
+                best and best["metrics"]["metrics"]["task_space_prior"]["mIoU"]
+                > best["metrics"]["metrics"]["semantic_persistence"]["mIoU"]
+            ),
+            "prior_mTC_gt_persistence": bool(
+                best and best["metrics"]["metrics"]["task_space_prior"]["mTC"]
+                > best["metrics"]["metrics"]["semantic_persistence"]["mTC"]
+            ),
+            "oracle_delta_mTC_ge_0p4pp": bool(
+                best and best["metrics"]["delta_vs_host"]["repair_only_label_oracle"]["mTC"] >= 0.004
+            ),
+            "minimum_c_gate_passed": bool(
+                best
+                and best["metrics"]["metrics"]["task_space_prior"]["mIoU"]
+                > best["metrics"]["metrics"]["semantic_persistence"]["mIoU"]
+                and best["metrics"]["metrics"]["task_space_prior"]["mTC"]
+                > best["metrics"]["metrics"]["semantic_persistence"]["mTC"]
+                and best["metrics"]["delta_vs_host"]["repair_only_label_oracle"]["mTC"] >= 0.004
+            ),
         },
     }
     (result_output / "summary.json").write_text(
