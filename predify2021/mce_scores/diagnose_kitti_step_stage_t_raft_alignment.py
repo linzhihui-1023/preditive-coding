@@ -32,6 +32,17 @@ from predify2021.model_factory.deeplabv3plus_resnet50 import (
 FULL9 = ("0002", "0006", "0007", "0008", "0010", "0013", "0014", "0016", "0018")
 NUM_CLASSES = 19
 DEFAULT_CHECKPOINT = "/home/lin/predify/experiments/kitti_step_v2_auxiliary_stage_t/best.pt"
+FAST_B_CHECKPOINT_DEFAULT = (
+    "/home/lin/predify/experiments/kitti_step_semantic_v3_joint_c4_fast_ab_5754714/"
+    "fast_b_joint_c4_weak_z4/best.pt"
+)
+BASELINE_REFERENCE = {
+    "mIoU": 0.63266819,
+    "mTC": 0.71302309,
+    "mVC8": 0.93904899,
+    "mVC16": 0.93213566,
+}
+BASELINE_TOLERANCE = 1e-6
 
 
 def encode_clean(model, sample):
@@ -143,11 +154,21 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default="/home/lin/predify/kitti_step")
     parser.add_argument("--checkpoint", default=DEFAULT_CHECKPOINT)
+    parser.add_argument("--fast-b-checkpoint", default=FAST_B_CHECKPOINT_DEFAULT)
     parser.add_argument("--result-output", default="results/kitti_step_stage_t_raft_alignment.json")
     args = parser.parse_args(argv)
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required")
     model, _ = load_components(STATIC_CHECKPOINT_DEFAULT, ADAPTER_CHECKPOINT_DEFAULT, ROLE_PREDICTOR_CHECKPOINT_DEFAULT, WRITEBACK_CHECKPOINT_DEFAULT)
+    # Stage T evaluates with the FAST-B C4 interface, not the generic adapter
+    # and host-conditioned writeback defaults used by load_components().
+    fast_b_payload = torch.load(args.fast_b_checkpoint, map_location="cpu", weights_only=False)
+    model.multi_layer_adapter.output_adapters[3].load_state_dict(
+        fast_b_payload["c4_output_adapter_state_dict"], strict=True
+    )
+    model.host_conditioned_writebacks["3"].load_state_dict(
+        fast_b_payload["c4_writeback_state_dict"], strict=True
+    )
     payload = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
     encoder = AuxiliaryTemporalStateEncoder().cuda(); encoder.load_state_dict(payload["encoder_state_dict"], strict=True)
     predictor = AuxiliaryTemporalPredictor().cuda(); predictor.load_state_dict(payload["predictor_state_dict"], strict=True)
@@ -155,10 +176,39 @@ def main(argv=None):
     dataset = KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "val")
     groups = sequence_groups(dataset); raft = FrozenRAFT()
     standard = evaluate(model, encoder, predictor, groups, raft, aligned=False)
+    baseline_delta = {
+        key: standard[key] - BASELINE_REFERENCE[key] for key in BASELINE_REFERENCE
+    }
+    baseline_check = {
+        "reference": BASELINE_REFERENCE,
+        "observed_standard": {key: standard[key] for key in BASELINE_REFERENCE},
+        "delta": baseline_delta,
+        "tolerance": BASELINE_TOLERANCE,
+        "passed": all(abs(value) <= BASELINE_TOLERANCE for value in baseline_delta.values()),
+    }
+    print(json.dumps({"baseline_reproduction_check": baseline_check}, sort_keys=True), flush=True)
+    if not baseline_check["passed"]:
+        result = {
+            "experiment": "Stage-T Oracle RAFT hidden alignment diagnostic",
+            "checkpoint": args.checkpoint,
+            "fast_b_checkpoint": args.fast_b_checkpoint,
+            "full9": FULL9,
+            "standard": standard,
+            "baseline_reproduction_check": baseline_check,
+            "status": "STOP_BASELINE_MISMATCH",
+        }
+        output = Path(args.result_output); output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        raise RuntimeError(
+            "FAST-B baseline reproduction failed; stopping before RAFT alignment: "
+            + json.dumps(baseline_check, sort_keys=True)
+        )
     aligned = evaluate(model, encoder, predictor, groups, raft, aligned=True)
     result = {
         "experiment": "Stage-T Oracle RAFT hidden alignment diagnostic", "checkpoint": args.checkpoint,
+        "fast_b_checkpoint": args.fast_b_checkpoint,
         "full9": FULL9, "standard": standard, "raft_aligned": aligned,
+        "baseline_reproduction_check": baseline_check,
         "delta_aligned_minus_standard": {
             key: aligned[key] - standard[key] for key in ("Rpred", "pred_motion_ratio", "mIoU", "mTC")
         },
