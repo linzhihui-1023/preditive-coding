@@ -1,0 +1,279 @@
+{
+  "baseline_entropy_only": {
+    "note": "Entropy-only AUROC is evaluated on the same decisive sampled pixels; its raw orientation is higher entropy -> positive HW_TC.",
+    "pooled_auroc": 0.6213447329272082
+  },
+  "decisive_only": true,
+  "experiment": "Frozen Switch Benefit Probe",
+  "feature_names": [
+    "host_entropy",
+    "host_margin",
+    "temporal_entropy",
+    "temporal_margin",
+    "host_temporal_disagreement",
+    "host_temporal_js",
+    "error_abs_mean",
+    "probability_difference_class_0",
+    "probability_difference_class_1",
+    "probability_difference_class_2",
+    "probability_difference_class_3",
+    "probability_difference_class_4",
+    "probability_difference_class_5",
+    "probability_difference_class_6",
+    "probability_difference_class_7",
+    "probability_difference_class_8",
+    "probability_difference_class_9",
+    "probability_difference_class_10",
+    "probability_difference_class_11",
+    "probability_difference_class_12",
+    "probability_difference_class_13",
+    "probability_difference_class_14",
+    "probability_difference_class_15",
+    "probability_difference_class_16",
+    "probability_difference_class_17",
+    "probability_difference_class_18"
+  ],
+  "full9": [
+    "0002",
+    "0006",
+    "0007",
+    "0008",
+    "0010",
+    "0013",
+    "0014",
+    "0016",
+    "0018"
+  ],
+  "inference_only_features": true,
+  "label_definition": {
+    "negative": "HC_TW: Host correct / Temporal wrong",
+    "positive": "HW_TC: Host wrong / Temporal correct"
+  },
+  "loso": {
+    "folds": [
+      {
+        "B_negative": 59663,
+        "C_positive": 51318,
+        "auroc": 0.5719253448606817,
+        "held_out_sequence": "0002",
+        "operating_point": {
+          "false_positive": 15097,
+          "minimum_precision": 0.6,
+          "minimum_recall": 0.3,
+          "pass": false,
+          "precision": 0.5459685422994797,
+          "recall_hw_tc_coverage": 0.35375501773256945,
+          "selected_pixels": 33251,
+          "threshold": 0.492491751909256,
+          "true_positive": 18154
+        },
+        "samples": 110981
+      },
+      {
+        "B_negative": 71634,
+        "C_positive": 57116,
+        "auroc": 0.6582876688593322,
+        "held_out_sequence": "0006",
+        "operating_point": {
+          "false_positive": 13391,
+          "minimum_precision": 0.6,
+          "minimum_recall": 0.3,
+          "pass": false,
+          "precision": 0.5647892359192694,
+          "recall_hw_tc_coverage": 0.3042580012605925,
+          "selected_pixels": 30769,
+          "threshold": 0.5006283521652222,
+          "true_positive": 17378
+        },
+        "samples": 128750
+      },
+      {
+        "B_negative": 280106,
+        "C_positive": 118109,
+        "auroc": 0.631845537103093,
+        "held_out_sequence": "0007",
+        "operating_point": {
+          "false_positive": 142430,
+          "minimum_precision": 0.6,
+          "minimum_recall": 0.3,
+          "pass": false,
+          "precision": 0.3816183078840084,
+          "recall_hw_tc_coverage": 0.7442023893183415,
+          "selected_pixels": 230327,
+          "threshold": 0.4084499180316925,
+          "true_positive": 87897
+        },
+        "samples": 398215
+      },
+      {
+        "B_negative": 120793,
+        "C_positive": 70225,
+        "auroc": 0.6732727819128875,
+        "held_out_sequence": "0008",
+        "operating_point": {
+          "false_positive": 40810,
+          "minimum_precision": 0.6,
+          "minimum_recall": 0.3,
+          "pass": false,
+          "precision": 0.4896644866007228,
+          "recall_hw_tc_coverage": 0.5575934496262015,
+          "selected_pixels": 79967,
+          "threshold": 0.468672513961792,
+          "true_positive": 39157
+        },
+        "samples": 191018
+      },
+      {
+        "B_negative": 88094,
+        "C_positive": 55964,
+        "auroc": 0.5934894536269296,
+        "held_out_sequence": "0010",
+        "operating_point": {
+          "false_positive": 41161,
+          "minimum_precision": 0.6,
+          "minimum_recall": 0.3,
+          "pass": false,
+          "precision": 0.46134216243096815,
+          "recall_hw_tc_coverage": 0.6299228075191194,
+          "selected_pixels": 76414,
+          "threshold": 0.4281572699546814,
+          "true_positive": 35253
+        },
+        "samples": 144058
+      },
+      {
+        "B_negative": 102659,
+        "C_positive": 63744,
+        "auroc": 0.5506649678063553,
+        "held_out_sequence": "0013",
+        "operating_point": {
+          "false_positive": 67466,
+          "minimum_precision": 0.6,
+          "minimum_recall": 0.3,
+          "pass": false,
+          "precision": 0.4196323345978821,
+          "recall_hw_tc_coverage": 0.7652641817269076,
+          "selected_pixels": 116247,
+          "threshold": 0.35010096430778503,
+          "true_positive": 48781
+        },
+        "samples": 166403
+      },
+      {
+        "B_negative": 31762,
+        "C_positive": 20378,
+        "auroc": 0.7765919681893579,
+        "held_out_sequence": "0014",
+        "operating_point": {
+          "false_positive": 9262,
+          "minimum_precision": 0.6,
+          "minimum_recall": 0.3,
+          "pass": true,
+          "precision": 0.6000863557858377,
+          "recall_hw_tc_coverage": 0.6820100107959565,
+          "selected_pixels": 23160,
+          "threshold": 0.4637870490550995,
+          "true_positive": 13898
+        },
+        "samples": 52140
+      },
+      {
+        "B_negative": 52352,
+        "C_positive": 49088,
+        "auroc": 0.5248023667075601,
+        "held_out_sequence": "0016",
+        "operating_point": {
+          "false_positive": 14328,
+          "minimum_precision": 0.6,
+          "minimum_recall": 0.3,
+          "pass": false,
+          "precision": 0.5068832599118943,
+          "recall_hw_tc_coverage": 0.30003259452411996,
+          "selected_pixels": 29056,
+          "threshold": 0.524651825428009,
+          "true_positive": 14728
+        },
+        "samples": 101440
+      },
+      {
+        "B_negative": 88897,
+        "C_positive": 77252,
+        "auroc": 0.6076234958639892,
+        "held_out_sequence": "0018",
+        "operating_point": {
+          "false_positive": 55762,
+          "minimum_precision": 0.6,
+          "minimum_recall": 0.3,
+          "pass": false,
+          "precision": 0.5321312603307519,
+          "recall_hw_tc_coverage": 0.820962564076011,
+          "selected_pixels": 119183,
+          "threshold": 0.41061803698539734,
+          "true_positive": 63421
+        },
+        "samples": 166149
+      }
+    ],
+    "pooled_auroc": 0.6174806894207491,
+    "pooled_operating_point": {
+      "false_positive": 415127,
+      "minimum_precision": 0.6,
+      "minimum_recall": 0.3,
+      "pass": false,
+      "precision": 0.46607940507288037,
+      "recall_hw_tc_coverage": 0.6434372525275482,
+      "selected_pixels": 777507,
+      "threshold": 0.45377665758132935,
+      "true_positive": 362380
+    }
+  },
+  "per_sequence_samples": {
+    "0002": {
+      "B_negative": 59663,
+      "C_positive": 51318,
+      "samples": 110981
+    },
+    "0006": {
+      "B_negative": 71634,
+      "C_positive": 57116,
+      "samples": 128750
+    },
+    "0007": {
+      "B_negative": 280106,
+      "C_positive": 118109,
+      "samples": 398215
+    },
+    "0008": {
+      "B_negative": 120793,
+      "C_positive": 70225,
+      "samples": 191018
+    },
+    "0010": {
+      "B_negative": 88094,
+      "C_positive": 55964,
+      "samples": 144058
+    },
+    "0013": {
+      "B_negative": 102659,
+      "C_positive": 63744,
+      "samples": 166403
+    },
+    "0014": {
+      "B_negative": 31762,
+      "C_positive": 20378,
+      "samples": 52140
+    },
+    "0016": {
+      "B_negative": 52352,
+      "C_positive": 49088,
+      "samples": 101440
+    },
+    "0018": {
+      "B_negative": 88897,
+      "C_positive": 77252,
+      "samples": 166149
+    }
+  },
+  "sample_per_frame_max": 512,
+  "training": "Only the lightweight logistic probe is trained; Host, Adapter, Dynamics, Stage-T encoder and predictor are frozen."
+}
