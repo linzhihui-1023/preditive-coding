@@ -26,6 +26,7 @@ from .semantic_recurrent_predictor import (
 from .predictive_semantic_v2 import (
     PredictiveSemanticV2,
     Z4PredictiveSemanticEncoder,
+    Z4PredictiveSemanticDecoder,
     Z4PredictiveTemporalPredictor,
     Z4TemporalUpdateHead,
 )
@@ -101,6 +102,7 @@ __all__ = [
     "ErrorRegulatedSemanticRestorationPredictor",
     "PredictiveSemanticV2",
     "Z4PredictiveSemanticEncoder",
+    "Z4PredictiveSemanticDecoder",
     "Z4PredictiveTemporalPredictor",
     "Z4TemporalUpdateHead",
     "DecoupledLocalFeatureCorrelation",

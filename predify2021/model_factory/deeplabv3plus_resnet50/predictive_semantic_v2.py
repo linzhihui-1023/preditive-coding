@@ -28,6 +28,21 @@ class Z4PredictiveSemanticEncoder(nn.Module):
         return self.net(z4)
 
 
+class Z4PredictiveSemanticDecoder(nn.Module):
+    """Small reconstruction decoder used only by V2-Staged Stage A."""
+
+    def __init__(self, state_channels=64, output_channels=UNIFIED_STATE_CHANNELS):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(state_channels, state_channels, 3, padding=1),
+            nn.SiLU(),
+            nn.Conv2d(state_channels, output_channels, 1),
+        )
+
+    def forward(self, state):
+        return self.net(state)
+
+
 class Z4PredictiveTemporalPredictor(nn.Module):
     """Causal residual predictor for the encoded semantic state."""
 
