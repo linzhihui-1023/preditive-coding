@@ -1,18 +1,20 @@
 """Zero-training Host/Stage-T temporal complementarity diagnostic on KITTI-STEP Full9.
 
-The frozen Host and the frozen best Stage-T encoder/predictor are evaluated on
-exactly the causal Full9 validation protocol. No correction head is trained or
-applied. The Stage-T Predicted-T decode is used only as a proxy for historical
-temporal evidence that a future task-space prior could provide.
+The frozen Host and frozen best Stage-T encoder/predictor are evaluated on the
+same causal Full9 validation protocol. No correction head is trained or
+applied. Stage-T Predicted-T is used only as a proxy for historical temporal
+evidence that a future task-space prior could provide.
 
-The diagnostic answers three questions before implementing C+D:
+This diagnostic answers four questions before implementing C+D:
 1) How often is the temporal proxy correct when the Host is wrong?
-2) How much mIoU headroom exists under a GT selector that chooses the temporal
-   proxy only when it repairs a Host error?
-3) How much of that recoverable set is exposed by Host predictive entropy?
+2) How much label-repair headroom exists if GT selects the temporal proxy only
+   where it repairs a Host error?
+3) How well does Host predictive entropy expose those recoverable errors?
+4) If entropy alone decides when to replace Host by the temporal proxy, what is
+   the actual mIoU/mTC/mVC trade-off and which pixel quadrants are selected?
 
-GT is used only for offline diagnostics and the oracle selector. It is never
-an input to Host, temporal encoder, or temporal predictor.
+GT is used only for offline diagnostics and the repair-only oracle. It is never
+an input to Host, temporal encoder, temporal predictor, or entropy gate.
 """
 
 import argparse
@@ -58,6 +60,15 @@ ENTROPY_BINS = 4096
 FIXED_ENTROPY_THRESHOLDS = (0.10, 0.20, 0.30, 0.40, 0.50)
 TOP_UNCERTAIN_FRACTIONS = (0.10, 0.25, 0.50)
 RESULT_DEFAULT = "results/kitti_step_host_temporal_complementarity.json"
+
+EXPECTED_FULL9_FRAMES = 2981
+EXPECTED_CAUSAL_FRAMES = 2972
+EXPECTED_HOST_MIOU = 0.654109
+EXPECTED_HOST_MTC = 0.707814
+EXPECTED_TEMPORAL_MIOU = 0.632668
+EXPECTED_TEMPORAL_MTC = 0.713023
+REPRO_MIOU_TOL = 5e-4
+REPRO_MTC_TOL = 5e-4
 
 
 @torch.inference_mode()
@@ -121,7 +132,7 @@ def _add_counts(total, host_correct, temporal_correct, valid):
     }
     for key, value in increments.items():
         total[key] += value
-    return hw_tc
+    return hw_tc, hc_tw
 
 
 def _rates(counts):
@@ -150,6 +161,14 @@ def _rates(counts):
     }
 
 
+def _gate_name_threshold(threshold):
+    return f"entropy_tau_{threshold:.2f}".replace(".", "p")
+
+
+def _gate_name_top_fraction(fraction):
+    return f"entropy_top_{int(round(100 * fraction)):02d}pct"
+
+
 class EntropyAccumulator:
     """Streaming normalized-entropy histograms without storing per-pixel scores."""
 
@@ -160,6 +179,7 @@ class EntropyAccumulator:
             "host_correct": np.zeros(self.bins, dtype=np.int64),
             "host_wrong": np.zeros(self.bins, dtype=np.int64),
             "recoverable": np.zeros(self.bins, dtype=np.int64),
+            "harmful": np.zeros(self.bins, dtype=np.int64),
         }
         self.sum = {key: 0.0 for key in self.hist}
         self.count = {key: 0 for key in self.hist}
@@ -175,11 +195,12 @@ class EntropyAccumulator:
         self.sum[name] += float(values.sum().item())
         self.count[name] += count
 
-    def update(self, entropy, valid, host_correct, recoverable):
+    def update(self, entropy, valid, host_correct, recoverable, harmful):
         self._update_one("all", entropy, valid)
         self._update_one("host_correct", entropy, valid & host_correct)
         self._update_one("host_wrong", entropy, valid & ~host_correct)
         self._update_one("recoverable", entropy, recoverable)
+        self._update_one("harmful", entropy, harmful)
 
     def _auc_wrong(self):
         pos = self.hist["host_wrong"].astype(np.float64)
@@ -195,31 +216,34 @@ class EntropyAccumulator:
             neg_lower += neg[index]
         return float(favorable / (n_pos * n_neg))
 
-    def _threshold_stats(self, threshold):
+    def threshold_stats(self, threshold):
         index = min(self.bins, max(0, int(math.ceil(threshold * self.bins))))
         all_selected = int(self.hist["all"][index:].sum())
         recover_selected = int(self.hist["recoverable"][index:].sum())
+        harmful_selected = int(self.hist["harmful"][index:].sum())
         all_count = max(self.count["all"], 1)
         recover_count = max(self.count["recoverable"], 1)
+        harmful_count = max(self.count["harmful"], 1)
         return {
             "entropy_threshold": float(threshold),
             "intervention_rate": all_selected / all_count,
             "recoverable_error_coverage": recover_selected / recover_count,
+            "harmful_error_coverage": harmful_selected / harmful_count,
             "selected_valid_pixels": all_selected,
             "selected_recoverable_pixels": recover_selected,
+            "selected_harmful_pixels": harmful_selected,
         }
 
-    def _top_fraction_stats(self, fraction):
-        target = max(1, int(math.ceil(fraction * max(self.count["all"], 1))))
+    def top_fraction_threshold(self, fraction):
+        if self.count["all"] <= 0:
+            return float("nan")
+        target = max(1, int(math.ceil(fraction * self.count["all"])))
         reverse = np.cumsum(self.hist["all"][::-1])
         reverse_index = int(np.searchsorted(reverse, target, side="left"))
         bin_index = max(0, self.bins - 1 - reverse_index)
-        threshold = bin_index / self.bins
-        row = self._threshold_stats(threshold)
-        row["target_top_uncertain_fraction"] = float(fraction)
-        return row
+        return bin_index / self.bins
 
-    def summary(self):
+    def summary(self, top_thresholds):
         means = {
             key: self.sum[key] / self.count[key] if self.count[key] else float("nan")
             for key in self.hist
@@ -231,10 +255,14 @@ class EntropyAccumulator:
             "mean_entropy": means,
             "counts": dict(self.count),
             "recoverable_error_coverage_fixed_thresholds": [
-                self._threshold_stats(value) for value in FIXED_ENTROPY_THRESHOLDS
+                self.threshold_stats(value) for value in FIXED_ENTROPY_THRESHOLDS
             ],
             "recoverable_error_coverage_top_uncertain": [
-                self._top_fraction_stats(value) for value in TOP_UNCERTAIN_FRACTIONS
+                {
+                    **self.threshold_stats(top_thresholds[fraction]),
+                    "target_top_uncertain_fraction": float(fraction),
+                }
+                for fraction in TOP_UNCERTAIN_FRACTIONS
             ],
         }
 
@@ -243,6 +271,38 @@ def _normalized_entropy(logits, temperature):
     probabilities = F.softmax(logits / temperature, dim=1)
     entropy = -(probabilities * probabilities.clamp_min(1e-12).log()).sum(dim=1)
     return entropy / math.log(NUM_CLASSES)
+
+
+@torch.inference_mode()
+def collect_global_top_thresholds(model, groups, temperature):
+    """Host-only prepass to resolve global top-uncertainty thresholds."""
+    histogram = np.zeros(ENTROPY_BINS, dtype=np.int64)
+    valid_count = 0
+    for sequence in FULL9:
+        for index, sample in enumerate(groups[sequence]):
+            if index == 0:
+                continue
+            image = load_image(sample)
+            raw = model.extract_backbone_features(image)
+            output_size = tuple(image.shape[-2:])
+            logits = model.decode_from_host_feature(HostFeature(raw.c4, raw.c1, output_size))
+            gt = semantic_mask_from_panoptic_png(sample["mask_path"]).cuda(non_blocking=True)
+            valid = gt != IGNORE_LABEL
+            values = _normalized_entropy(logits, temperature).squeeze(0)[valid]
+            indices = torch.clamp((values * ENTROPY_BINS).long(), 0, ENTROPY_BINS - 1)
+            histogram += torch.bincount(
+                indices, minlength=ENTROPY_BINS
+            ).cpu().numpy().astype(np.int64)
+            valid_count += int(valid.sum().item())
+
+    thresholds = {}
+    reverse = np.cumsum(histogram[::-1])
+    for fraction in TOP_UNCERTAIN_FRACTIONS:
+        target = max(1, int(math.ceil(fraction * max(valid_count, 1))))
+        reverse_index = int(np.searchsorted(reverse, target, side="left"))
+        bin_index = max(0, ENTROPY_BINS - 1 - reverse_index)
+        thresholds[fraction] = bin_index / ENTROPY_BINS
+    return thresholds, valid_count
 
 
 def _metric_summary(confusion, vc_sums, vc_counts, mtc_sums, mtc_counts):
@@ -258,9 +318,47 @@ def _metric_summary(confusion, vc_sums, vc_counts, mtc_sums, mtc_counts):
     return result
 
 
+def _selection_summary(selected_counts, global_counts):
+    selected_valid = selected_counts["valid_pixels"]
+    global_valid = max(global_counts["valid_pixels"], 1)
+    global_recoverable = max(global_counts["host_wrong_temporal_correct"], 1)
+    global_harmful = max(global_counts["host_correct_temporal_wrong"], 1)
+    decisive = (
+        selected_counts["host_wrong_temporal_correct"]
+        + selected_counts["host_correct_temporal_wrong"]
+    )
+    return {
+        **_rates(selected_counts),
+        "intervention_rate_over_causal_valid": selected_valid / global_valid,
+        "recoverable_error_coverage": (
+            selected_counts["host_wrong_temporal_correct"] / global_recoverable
+        ),
+        "harmful_error_coverage": (
+            selected_counts["host_correct_temporal_wrong"] / global_harmful
+        ),
+        "selected_recoverable_HW_TC": selected_counts["host_wrong_temporal_correct"],
+        "selected_harmful_HC_TW": selected_counts["host_correct_temporal_wrong"],
+        "decisive_switch_precision": (
+            selected_counts["host_wrong_temporal_correct"] / decisive
+            if decisive else float("nan")
+        ),
+    }
+
+
 @torch.inference_mode()
-def evaluate(model, encoder, predictor, groups, raft, temperature):
-    names = ("host", "stage_t_temporal_proxy", "gt_oracle_fusion")
+def evaluate(model, encoder, predictor, groups, raft, temperature, top_thresholds):
+    baseline_names = ("host", "stage_t_temporal_proxy", "repair_only_label_oracle")
+    fixed_gate_specs = {
+        _gate_name_threshold(value): float(value)
+        for value in FIXED_ENTROPY_THRESHOLDS
+    }
+    top_gate_specs = {
+        _gate_name_top_fraction(fraction): float(top_thresholds[fraction])
+        for fraction in TOP_UNCERTAIN_FRACTIONS
+    }
+    gate_specs = {**fixed_gate_specs, **top_gate_specs}
+    names = baseline_names + tuple(gate_specs)
+
     confusion = {
         name: torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64)
         for name in names
@@ -270,9 +368,11 @@ def evaluate(model, encoder, predictor, groups, raft, temperature):
     mtc_sums = {name: 0.0 for name in names}
     mtc_counts = {name: 0 for name in names}
     global_counts = _new_counts()
+    gate_selected_counts = {name: _new_counts() for name in gate_specs}
     entropy = EntropyAccumulator()
     per_sequence = {}
     temporal_frames = 0
+    evaluated_frames = 0
 
     for sequence in FULL9:
         samples = groups[sequence]
@@ -305,9 +405,6 @@ def evaluate(model, encoder, predictor, groups, raft, temperature):
             host_prediction = host_logits.argmax(1)
 
             if index == 0:
-                # Match the existing Stage-T Predicted-T task probe on frame 0
-                # for metric reproduction, but exclude frame 0 from all
-                # complementarity/entropy statistics because no history exists.
                 temporal_logits = probe_logits(
                     model, raw, observation, state, output_size
                 )
@@ -320,23 +417,41 @@ def evaluate(model, encoder, predictor, groups, raft, temperature):
             valid = gt != IGNORE_LABEL
             host_correct = host_prediction.squeeze(0) == gt
             temporal_correct = temporal_prediction.squeeze(0) == gt
-
             oracle_prediction = host_prediction.clone()
+            gated_predictions = {
+                name: host_prediction.clone() for name in gate_specs
+            }
+
             if index > 0:
-                recoverable = _add_counts(
+                recoverable, harmful = _add_counts(
                     global_counts, host_correct, temporal_correct, valid
                 )
                 _add_counts(seq_counts, host_correct, temporal_correct, valid)
                 host_entropy = _normalized_entropy(host_logits, temperature).squeeze(0)
-                entropy.update(host_entropy, valid, host_correct, recoverable)
+                entropy.update(
+                    host_entropy, valid, host_correct, recoverable, harmful
+                )
+
                 oracle_mask = recoverable.unsqueeze(0)
                 oracle_prediction[oracle_mask] = temporal_prediction[oracle_mask]
+
+                for name, threshold in gate_specs.items():
+                    selected = valid & (host_entropy >= threshold)
+                    _add_counts(
+                        gate_selected_counts[name],
+                        host_correct,
+                        temporal_correct,
+                        selected,
+                    )
+                    selected_3d = selected.unsqueeze(0)
+                    gated_predictions[name][selected_3d] = temporal_prediction[selected_3d]
                 temporal_frames += 1
 
             predictions = {
                 "host": host_prediction,
                 "stage_t_temporal_proxy": temporal_prediction,
-                "gt_oracle_fusion": oracle_prediction,
+                "repair_only_label_oracle": oracle_prediction,
+                **gated_predictions,
             }
             for name, prediction in predictions.items():
                 pred_cpu = prediction.squeeze(0).cpu()
@@ -362,6 +477,7 @@ def evaluate(model, encoder, predictor, groups, raft, temperature):
             previous_predictions = {
                 name: prediction.detach() for name, prediction in predictions.items()
             }
+            evaluated_frames += 1
 
         for name in names:
             stats = seq_vc[name].stats()
@@ -390,25 +506,103 @@ def evaluate(model, encoder, predictor, groups, raft, temperature):
     metrics = _metric_summary(
         confusion, vc_sums, vc_counts, mtc_sums, mtc_counts
     )
-    oracle_gain = {
-        key: metrics["gt_oracle_fusion"][key] - metrics["host"][key]
-        for key in ("mIoU", "mTC", "mVC8", "mVC16")
+    delta_vs_host = {
+        name: {
+            key: metrics[name][key] - metrics["host"][key]
+            for key in ("mIoU", "mTC", "mVC8", "mVC16")
+        }
+        for name in names
+        if name != "host"
     }
-    temporal_delta = {
-        key: metrics["stage_t_temporal_proxy"][key] - metrics["host"][key]
-        for key in ("mIoU", "mTC", "mVC8", "mVC16")
+    gate_selection = {
+        name: {
+            "entropy_threshold": gate_specs[name],
+            **_selection_summary(gate_selected_counts[name], global_counts),
+        }
+        for name in gate_specs
     }
     return {
         "metrics": metrics,
-        "delta_vs_host": {
-            "stage_t_temporal_proxy": temporal_delta,
-            "gt_oracle_fusion": oracle_gain,
-        },
+        "delta_vs_host": delta_vs_host,
         "complementarity_causal_frames_only": _rates(global_counts),
-        "host_uncertainty_causal_frames_only": entropy.summary(),
+        "host_uncertainty_causal_frames_only": entropy.summary(top_thresholds),
+        "entropy_gated_fusion": {
+            "rule": "On causal frames, use temporal proxy where normalized Host entropy >= threshold; otherwise keep Host. Frame 0 always uses Host.",
+            "gate_thresholds": gate_specs,
+            "selection": gate_selection,
+            "metrics": {name: metrics[name] for name in gate_specs},
+            "delta_vs_host": {name: delta_vs_host[name] for name in gate_specs},
+        },
         "per_sequence": per_sequence,
+        "evaluated_full9_frames": evaluated_frames,
         "temporal_frames_excluding_sequence_first_frames": temporal_frames,
     }
+
+
+def _reproduction_checks(results, dataset_frames, expected_temporal_frames):
+    metrics = results["metrics"]
+    checks = {
+        "full9_frame_count": {
+            "expected": EXPECTED_FULL9_FRAMES,
+            "actual": dataset_frames,
+            "pass": dataset_frames == EXPECTED_FULL9_FRAMES,
+        },
+        "causal_frame_count": {
+            "expected": EXPECTED_CAUSAL_FRAMES,
+            "actual": expected_temporal_frames,
+            "pass": expected_temporal_frames == EXPECTED_CAUSAL_FRAMES,
+        },
+        "observed_evaluated_frames": {
+            "expected": EXPECTED_FULL9_FRAMES,
+            "actual": results["evaluated_full9_frames"],
+            "pass": results["evaluated_full9_frames"] == EXPECTED_FULL9_FRAMES,
+        },
+        "observed_causal_frames": {
+            "expected": EXPECTED_CAUSAL_FRAMES,
+            "actual": results["temporal_frames_excluding_sequence_first_frames"],
+            "pass": results["temporal_frames_excluding_sequence_first_frames"] == EXPECTED_CAUSAL_FRAMES,
+        },
+        "host_mIoU_reproduction": {
+            "expected": EXPECTED_HOST_MIOU,
+            "actual": metrics["host"]["mIoU"],
+            "absolute_error": abs(metrics["host"]["mIoU"] - EXPECTED_HOST_MIOU),
+            "tolerance": REPRO_MIOU_TOL,
+            "pass": abs(metrics["host"]["mIoU"] - EXPECTED_HOST_MIOU) <= REPRO_MIOU_TOL,
+        },
+        "host_mTC_reproduction": {
+            "expected": EXPECTED_HOST_MTC,
+            "actual": metrics["host"]["mTC"],
+            "absolute_error": abs(metrics["host"]["mTC"] - EXPECTED_HOST_MTC),
+            "tolerance": REPRO_MTC_TOL,
+            "pass": abs(metrics["host"]["mTC"] - EXPECTED_HOST_MTC) <= REPRO_MTC_TOL,
+        },
+        "temporal_proxy_mIoU_reproduction": {
+            "expected": EXPECTED_TEMPORAL_MIOU,
+            "actual": metrics["stage_t_temporal_proxy"]["mIoU"],
+            "absolute_error": abs(metrics["stage_t_temporal_proxy"]["mIoU"] - EXPECTED_TEMPORAL_MIOU),
+            "tolerance": REPRO_MIOU_TOL,
+            "pass": abs(metrics["stage_t_temporal_proxy"]["mIoU"] - EXPECTED_TEMPORAL_MIOU) <= REPRO_MIOU_TOL,
+        },
+        "temporal_proxy_mTC_reproduction": {
+            "expected": EXPECTED_TEMPORAL_MTC,
+            "actual": metrics["stage_t_temporal_proxy"]["mTC"],
+            "absolute_error": abs(metrics["stage_t_temporal_proxy"]["mTC"] - EXPECTED_TEMPORAL_MTC),
+            "tolerance": REPRO_MTC_TOL,
+            "pass": abs(metrics["stage_t_temporal_proxy"]["mTC"] - EXPECTED_TEMPORAL_MTC) <= REPRO_MTC_TOL,
+        },
+        "host_valid_frame_pairs": {
+            "expected": EXPECTED_CAUSAL_FRAMES,
+            "actual": metrics["host"]["valid_frame_pairs"],
+            "pass": metrics["host"]["valid_frame_pairs"] == EXPECTED_CAUSAL_FRAMES,
+        },
+        "temporal_proxy_valid_frame_pairs": {
+            "expected": EXPECTED_CAUSAL_FRAMES,
+            "actual": metrics["stage_t_temporal_proxy"]["valid_frame_pairs"],
+            "pass": metrics["stage_t_temporal_proxy"]["valid_frame_pairs"] == EXPECTED_CAUSAL_FRAMES,
+        },
+    }
+    checks["all_pass"] = all(row["pass"] for row in checks.values())
+    return checks
 
 
 def main(argv=None):
@@ -438,11 +632,33 @@ def main(argv=None):
         Path(args.root), "val"
     )
     all_groups = sequence_groups(dataset)
+    missing = [sequence for sequence in FULL9 if sequence not in all_groups]
+    if missing:
+        raise RuntimeError(f"Missing Full9 sequences: {missing}")
     groups = {sequence: all_groups[sequence] for sequence in FULL9}
-    expected_temporal_frames = sum(max(len(groups[sequence]) - 1, 0) for sequence in FULL9)
+    dataset_frames = sum(len(groups[sequence]) for sequence in FULL9)
+    expected_temporal_frames = sum(
+        max(len(groups[sequence]) - 1, 0) for sequence in FULL9
+    )
+
+    top_thresholds, prepass_valid_pixels = collect_global_top_thresholds(
+        model, groups, args.temperature
+    )
+    results = evaluate(
+        model,
+        encoder,
+        predictor,
+        groups,
+        FrozenRAFT(),
+        args.temperature,
+        top_thresholds,
+    )
+    reproduction = _reproduction_checks(
+        results, dataset_frames, expected_temporal_frames
+    )
 
     result = {
-        "experiment": "Host-Temporal Complementarity Diagnostic",
+        "experiment": "Host-Temporal Complementarity and Entropy-Gated Fusion Diagnostic",
         "inference_only": True,
         "training": False,
         "full9": list(FULL9),
@@ -453,26 +669,40 @@ def main(argv=None):
             "Frozen Stage-T Predicted-T decode used as a proxy; this is not a "
             "trained C+D task-space prior."
         ),
-        "oracle_definition": (
+        "repair_only_label_oracle_definition": (
             "Frame 0 uses Host. On causal frames t>0, keep Host when Host is "
             "correct; if Host is wrong and temporal proxy is correct, select "
-            "the temporal prediction; if both are wrong, keep Host. GT is "
-            "used only by this offline selector."
+            "the temporal label; if both are wrong, keep Host. This is a label-"
+            "selection repair oracle, not a theoretical upper bound for a learned "
+            "feature correction or future C+D model."
         ),
         "complementarity_protocol": (
             "Four-way pixel counts and Host-entropy analysis exclude the first "
-            "frame of each sequence, because no historical prediction exists."
+            "frame of each sequence because no historical prediction exists."
         ),
+        "entropy_gate_protocol": (
+            "Hard zero-training diagnostic only: on causal frames select the "
+            "temporal proxy where normalized Host entropy exceeds a fixed/global-"
+            "top threshold; otherwise retain Host. No learned gate is involved."
+        ),
+        "global_top_uncertainty_thresholds": {
+            str(fraction): top_thresholds[fraction]
+            for fraction in TOP_UNCERTAIN_FRACTIONS
+        },
+        "top_threshold_prepass_valid_pixels": prepass_valid_pixels,
         "expected_temporal_frames": expected_temporal_frames,
-        "results": evaluate(
-            model, encoder, predictor, groups, FrozenRAFT(), args.temperature
-        ),
+        "results": results,
+        "reproduction_checks": reproduction,
     }
 
-    observed = result["results"]["temporal_frames_excluding_sequence_first_frames"]
-    if observed != expected_temporal_frames:
+    if not reproduction["all_pass"]:
+        failed = [
+            name for name, row in reproduction.items()
+            if name != "all_pass" and not row["pass"]
+        ]
         raise RuntimeError(
-            f"Temporal-frame protocol mismatch: expected {expected_temporal_frames}, got {observed}"
+            "Protocol/reproduction check failed before accepting diagnostic results: "
+            + ", ".join(failed)
         )
 
     output = Path(args.result_output)
