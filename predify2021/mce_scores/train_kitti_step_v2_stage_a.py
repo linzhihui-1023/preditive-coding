@@ -24,12 +24,13 @@ NUM_CLASSES = 19
 IGNORE = 255
 MAX_EPOCHS = 10
 PATIENCE = 3
+MIN_MIOU_IMPROVEMENT = 1e-4
 LR = 1e-5
 WEIGHT_DECAY = 1e-2
 LAMBDA_SEM = 1.0
 FULL9 = ("0002", "0006", "0007", "0008", "0010", "0013", "0014", "0016", "0018")
-OUTPUT_DEFAULT = "/home/lin/predify/experiments/kitti_step_v2_stage_a"
-RESULT_DEFAULT = "results/kitti_step_v2_stage_a"
+OUTPUT_DEFAULT = "/home/lin/predify/experiments/kitti_step_v2_stage_a_relaxed_gate"
+RESULT_DEFAULT = "results/kitti_step_v2_stage_a_relaxed_gate"
 
 
 def encode_host(model, sample):
@@ -135,11 +136,13 @@ def main(argv=None):
         out = Path(args.output); out.mkdir(parents=True, exist_ok=True); payload = {"experiment": "v2_stage_a", "epoch": epoch, "encoder_state_dict": encoder.state_dict(), "decoder_state_dict": decoder.state_dict(), "metrics": val_row, "config": {"lambda_sem": LAMBDA_SEM, "lr": LR}}
         torch.save(payload, out / f"epoch_{epoch:03d}.pt")
         score = val_row["mIoU_rec"]
-        if best is None or score > best["mIoU_rec"]: best = {"epoch": epoch, "mIoU_rec": score, "delta_mIoU_rec": val_row["delta_mIoU_rec"]}; torch.save(payload, out / "best.pt")
-        if epoch - best["epoch"] >= args.patience: break
-    result = {"experiment": "Predify V2-Staged Stage A", "trainable_modules": ["Z4PredictiveSemanticEncoder", "Z4PredictiveSemanticDecoder"], "frozen_modules": ["Host", "Adapter", "Writeback", "segmentation decoder", "Predictor", "Update Head"], "history": history, "best": best}
-    result_dir = Path(args.result_output); result_dir.mkdir(parents=True, exist_ok=True); (result_dir / "summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n"); (result_dir / "README.md").write_text("# V2-Staged Stage A\nLearns a 64D predictive representation and a 128D reconstruction decoder.\n")
+        if best is None or score > best["mIoU_rec"] + MIN_MIOU_IMPROVEMENT: best = {"epoch": epoch, "mIoU_rec": score, "delta_mIoU_rec": val_row["delta_mIoU_rec"]}; torch.save(payload, out / "best.pt")
+        # Do not judge the first three epochs.  Thereafter stop only when the
+        # best representation is still below the hard -0.5 pp boundary and
+        # has failed to improve by the numerical tolerance for PATIENCE epochs.
+        if epoch >= 3 and epoch - best["epoch"] >= args.patience and best["delta_mIoU_rec"] < -0.005: break
+    result = {"experiment": "Predify V2-Staged Stage A (relaxed early gate)", "trainable_modules": ["Z4PredictiveSemanticEncoder", "Z4PredictiveSemanticDecoder"], "frozen_modules": ["Host", "Adapter", "Writeback", "segmentation decoder", "Predictor", "Update Head"], "min_mIoU_improvement": MIN_MIOU_IMPROVEMENT, "no_go_after_epoch": 3, "patience": args.patience, "stop_delta_mIoU_rec": -0.005, "history": history, "best": best}
+    result_dir = Path(args.result_output); result_dir.mkdir(parents=True, exist_ok=True); (result_dir / "summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n"); (result_dir / "README.md").write_text("# V2-Staged Stage A (relaxed gate)\nEpochs 1-3 are never stopped by the mIoU gate. From Epoch 3, stopping requires three epochs without a >=1e-4 mIoU improvement and best delta below -0.5 pp.\n")
 
 
 if __name__ == "__main__": main()
-
