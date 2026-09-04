@@ -338,7 +338,7 @@ def main(argv=None):
     print(json.dumps({"zero_step": zero_step, "trainable_parameters": trainable_parameter_report(encoder, predictor)}, sort_keys=True), flush=True)
     optimizer = torch.optim.AdamW(list(encoder.parameters()) + list(predictor.parameters()), lr=LR, weight_decay=WEIGHT_DECAY)
     raft = FrozenRAFT()
-    history = []; best = None; stale = 0
+    history = []; best = None
     for epoch in range(1, args.epochs + 1):
         encoder.train(); predictor.train()
         totals = {"frames": 0, "windows": 0, "prediction_loss": 0.0, "anchor_loss": 0.0, "total_loss": 0.0,
@@ -374,18 +374,23 @@ def main(argv=None):
             "reference_Rpred_Z4": 0.9451,
             "final_output_is_host": True,
         }
-        history.append(record); print(json.dumps(record, sort_keys=True), flush=True)
         output = Path(args.output); output.mkdir(parents=True, exist_ok=True)
         payload = {"experiment": "v2_auxiliary_stage_t", "epoch": epoch, "encoder_state_dict": encoder.state_dict(), "predictor_state_dict": predictor.state_dict(), "metrics": record}
-        torch.save(payload, output / f"epoch_{epoch:03d}.pt")
         ratio = record["Rpred"]
         dynamic_ok = record["dynamic_ratio"] >= 0.5
         sequences_ok = record["sequences_better_than_persistence"] >= 6
-        if dynamic_ok and sequences_ok and (best is None or ratio < best["Rpred"]):
-            best = {"epoch": epoch, "Rpred": ratio, "dynamic_ratio": record["dynamic_ratio"], "metrics": metrics}; torch.save(payload, output / "best.pt"); stale = 0
-        else:
-            stale += 1
-        if best is not None and epoch - best["epoch"] >= args.patience:
+        selection_valid = bool(ratio < 1.0 and dynamic_ok and sequences_ok)
+        record["selection_valid"] = selection_valid
+        history.append(record); print(json.dumps(record, sort_keys=True), flush=True)
+        torch.save(payload, output / f"epoch_{epoch:03d}.pt")
+        if selection_valid and (best is None or ratio < best["Rpred"]):
+            best = {"epoch": epoch, "Rpred": ratio, "dynamic_ratio": record["dynamic_ratio"],
+                    "selection_valid": True, "metrics": metrics}
+            torch.save(payload, output / "best.pt")
+        # Patience starts only after the first valid checkpoint.  Invalid early
+        # epochs therefore cannot consume the Stage-T training budget.
+        if best is not None and bool(best["selection_valid"]) and epoch - int(best["epoch"]) >= args.patience:
+            print(f"Early stopping at epoch {epoch}; best valid epoch was {best['epoch']}", flush=True)
             break
     result = {
         "experiment": "Predify V2-Auxiliary Stage T", "source_fast_b_checkpoint": args.fast_b_checkpoint,
