@@ -9,7 +9,7 @@ class TrajGRUCell(nn.Module):
     """Trajectory GRU with learned location-variant recurrent connections.
 
     This experimental cell keeps the current ConvGRU gate convention and
-    candidate nonlinearity unchanged.  The controlled variable is only the
+    candidate nonlinearity unchanged. The controlled variable is only the
     recurrent spatial connection: fixed 3x3 convolution is replaced by learned
     trajectory sampling followed by per-link 1x1 projections.
     """
@@ -110,7 +110,7 @@ class TrajGRUCell(nn.Module):
         reset = torch.sigmoid(x_reset + hidden_reset)
         candidate = torch.tanh(x_candidate + reset * hidden_candidate)
 
-        # Match the existing ConvGRU convention exactly.  Therefore the only
+        # Match the existing ConvGRU convention exactly. Therefore the only
         # intended architectural change in this experiment is spatial transport.
         return (1.0 - update) * hidden + update * candidate
 
@@ -151,7 +151,8 @@ def trajgru_sanity_checks(device):
             f"TrajGRU zero-flow identity failed: max_abs={identity_max_abs:.6g}"
         )
 
-    # 2) A one-pixel displacement must change a non-constant feature map.
+    # 2) Coordinate convention: +1 x samples one pixel to the right, so an
+    # impulse in the source appears one pixel to the left in the warped output.
     impulse = torch.zeros(1, 1, 8, 10, device=device, dtype=dtype)
     impulse[:, :, 3, 4] = 1.0
     impulse_grid = TrajGRUCell._base_grid(impulse)
@@ -163,9 +164,12 @@ def trajgru_sanity_checks(device):
         impulse_grid,
     )
     displacement_change = float((shifted - impulse).abs().sum().item())
-    if displacement_change <= 0.5:
+    peak_index = int(shifted[0, 0].reshape(-1).argmax().item())
+    peak_y, peak_x = divmod(peak_index, shifted.shape[-1])
+    if displacement_change <= 0.5 or (peak_y, peak_x) != (3, 3):
         raise RuntimeError(
-            "TrajGRU non-zero displacement check failed: warp did not move features"
+            "TrajGRU displacement-direction check failed: "
+            f"change={displacement_change:.6g}, peak=({peak_y},{peak_x})"
         )
 
     # 3) The learned flow generator must receive gradient through grid_sample.
@@ -182,7 +186,11 @@ def trajgru_sanity_checks(device):
     loss.backward()
     flow_grad = cell.flow_generator[-1].weight.grad
     flow_grad_norm = 0.0 if flow_grad is None else float(flow_grad.norm().item())
-    if not torch.isfinite(torch.tensor(flow_grad_norm)) or flow_grad_norm <= 0.0:
+    if (
+        flow_grad is None
+        or not bool(torch.isfinite(flow_grad).all().item())
+        or flow_grad_norm <= 0.0
+    ):
         raise RuntimeError(
             f"TrajGRU flow-gradient check failed: grad_norm={flow_grad_norm:.6g}"
         )
@@ -190,5 +198,6 @@ def trajgru_sanity_checks(device):
     return {
         "zero_flow_identity_max_abs": identity_max_abs,
         "one_pixel_displacement_change": displacement_change,
+        "one_pixel_displacement_peak": [peak_y, peak_x],
         "flow_generator_grad_norm": flow_grad_norm,
     }
