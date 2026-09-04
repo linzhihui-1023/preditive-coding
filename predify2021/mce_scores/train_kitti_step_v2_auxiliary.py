@@ -370,6 +370,7 @@ def main(argv=None):
             "dynamic_ratio": temporal["dynamic_ratio"],
             "state_rms": temporal["state_rms"], "state_std": temporal["state_std"],
             "sequences_better_than_persistence": temporal["sequences_better_than_persistence"],
+            "sequences_gate_passed": temporal["sequences_better_than_persistence"] >= 6,
             "reference_Rpred_Z4": 0.9451,
             "final_output_is_host": True,
         }
