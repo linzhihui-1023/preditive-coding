@@ -208,7 +208,8 @@ def _add_tc(previous_prediction, current_prediction, flow, sums, counts):
 def evaluate(model, encoder, predictor, groups, raft):
     names = ("host", "current_t", "predicted_t")
     confusion = {name: torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64) for name in names}
-    vc = {name: VideoConsistency() for name in names}
+    vc_sums = {name: {8: 0.0, 16: 0.0} for name in names}
+    vc_counts = {name: {8: 0, 16: 0} for name in names}
     mtc_sum = {name: 0.0 for name in names}; mtc_count = {name: 0 for name in names}
     temporal_keys = ("pred_mse", "copy_mse", "true_delta_sq", "state_sq", "raw_delta_sq", "pred_motion_sq")
     temporal_sum = {key: 0.0 for key in temporal_keys}; temporal_pairs = 0; state_rms_sum = 0.0; state_std_sum = 0.0; state_frames = 0; better_sequences = 0
@@ -239,7 +240,7 @@ def evaluate(model, encoder, predictor, groups, raft):
             for name in names:
                 update_confusion_matrix(confusion[name], predictions[name].squeeze(0).cpu(), mask)
                 update_confusion_matrix(seq_conf[name], predictions[name].squeeze(0).cpu(), mask)
-                vc[name].update(mask, predictions[name]); seq_vc[name].update(mask, predictions[name])
+                seq_vc[name].update(mask, predictions[name])
             if previous_image is not None:
                 flow = raft.current_to_previous(image, previous_image)
                 for name in names:
@@ -269,6 +270,10 @@ def evaluate(model, encoder, predictor, groups, raft):
         per_sequence[sequence] = {}
         for name in names:
             values = seq_vc[name].values(); iou = compute_iou(seq_conf[name])
+            stats = seq_vc[name].stats()
+            for length in (8, 16):
+                vc_sums[name][length] += stats[length]["sum"]
+                vc_counts[name][length] += stats[length]["count"]
             per_sequence[sequence][name] = {
                 "mIoU": float(torch.nanmean(iou).item()), "mVC8": values[8], "mVC16": values[16],
                 "mTC": seq_mtc_sum[name] / seq_mtc_count[name] if seq_mtc_count[name] else float("nan"),
@@ -281,8 +286,10 @@ def evaluate(model, encoder, predictor, groups, raft):
         per_sequence[sequence]["valid_frame_pairs"] = seq_mtc_count["host"]
     metrics = {}
     for name in names:
-        values = vc[name].values(); iou = compute_iou(confusion[name])
-        metrics[name] = {"mIoU": float(torch.nanmean(iou).item()), "mVC8": values[8], "mVC16": values[16],
+        iou = compute_iou(confusion[name])
+        metrics[name] = {"mIoU": float(torch.nanmean(iou).item()),
+                         "mVC8": vc_sums[name][8] / vc_counts[name][8] if vc_counts[name][8] else float("nan"),
+                         "mVC16": vc_sums[name][16] / vc_counts[name][16] if vc_counts[name][16] else float("nan"),
                          "mTC": mtc_sum[name] / mtc_count[name] if mtc_count[name] else float("nan"),
                          "valid_frame_pairs": mtc_count[name]}
     metrics["per_sequence"] = per_sequence
