@@ -1,0 +1,32 @@
+{
+  "experiment": "Predify V2-Staged Stage A",
+  "status": "NO_GO_STOPPED_AFTER_EPOCH_1",
+  "epoch": 1,
+  "gate": {
+    "minimum_delta_mIoU_rec_pp": -0.2,
+    "stop_delta_mIoU_rec_pp": -0.5,
+    "delta_mIoU_rec_pp": -33.47945737099153,
+    "passed": false
+  },
+  "train": {
+    "frames": 5027,
+    "Lrec": 0.027470190072091644,
+    "Lsem": 0.6223960811406024,
+    "total": 0.6498662714565016,
+    "reconstruction_mse": 0.05494038014418329,
+    "state_rms": 0.2018303682770849,
+    "state_std": 0.2008210818955954
+  },
+  "validation": {
+    "frames": 2981,
+    "pairs": 2972,
+    "mIoU_host": 0.6541093425332458,
+    "mIoU_rec": 0.3193147688233305,
+    "delta_mIoU_rec": -0.33479457370991533,
+    "reconstruction_mse": 0.04779048218288425,
+    "state_rms": 0.2432109847719819,
+    "state_std": 0.24172606531384405,
+    "state_temporal_mse": 4.266121837318949e-06
+  },
+  "checkpoint": "/home/lin/predify/experiments/kitti_step_v2_stage_a/epoch_001.pt"
+}
