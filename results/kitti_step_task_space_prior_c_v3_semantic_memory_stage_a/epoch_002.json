@@ -1,0 +1,83 @@
+{
+  "delta_c_v3_vs_e1_base": {
+    "mIoU": -0.006963976080328171,
+    "mTC": 0.004069989855538525,
+    "mVC16": 0.011490546380339972,
+    "mVC8": 0.008827934782918878
+  },
+  "delta_vs_host": {
+    "c_v3": {
+      "mIoU": -0.005701216843290058,
+      "mTC": 0.006080504902964745,
+      "mVC16": 0.02285886221288258,
+      "mVC8": 0.01718739359305166
+    },
+    "e1_base": {
+      "mIoU": 0.0012627592370381135,
+      "mTC": 0.00201051504742622,
+      "mVC16": 0.011368315832542608,
+      "mVC8": 0.00835945881013278
+    }
+  },
+  "diagnostics": {
+    "agreement_mean": 0.919454303859578,
+    "delta_refinement_abs": 0.290971589257417,
+    "frames_with_temporal_prior": 2963,
+    "memory_abs": 0.4320294124388912,
+    "memory_reliability_mean": 0.8799493839480851,
+    "semantic_state_abs": 0.060368896160907154,
+    "transportability_mean": 0.9577721966467634,
+    "warped_memory_abs": 0.43411758800555517
+  },
+  "epoch": 2,
+  "metrics": {
+    "c_v3": {
+      "mIoU": 0.6484161896935045,
+      "mTC": 0.7138646109052756,
+      "mVC16": 0.9518297183031789,
+      "mVC8": 0.9551338547148728
+    },
+    "e1_base": {
+      "mIoU": 0.6553801657738326,
+      "mTC": 0.7097946210497371,
+      "mVC16": 0.9403391719228389,
+      "mVC8": 0.9463059199319539
+    },
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC16": 0.9289708560902963,
+      "mVC8": 0.9379464611218211
+    }
+  },
+  "temporal_scale_calibration": {
+    "calibration_ratio": 0.5,
+    "calibration_window": 2,
+    "global_window_count": 1260,
+    "seg_grad_norm": 0.02790185995399952,
+    "temp_grad_norm": 0.00016870233230292797,
+    "value": 82.6955370833224,
+    "warmup_done": true,
+    "warmup_windows": 1
+  },
+  "train": {
+    "agreement_mean": 0.9266951917649644,
+    "delta_refinement_abs": 0.2565493201771183,
+    "frames": 416.9166666666667,
+    "lambda_temporal": 82.6955370833224,
+    "memory_abs": 0.46685781946616994,
+    "memory_reliability_mean": 0.8867958298950708,
+    "previous_true_confidence_mean": 0.9535669378472096,
+    "segmentation_ce": 0.13012794997071697,
+    "semantic_state_abs": 0.05860790747443376,
+    "temporal_calibration_window": 2.0,
+    "temporal_l1": 0.0010851393428388972,
+    "temporal_valid_fraction": 0.9286461671272269,
+    "temporal_warmup_windows": 1.0,
+    "temporal_weight_mean": 0.8480680394322233,
+    "total": 0.2207661393923085,
+    "transportability_mean": 0.9576283233339288,
+    "warped_memory_abs": 0.4679654401612112,
+    "windows": 52.5
+  }
+}

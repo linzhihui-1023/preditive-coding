@@ -1,0 +1,314 @@
+{
+  "base_checkpoint": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_spatial_mask_semantic_state_r2/epoch_001.pt",
+  "best": {
+    "delta_vs_e1_base": {
+      "mIoU": -0.00528880079881755,
+      "mTC": 0.0019654500591901325,
+      "mVC16": 0.008614346057187805,
+      "mVC8": 0.006357683621063259
+    },
+    "delta_vs_host": {
+      "mIoU": -0.0040260415617794365,
+      "mTC": 0.003975965106616353,
+      "mVC16": 0.019982661889730413,
+      "mVC8": 0.01471714243119604
+    },
+    "epoch": 1,
+    "metrics": {
+      "mIoU": 0.6500913649750151,
+      "mTC": 0.7117600711089273,
+      "mVC16": 0.9489535179800267,
+      "mVC8": 0.9526636035530172
+    },
+    "selection_key": [
+      0,
+      0.6500913649750151,
+      0.7117600711089273
+    ]
+  },
+  "experiment": "C-V3 Stage A Motion-Gated Semantic Memory",
+  "history": [
+    {
+      "delta_c_v3_vs_e1_base": {
+        "mIoU": -0.00528880079881755,
+        "mTC": 0.0019654500591901325,
+        "mVC16": 0.008614346057187805,
+        "mVC8": 0.006357683621063259
+      },
+      "delta_vs_host": {
+        "c_v3": {
+          "mIoU": -0.0040260415617794365,
+          "mTC": 0.003975965106616353,
+          "mVC16": 0.019982661889730413,
+          "mVC8": 0.01471714243119604
+        },
+        "e1_base": {
+          "mIoU": 0.0012627592370381135,
+          "mTC": 0.00201051504742622,
+          "mVC16": 0.011368315832542608,
+          "mVC8": 0.00835945881013278
+        }
+      },
+      "diagnostics": {
+        "agreement_mean": 0.919454303859578,
+        "delta_refinement_abs": 0.35387187478029763,
+        "frames_with_temporal_prior": 2963,
+        "memory_abs": 0.5552909228896676,
+        "memory_reliability_mean": 0.8799493839480851,
+        "semantic_state_abs": 0.060368896160907154,
+        "transportability_mean": 0.9577721966467634,
+        "warped_memory_abs": 0.5581643000783206
+      },
+      "epoch": 1,
+      "metrics": {
+        "c_v3": {
+          "mIoU": 0.6500913649750151,
+          "mTC": 0.7117600711089273,
+          "mVC16": 0.9489535179800267,
+          "mVC8": 0.9526636035530172
+        },
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC16": 0.9403391719228389,
+          "mVC8": 0.9463059199319539
+        },
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        }
+      },
+      "temporal_scale_calibration": {
+        "calibration_ratio": 0.5,
+        "calibration_window": 2,
+        "global_window_count": 630,
+        "seg_grad_norm": 0.02790185995399952,
+        "temp_grad_norm": 0.00016870233230292797,
+        "value": 82.6955370833224,
+        "warmup_done": true,
+        "warmup_windows": 1
+      },
+      "train": {
+        "agreement_mean": 0.9266951917649644,
+        "delta_refinement_abs": 0.11851930676880207,
+        "frames": 416.9166666666667,
+        "lambda_temporal": 82.6955370833224,
+        "memory_abs": 0.4137466566142318,
+        "memory_reliability_mean": 0.8867958298950708,
+        "previous_true_confidence_mean": 0.9526566797042189,
+        "segmentation_ce": 0.129243923639749,
+        "semantic_state_abs": 0.05860790747443376,
+        "temporal_calibration_window": 2.0,
+        "temporal_l1": 0.0011613290340488035,
+        "temporal_valid_fraction": 0.9286461671272269,
+        "temporal_warmup_windows": 1.0,
+        "temporal_weight_mean": 0.8472450345440358,
+        "total": 0.22529606031765495,
+        "transportability_mean": 0.9576283233339288,
+        "warped_memory_abs": 0.41359845443604565,
+        "windows": 52.5
+      }
+    },
+    {
+      "delta_c_v3_vs_e1_base": {
+        "mIoU": -0.006963976080328171,
+        "mTC": 0.004069989855538525,
+        "mVC16": 0.011490546380339972,
+        "mVC8": 0.008827934782918878
+      },
+      "delta_vs_host": {
+        "c_v3": {
+          "mIoU": -0.005701216843290058,
+          "mTC": 0.006080504902964745,
+          "mVC16": 0.02285886221288258,
+          "mVC8": 0.01718739359305166
+        },
+        "e1_base": {
+          "mIoU": 0.0012627592370381135,
+          "mTC": 0.00201051504742622,
+          "mVC16": 0.011368315832542608,
+          "mVC8": 0.00835945881013278
+        }
+      },
+      "diagnostics": {
+        "agreement_mean": 0.919454303859578,
+        "delta_refinement_abs": 0.290971589257417,
+        "frames_with_temporal_prior": 2963,
+        "memory_abs": 0.4320294124388912,
+        "memory_reliability_mean": 0.8799493839480851,
+        "semantic_state_abs": 0.060368896160907154,
+        "transportability_mean": 0.9577721966467634,
+        "warped_memory_abs": 0.43411758800555517
+      },
+      "epoch": 2,
+      "metrics": {
+        "c_v3": {
+          "mIoU": 0.6484161896935045,
+          "mTC": 0.7138646109052756,
+          "mVC16": 0.9518297183031789,
+          "mVC8": 0.9551338547148728
+        },
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC16": 0.9403391719228389,
+          "mVC8": 0.9463059199319539
+        },
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        }
+      },
+      "temporal_scale_calibration": {
+        "calibration_ratio": 0.5,
+        "calibration_window": 2,
+        "global_window_count": 1260,
+        "seg_grad_norm": 0.02790185995399952,
+        "temp_grad_norm": 0.00016870233230292797,
+        "value": 82.6955370833224,
+        "warmup_done": true,
+        "warmup_windows": 1
+      },
+      "train": {
+        "agreement_mean": 0.9266951917649644,
+        "delta_refinement_abs": 0.2565493201771183,
+        "frames": 416.9166666666667,
+        "lambda_temporal": 82.6955370833224,
+        "memory_abs": 0.46685781946616994,
+        "memory_reliability_mean": 0.8867958298950708,
+        "previous_true_confidence_mean": 0.9535669378472096,
+        "segmentation_ce": 0.13012794997071697,
+        "semantic_state_abs": 0.05860790747443376,
+        "temporal_calibration_window": 2.0,
+        "temporal_l1": 0.0010851393428388972,
+        "temporal_valid_fraction": 0.9286461671272269,
+        "temporal_warmup_windows": 1.0,
+        "temporal_weight_mean": 0.8480680394322233,
+        "total": 0.2207661393923085,
+        "transportability_mean": 0.9576283233339288,
+        "warped_memory_abs": 0.4679654401612112,
+        "windows": 52.5
+      }
+    },
+    {
+      "delta_c_v3_vs_e1_base": {
+        "mIoU": -0.00897499481286923,
+        "mTC": 0.0032475090459793687,
+        "mVC16": 0.009586564369062245,
+        "mVC8": 0.007252320002454349
+      },
+      "delta_vs_host": {
+        "c_v3": {
+          "mIoU": -0.007712235575831117,
+          "mTC": 0.005258024093405589,
+          "mVC16": 0.020954880201604853,
+          "mVC8": 0.01561177881258713
+        },
+        "e1_base": {
+          "mIoU": 0.0012627592370381135,
+          "mTC": 0.00201051504742622,
+          "mVC16": 0.011368315832542608,
+          "mVC8": 0.00835945881013278
+        }
+      },
+      "diagnostics": {
+        "agreement_mean": 0.919454303859578,
+        "delta_refinement_abs": 0.3803398641045738,
+        "frames_with_temporal_prior": 2963,
+        "memory_abs": 0.391128114785168,
+        "memory_reliability_mean": 0.8799493839480851,
+        "semantic_state_abs": 0.060368896160907154,
+        "transportability_mean": 0.9577721966467634,
+        "warped_memory_abs": 0.39238220778140837
+      },
+      "epoch": 3,
+      "metrics": {
+        "c_v3": {
+          "mIoU": 0.6464051709609634,
+          "mTC": 0.7130421300957165,
+          "mVC16": 0.9499257362919011,
+          "mVC8": 0.9535582399344082
+        },
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC16": 0.9403391719228389,
+          "mVC8": 0.9463059199319539
+        },
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        }
+      },
+      "temporal_scale_calibration": {
+        "calibration_ratio": 0.5,
+        "calibration_window": 2,
+        "global_window_count": 1890,
+        "seg_grad_norm": 0.02790185995399952,
+        "temp_grad_norm": 0.00016870233230292797,
+        "value": 82.6955370833224,
+        "warmup_done": true,
+        "warmup_windows": 1
+      },
+      "train": {
+        "agreement_mean": 0.9266951917649644,
+        "delta_refinement_abs": 0.2998670450324407,
+        "frames": 416.9166666666667,
+        "lambda_temporal": 82.6955370833224,
+        "memory_abs": 0.44422073075149626,
+        "memory_reliability_mean": 0.8867958298950708,
+        "previous_true_confidence_mean": 0.9542278481732613,
+        "segmentation_ce": 0.12740627320561282,
+        "semantic_state_abs": 0.05860790747443376,
+        "temporal_calibration_window": 2.0,
+        "temporal_l1": 0.0010668832837433721,
+        "temporal_valid_fraction": 0.9286461671272269,
+        "temporal_warmup_windows": 1.0,
+        "temporal_weight_mean": 0.8486670828544179,
+        "total": 0.21651189366070156,
+        "transportability_mean": 0.9576283233339288,
+        "warped_memory_abs": 0.44492461619667995,
+        "windows": 52.5
+      }
+    }
+  ],
+  "purpose": "Test whether high-dimensional motion-compensated semantic evidence plus adaptive vector readout breaks the C-V2 scalar/direct-correction ceiling.",
+  "stage_a_gate": {
+    "criterion": "best Full9 delta_vs_host mIoU >= +0.5 pp AND mTC >= +1.0 pp",
+    "go": false,
+    "if_no_go": "Do not proceed to Stage B motion unfreezing or parameter sweeps."
+  },
+  "temporal_scale_calibration": {
+    "calibration_ratio": 0.5,
+    "calibration_window": 2,
+    "global_window_count": 1890,
+    "seg_grad_norm": 0.02790185995399952,
+    "temp_grad_norm": 0.00016870233230292797,
+    "value": 82.6955370833224,
+    "warmup_done": true,
+    "warmup_windows": 1
+  },
+  "training": {
+    "T_frozen": true,
+    "epochs": 3,
+    "lr": 0.0001,
+    "motion_frozen": true,
+    "no_lambda_sweep": true,
+    "only_trainable": "MotionGatedSemanticMemoryRefiner",
+    "tbptt_steps": 8,
+    "temporal_grad_ratio": 0.5,
+    "temporal_scale_policy": "one segmentation-only TBPTT warm-up window, then the next valid window fixes lambda_temporal = 0.5 * ||grad L_seg|| / ||grad L_temp||; no lambda sweep",
+    "temporal_warmup_windows": 1,
+    "weight_decay": 0.01
+  },
+  "zero_step_equality": {
+    "delta_refinement_abs_max": 0.0,
+    "e1_vs_cv3_abs_max": 0.0
+  }
+}
