@@ -1,4 +1,11 @@
-"""C-V2 causal motion transport primitives for task-space temporal priors."""
+"""Task-space motion transport components for C-V2.
+
+Stage 1 keeps the original causal semantic-history flow predictor. Stage 1B adds
+an explicit pairwise Motion Observer and a residual future-motion predictor.
+RAFT remains training supervision only; no class below depends on RAFT.
+"""
+
+import math
 
 import torch
 from torch import nn
@@ -26,7 +33,6 @@ class CausalMotionTransportPredictor(nn.Module):
             nn.SiLU(),
             nn.Conv2d(self.hidden_channels, 2, 1),
         )
-        # Epoch zero is exact zero-motion persistence regardless of hidden state.
         nn.init.zeros_(self.flow_head[-1].weight)
         nn.init.zeros_(self.flow_head[-1].bias)
 
@@ -37,6 +43,124 @@ class CausalMotionTransportPredictor(nn.Module):
         raw_flow = self.flow_head(hidden)
         backward_flow_low = self.max_displacement_low * torch.tanh(raw_flow)
         return backward_flow_low, hidden
+
+
+class LocalCorrelationMotionObserver(nn.Module):
+    """Observe current backward motion from a frozen Host feature/probability pair.
+
+    The observer estimates M_t = F_{t->t-1}. A local cost volume performs the
+    explicit correspondence search that the original Stage-1 predictor lacked.
+    """
+
+    def __init__(
+        self,
+        c1_channels=256,
+        num_classes=19,
+        projected_channels=32,
+        hidden_channels=64,
+        correlation_radius=4,
+        max_displacement_low=32.0,
+    ):
+        super().__init__()
+        self.c1_channels = int(c1_channels)
+        self.num_classes = int(num_classes)
+        self.projected_channels = int(projected_channels)
+        self.hidden_channels = int(hidden_channels)
+        self.correlation_radius = int(correlation_radius)
+        self.max_displacement_low = float(max_displacement_low)
+        if self.correlation_radius < 0:
+            raise ValueError("correlation_radius must be >= 0")
+
+        groups = 8 if self.projected_channels % 8 == 0 else 1
+        self.feature_projector = nn.Sequential(
+            nn.Conv2d(self.c1_channels, self.projected_channels, 1, bias=False),
+            nn.GroupNorm(groups, self.projected_channels),
+            nn.SiLU(),
+        )
+        correlation_channels = (2 * self.correlation_radius + 1) ** 2
+        input_channels = correlation_channels + 3 * self.num_classes
+        self.flow_head = nn.Sequential(
+            nn.Conv2d(input_channels, self.hidden_channels, 3, padding=1),
+            nn.SiLU(),
+            nn.Conv2d(self.hidden_channels, self.hidden_channels, 3, padding=1),
+            nn.SiLU(),
+            nn.Conv2d(self.hidden_channels, 2, 1),
+        )
+        # E0 is exact zero-motion persistence. The observer must earn every warp.
+        nn.init.zeros_(self.flow_head[-1].weight)
+        nn.init.zeros_(self.flow_head[-1].bias)
+
+    def _local_correlation(self, previous_c1, current_c1):
+        previous = F.normalize(self.feature_projector(previous_c1), dim=1)
+        current = F.normalize(self.feature_projector(current_c1), dim=1)
+        batch, channels, height, width = current.shape
+        radius = self.correlation_radius
+        kernel = 2 * radius + 1
+        patches = F.unfold(previous, kernel_size=kernel, padding=radius)
+        patches = patches.view(batch, channels, kernel * kernel, height, width)
+        correlation = (patches * current.unsqueeze(2)).sum(dim=1)
+        correlation = correlation / math.sqrt(max(channels, 1))
+        return correlation
+
+    def forward(
+        self,
+        previous_c1,
+        current_c1,
+        previous_probability,
+        current_probability,
+    ):
+        if previous_c1.shape[-2:] != current_c1.shape[-2:]:
+            raise ValueError("Previous/current C1 features must share spatial size")
+        if previous_probability.shape[-2:] != current_c1.shape[-2:]:
+            raise ValueError("Host probabilities must be at C1 spatial resolution")
+        correlation = self._local_correlation(previous_c1, current_c1)
+        probability_delta = current_probability - previous_probability
+        evidence = torch.cat(
+            (correlation, previous_probability, current_probability, probability_delta),
+            dim=1,
+        )
+        raw_flow = self.flow_head(evidence)
+        return self.max_displacement_low * torch.tanh(raw_flow)
+
+
+class MotionResidualPredictor(nn.Module):
+    """Predict future motion as observed motion plus a bounded residual.
+
+    Input at time t is the already observed M_t = F_{t->t-1} plus the semantic
+    prediction error e_t. The output predicts M_{t+1} = F_{t+1->t}.
+    """
+
+    def __init__(
+        self,
+        num_classes=19,
+        hidden_channels=64,
+        max_observed_displacement_low=32.0,
+        max_residual_displacement_low=16.0,
+    ):
+        super().__init__()
+        self.num_classes = int(num_classes)
+        self.hidden_channels = int(hidden_channels)
+        self.max_observed_displacement_low = float(max_observed_displacement_low)
+        self.max_residual_displacement_low = float(max_residual_displacement_low)
+        self.recurrent = ConvGRUCell(2 + self.num_classes, self.hidden_channels)
+        self.delta_head = nn.Sequential(
+            nn.Conv2d(self.hidden_channels, self.hidden_channels, 3, padding=1),
+            nn.SiLU(),
+            nn.Conv2d(self.hidden_channels, 2, 1),
+        )
+        # E0 is exactly Lagged-Motion-Persistence: M_hat_{t+1} = M_t.
+        nn.init.zeros_(self.delta_head[-1].weight)
+        nn.init.zeros_(self.delta_head[-1].bias)
+
+    def predict_next(self, observed_motion, probability_error, hidden=None):
+        scale = max(self.max_observed_displacement_low, 1e-6)
+        normalized_motion = observed_motion / scale
+        recurrent_input = torch.cat((normalized_motion, probability_error), dim=1)
+        hidden = self.recurrent(recurrent_input, hidden)
+        raw_delta = self.delta_head(hidden)
+        delta_motion = self.max_residual_displacement_low * torch.tanh(raw_delta)
+        predicted_motion = observed_motion + delta_motion
+        return predicted_motion, delta_motion, hidden
 
 
 def low_flow_grid(backward_flow_low):
@@ -79,9 +203,6 @@ def warp_low_logits(previous_logits_low, backward_flow_low):
         padding_mode="zeros",
         align_corners=True,
     )
-    # Never use the current Host as an invalid-flow fallback: that would leak
-    # target-frame information into the historical prior. Use same-coordinate
-    # previous logits instead.
     warped = torch.where(valid.unsqueeze(1), warped, previous_logits_low.float())
     return warped.to(previous_logits_low.dtype), valid
 
@@ -91,8 +212,6 @@ def downsample_backward_flow(full_flow, low_size):
     low_h, low_w = low_size
     full_h, full_w = full_flow.shape[-2:]
     low = F.interpolate(full_flow, size=low_size, mode="bilinear", align_corners=True).clone()
-    # flow_grid/grid_sample both use align_corners=True, so one endpoint-to-endpoint
-    # pixel displacement scales with (size - 1), not size.
     x_scale = (low_w - 1) / max(full_w - 1, 1)
     y_scale = (low_h - 1) / max(full_h - 1, 1)
     low[:, 0] *= x_scale
@@ -124,3 +243,9 @@ def normalized_flow_distillation_loss(predicted_flow, teacher_flow, max_displace
         predicted_flow[valid] / scale,
         teacher_target[valid] / scale,
     )
+
+
+def normalized_motion_residual_l2(delta_motion, max_residual_displacement):
+    """Dimensionless weak L2 regularizer for residual future motion."""
+    scale = max(float(max_residual_displacement), 1e-6)
+    return (delta_motion / scale).square().mean()
