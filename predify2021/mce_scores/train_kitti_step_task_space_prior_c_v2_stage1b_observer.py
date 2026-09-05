@@ -184,6 +184,7 @@ def _evaluate(model, observer, groups, raft):
         "l1": 0.0,
         "spatial_valid_pixels": 0,
         "reachable_pixels": 0,
+        "within_correlation_radius_pixels": 0,
     }
     per_sequence = {}
     observer.eval()
@@ -237,6 +238,11 @@ def _evaluate(model, observer, groups, raft):
                 reachable, spatial_valid = teacher_reachable_mask(
                     teacher_low, observer.max_displacement_low
                 )
+                within_correlation_radius = (
+                    spatial_valid
+                    & (teacher_low[:, 0].abs() <= observer.correlation_radius)
+                    & (teacher_low[:, 1].abs() <= observer.correlation_radius)
+                )
                 mask = reachable.unsqueeze(1).expand_as(observed_motion)
                 values = int(mask.sum().item())
                 if values:
@@ -246,6 +252,9 @@ def _evaluate(model, observer, groups, raft):
                     flow_diag["l1"] += float((observed_motion[mask] - teacher_low[mask]).abs().sum().item())
                 flow_diag["spatial_valid_pixels"] += int(spatial_valid.sum().item())
                 flow_diag["reachable_pixels"] += int(reachable.sum().item())
+                flow_diag["within_correlation_radius_pixels"] += int(
+                    within_correlation_radius.sum().item()
+                )
                 flow_diag["pairs"] += 1
 
             predictions = {
@@ -329,6 +338,10 @@ def _evaluate(model, observer, groups, raft):
             "teacher_abs_mean_low_pixels_reachable": flow_diag["teacher_abs"] / values,
             "l1_mean_low_pixels_reachable": flow_diag["l1"] / values,
             "teacher_reachable_fraction_of_spatial_valid": flow_diag["reachable_pixels"] / spatial_valid,
+            "teacher_within_correlation_radius_fraction": (
+                flow_diag["within_correlation_radius_pixels"] / spatial_valid
+            ),
+            "correlation_radius_low_pixels": observer.correlation_radius,
         },
         "per_sequence": per_sequence,
     }
@@ -432,7 +445,12 @@ def main(argv=None):
             "architecture": {
                 "input": "pairwise frozen Host C1 features + pairwise Host task probabilities",
                 "matching": "local correlation cost volume",
+                "c1_channels": C1_CHANNELS,
+                "num_classes": NUM_CLASSES,
+                "projected_channels": PROJECTED_CHANNELS,
+                "hidden_channels": HIDDEN_CHANNELS,
                 "correlation_radius": args.correlation_radius,
+                "max_displacement_low": args.max_displacement_low,
                 "prediction": "observed backward motion M_t = F_{t->t-1}",
                 "raft_at_inference": False,
             },
@@ -460,6 +478,8 @@ def main(argv=None):
             "weight_decay": args.weight_decay,
             "lambda_warp": args.lambda_warp,
             "lambda_flow": args.lambda_flow,
+            "correlation_radius": args.correlation_radius,
+            "max_displacement_low": args.max_displacement_low,
             "max_train_pairs_per_sequence": args.max_train_pairs,
         },
         "frozen": ["Host", "Adapter", "Writeback", "Decoder", "all existing temporal modules"],
