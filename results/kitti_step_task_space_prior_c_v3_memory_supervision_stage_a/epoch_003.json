@@ -1,0 +1,141 @@
+{
+  "delta_c_v3_vs_e1_base": {
+    "mIoU": -0.0003489348704652784,
+    "mTC": -0.022374180752534722,
+    "mVC16": -0.0071029506811352006,
+    "mVC8": -0.003794088526049677
+  },
+  "delta_vs_host": {
+    "c_v3": {
+      "mIoU": 0.0009138243665728352,
+      "mTC": -0.020363665705108502,
+      "mVC16": 0.004265365151407408,
+      "mVC8": 0.004565370284083103
+    },
+    "e1_base": {
+      "mIoU": 0.0012627592370381135,
+      "mTC": 0.00201051504742622,
+      "mVC16": 0.011368315832542608,
+      "mVC8": 0.00835945881013278
+    }
+  },
+  "diagnostics": {
+    "agreement_mean": 0.919454303859578,
+    "delta_refinement_abs": 0.19754373082791155,
+    "frames_with_temporal_prior": 2963,
+    "memory_abs": 0.3790699689172226,
+    "memory_reliability_mean": 0.8799493839480851,
+    "semantic_state_abs": 0.060368896160907154,
+    "transportability_mean": 0.9577721966467634,
+    "warped_memory_abs": 0.3783563673848282
+  },
+  "epoch": 3,
+  "memory_scale_calibration": {
+    "calibration_ratio": 0.5,
+    "calibration_window": 2,
+    "global_window_count": 1890,
+    "mem_grad_norm": 3.9698586463928223,
+    "seg_grad_norm": null,
+    "task_grad_norm": 0.551764965057373,
+    "temp_grad_norm": null,
+    "value": 0.06949428357590635,
+    "warmup_done": true,
+    "warmup_windows": 1
+  },
+  "metrics": {
+    "c_v3": {
+      "mIoU": 0.6550312309033673,
+      "mTC": 0.6874204402972024,
+      "mVC16": 0.9332362212417037,
+      "mVC8": 0.9425118314059042
+    },
+    "e1_base": {
+      "mIoU": 0.6553801657738326,
+      "mTC": 0.7097946210497371,
+      "mVC16": 0.9403391719228389,
+      "mVC8": 0.9463059199319539
+    },
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC16": 0.9289708560902963,
+      "mVC8": 0.9379464611218211
+    }
+  },
+  "readout_memory_usage": {
+    "blocks": {
+      "appearance": {
+        "channels": 32,
+        "energy_share": 0.17727844683450972,
+        "l2": 1.4322279574934822,
+        "rms": 0.04475712367167132
+      },
+      "host_probability": {
+        "channels": 19,
+        "energy_share": 0.13785919387468987,
+        "l2": 1.262996204044319,
+        "rms": 0.05122125941684493
+      },
+      "memory": {
+        "channels": 64,
+        "energy_share": 0.42209982327539386,
+        "l2": 2.2099974018616746,
+        "rms": 0.04883450466440755
+      },
+      "prediction_error": {
+        "channels": 19,
+        "energy_share": 0.13005521016150826,
+        "l2": 1.2267273713118558,
+        "rms": 0.04975036388592413
+      },
+      "semantic_state": {
+        "channels": 19,
+        "energy_share": 0.12654643302622054,
+        "l2": 1.2100662050184068,
+        "rms": 0.049074663986127205
+      },
+      "transportability": {
+        "channels": 1,
+        "energy_share": 0.006160882525198628,
+        "l2": 0.26699654520492805,
+        "rms": 0.0471987669169463
+      }
+    },
+    "definition": "Adaptive Readout first 1x1 projection weight statistics; proxy for Memory-vs-current-evidence usage, not a causal sensitivity measure",
+    "expected_memory_energy_share_equal_scale": 0.4155844155844156,
+    "memory_energy_share": 0.42209982327539386,
+    "memory_energy_share_relative_to_channel_fraction": 1.0156776997564163,
+    "memory_vs_nonmemory_rms_ratio": 1.0134735649742694,
+    "pre_weight_shape": [
+      32,
+      154,
+      1,
+      1
+    ]
+  },
+  "train": {
+    "agreement_mean": 0.9266951917649644,
+    "delta_refinement_abs": 0.1988153628940935,
+    "frames": 416.9166666666667,
+    "lambda_mem": 0.06949428357590635,
+    "lambda_temporal": 0.06949428357590635,
+    "memory_abs": 0.3651219476626153,
+    "memory_calibration_window": 2.0,
+    "memory_cosine": 0.36334890271222536,
+    "memory_cosine_similarity": 0.6323697985276815,
+    "memory_reliability_mean": 0.8867958298950708,
+    "memory_transportable_density_mean": 0.9246310767216558,
+    "memory_valid_weight_mean": 0.8820195309437412,
+    "memory_warmup_windows": 1.0,
+    "preserve_fraction": 0.954179252582017,
+    "preserve_margin": 0.17121831955917158,
+    "repair_ce": 1.5358403473084936,
+    "repair_fraction": 0.04582074741798297,
+    "semantic_state_abs": 0.05860790747443376,
+    "task_loss": 1.7070586666091148,
+    "total": 1.734834105380891,
+    "transportability_mean": 0.9576283233339288,
+    "warped_memory_abs": 0.3629148917325972,
+    "windows": 52.5
+  }
+}
