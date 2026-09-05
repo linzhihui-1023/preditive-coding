@@ -1,0 +1,225 @@
+{
+  "base_checkpoint": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_spatial_mask_semantic_state_r2/epoch_001.pt",
+  "best": {
+    "delta_vs_e1_base": {
+      "mIoU": -0.00046704472886216486,
+      "mTC": 0.0019010307085470801,
+      "mVC16": 0.0021570036734567255,
+      "mVC8": 0.0016305136037449985
+    },
+    "delta_vs_host": {
+      "mIoU": 0.0007957145081759487,
+      "mTC": 0.0039115457559733,
+      "mVC16": 0.013525319505999334,
+      "mVC8": 0.009989972413877779
+    },
+    "epoch": 1,
+    "metrics": {
+      "mIoU": 0.6549131210449705,
+      "mTC": 0.7116956517582842,
+      "mVC16": 0.9424961755962956,
+      "mVC8": 0.9479364335356989
+    },
+    "selection_key": [
+      1,
+      0.7116956517582842,
+      0.6549131210449705
+    ]
+  },
+  "decision_rule": "Judge U directly against e1_base in the same evaluation. Keep U only if it improves the mIoU/mTC tradeoff without reopening T, C, Motion or threshold sweeps.",
+  "experiment": "C-V2 Stage 1B Utility on Frozen E1 Base r2",
+  "frozen": [
+    "Host",
+    "Motion Observer",
+    "bounded r=2 Task-Alignment Residual",
+    "E1 Transport/Innovation correction",
+    "E1 Transportability Mask"
+  ],
+  "history": [
+    {
+      "delta_utility_vs_e1_base": {
+        "mIoU": -0.00046704472886216486,
+        "mTC": 0.0019010307085470801,
+        "mVC16": 0.0021570036734567255,
+        "mVC8": 0.0016305136037449985
+      },
+      "delta_vs_host": {
+        "e1_base": {
+          "mIoU": 0.0012627592370381135,
+          "mTC": 0.00201051504742622,
+          "mVC16": 0.011368315832542608,
+          "mVC8": 0.00835945881013278
+        },
+        "e1_plus_utility": {
+          "mIoU": 0.0007957145081759487,
+          "mTC": 0.0039115457559733,
+          "mVC16": 0.013525319505999334,
+          "mVC8": 0.009989972413877779
+        }
+      },
+      "diagnostics": {
+        "frames_with_temporal_prior": 2963,
+        "mask_mean": 0.9577721966467634,
+        "semantic_state_abs": 0.060368896160907154,
+        "utility_mean": 0.2615853631557784
+      },
+      "epoch": 1,
+      "metrics": {
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC16": 0.9403391719228389,
+          "mVC8": 0.9463059199319539
+        },
+        "e1_plus_utility": {
+          "mIoU": 0.6549131210449705,
+          "mTC": 0.7116956517582842,
+          "mVC16": 0.9424961755962956,
+          "mVC8": 0.9479364335356989
+        },
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        }
+      },
+      "train": {
+        "frames": 416.9166666666667,
+        "mask_mean": 0.9576283233339288,
+        "semantic_state_abs": 0.05860790747443376,
+        "total": 0.5182445993328517,
+        "utility_bce": 0.5179685651143315,
+        "utility_mean": 0.3061467157414607,
+        "utility_target_mean": 0.23415586145480452,
+        "windows": 52.5
+      }
+    },
+    {
+      "delta_utility_vs_e1_base": {
+        "mIoU": -0.00048089866481670906,
+        "mTC": 0.0014220329554763822,
+        "mVC16": 0.0019254048444955485,
+        "mVC8": 0.0014371110402560117
+      },
+      "delta_vs_host": {
+        "e1_base": {
+          "mIoU": 0.0012627592370381135,
+          "mTC": 0.00201051504742622,
+          "mVC16": 0.011368315832542608,
+          "mVC8": 0.00835945881013278
+        },
+        "e1_plus_utility": {
+          "mIoU": 0.0007818605722214045,
+          "mTC": 0.0034325480029026023,
+          "mVC16": 0.013293720677038157,
+          "mVC8": 0.009796569850388792
+        }
+      },
+      "diagnostics": {
+        "frames_with_temporal_prior": 2963,
+        "mask_mean": 0.9577721966467634,
+        "semantic_state_abs": 0.060368896160907154,
+        "utility_mean": 0.2833264008883564
+      },
+      "epoch": 2,
+      "metrics": {
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC16": 0.9403391719228389,
+          "mVC8": 0.9463059199319539
+        },
+        "e1_plus_utility": {
+          "mIoU": 0.6548992671090159,
+          "mTC": 0.7112166540052135,
+          "mVC16": 0.9422645767673344,
+          "mVC8": 0.9477430309722099
+        },
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        }
+      },
+      "train": {
+        "frames": 416.9166666666667,
+        "mask_mean": 0.9576283233339288,
+        "semantic_state_abs": 0.05860790747443376,
+        "total": 0.4453310516504852,
+        "utility_bce": 0.4447136750473175,
+        "utility_mean": 0.2594928676264756,
+        "utility_target_mean": 0.23415586145480452,
+        "windows": 52.5
+      }
+    },
+    {
+      "delta_utility_vs_e1_base": {
+        "mIoU": -0.0005039117395171377,
+        "mTC": 0.0014550754163569213,
+        "mVC16": 0.0018808592754055997,
+        "mVC8": 0.0013983051460904061
+      },
+      "delta_vs_host": {
+        "e1_base": {
+          "mIoU": 0.0012627592370381135,
+          "mTC": 0.00201051504742622,
+          "mVC16": 0.011368315832542608,
+          "mVC8": 0.00835945881013278
+        },
+        "e1_plus_utility": {
+          "mIoU": 0.0007588474975209758,
+          "mTC": 0.0034655904637831414,
+          "mVC16": 0.013249175107948208,
+          "mVC8": 0.009757763956223187
+        }
+      },
+      "diagnostics": {
+        "frames_with_temporal_prior": 2963,
+        "mask_mean": 0.9577721966467634,
+        "semantic_state_abs": 0.060368896160907154,
+        "utility_mean": 0.2857551279198347
+      },
+      "epoch": 3,
+      "metrics": {
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC16": 0.9403391719228389,
+          "mVC8": 0.9463059199319539
+        },
+        "e1_plus_utility": {
+          "mIoU": 0.6548762540343155,
+          "mTC": 0.711249696466094,
+          "mVC16": 0.9422200311982445,
+          "mVC8": 0.9477042250780443
+        },
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        }
+      },
+      "train": {
+        "frames": 416.9166666666667,
+        "mask_mean": 0.9576283233339288,
+        "semantic_state_abs": 0.05860790747443376,
+        "total": 0.4214743574360445,
+        "utility_bce": 0.42084323805518653,
+        "utility_mean": 0.26184931611340007,
+        "utility_target_mean": 0.23415586145480452,
+        "windows": 52.5
+      }
+    }
+  ],
+  "purpose": "Isolate whether U improves the already validated E1 T+C base.",
+  "training": {
+    "epochs": 3,
+    "lr": 0.0001,
+    "only_trainable": "RecurrentCorrectionUtility",
+    "tbptt_steps": 8,
+    "weight_decay": 0.01
+  }
+}
