@@ -9,6 +9,7 @@ U never gates transport correction and never controls semantic-state evolution.
 It only gates the final writeback of the carried Semantic Correction State.
 """
 
+import torch
 from torch import nn
 from torch.nn import functional as F
 
@@ -43,7 +44,7 @@ class RecurrentCorrectionUtility(nn.Module):
         # Evidence channels:
         # Host probability, temporal-prior probability, absolute prediction error,
         # transport-corrected probability, semantic-state candidate probability,
-        # transportability T, motion and current appearance.
+        # transportability T, signed motion and current appearance.
         input_channels = 5 * self.num_classes + 1 + 2 + self.projected_channels
         self.recurrent = ConvGRUCell(input_channels, self.hidden_channels)
         self.utility_head = nn.Sequential(
@@ -94,7 +95,7 @@ class RecurrentCorrectionUtility(nn.Module):
         normalized_motion = transport_motion_low / max(self.motion_scale, 1e-6)
         appearance = self.feature_projector(current_c1)
 
-        recurrent_input = F.relu(torch.cat(
+        recurrent_input = torch.cat(
             (
                 host_probability,
                 prior_probability,
@@ -106,7 +107,7 @@ class RecurrentCorrectionUtility(nn.Module):
                 appearance,
             ),
             dim=1,
-        ))
+        )
         hidden = self.recurrent(recurrent_input, hidden)
         utility_logit = self.utility_head(hidden)
         return utility_logit, hidden
