@@ -151,6 +151,7 @@ class ReliabilityGatedSemanticMemory(nn.Module):
 
         return {
             "memory": memory,
+            "current_seed": seed,
             "warped_memory": warped_memory,
             "memory_reliability": reliability,
             "agreement": agreement,
