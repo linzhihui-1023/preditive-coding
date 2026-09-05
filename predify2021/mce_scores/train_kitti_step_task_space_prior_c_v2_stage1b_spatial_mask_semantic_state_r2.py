@@ -8,8 +8,9 @@ Two structural changes are made together because they define the new routing
 semantics:
 
 1) Transportability T is trained with ordinary BCE, not class-balanced BCE.
-   Its sigmoid value is therefore trained as the probability of the binary
-   transportable pseudo-label under the observed training distribution.
+   Supervision is applied directly at the same low resolution where T is used
+   for routing. Full-resolution binary pseudo-labels are area-aggregated into a
+   soft local transportability target over valid pixels.
 
 2) Semantic correction is no longer a free per-frame residual. The semantic
    head emits only an innovation I_t. A low-resolution correction state C_t is
@@ -98,15 +99,26 @@ RESULT_DEFAULT = (
 CANDIDATES = ("host", "spatial_mask")
 
 
-def _transportability_bce(mask_logits_full, transportable, valid):
-    """Ordinary BCE so sigmoid(T) keeps its probability interpretation."""
-    target = transportable.float().unsqueeze(0).unsqueeze(0)
-    valid4 = valid.unsqueeze(0).unsqueeze(0)
-    selected_logits = mask_logits_full[valid4]
-    selected_target = target[valid4]
-    if selected_target.numel() == 0:
-        return mask_logits_full.sum() * 0.0
-    return F.binary_cross_entropy_with_logits(selected_logits, selected_target)
+def _transportability_bce(mask_logits_low, transportable, valid):
+    """Ordinary low-resolution BCE with a valid-pixel area-aggregated soft target."""
+    low_size = tuple(mask_logits_low.shape[-2:])
+    transportable_full = transportable.float().unsqueeze(0).unsqueeze(0)
+    valid_full = valid.float().unsqueeze(0).unsqueeze(0)
+
+    transportable_density = F.interpolate(
+        transportable_full, size=low_size, mode="area"
+    )
+    valid_density = F.interpolate(valid_full, size=low_size, mode="area")
+    keep = valid_density > 0.0
+    if not bool(keep.any()):
+        return mask_logits_low.sum() * 0.0
+
+    target_low = (
+        transportable_density / valid_density.clamp_min(1e-6)
+    ).clamp_(0.0, 1.0)
+    return F.binary_cross_entropy_with_logits(
+        mask_logits_low[keep], target_low[keep]
+    )
 
 
 def _update_semantic_state(previous_state, pending_motion, transportability, innovation):
@@ -191,7 +203,6 @@ def _train_sequence(
             pending_motion.detach(),
             mask_hidden,
         )
-        mask_logits_full = _upsample_prior(mask_logits_low, output_size)
         transportability_low = torch.sigmoid(mask_logits_low)
 
         # Role supervision is kept as a training contract for the two heads.
@@ -213,7 +224,9 @@ def _train_sequence(
         semantic_offrole = _masked_zero_residual(
             innovation_full, transportable
         )
-        mask_bce = _transportability_bce(mask_logits_full, transportable, valid)
+        mask_bce = _transportability_bce(
+            mask_logits_low, transportable, valid
+        )
 
         # Final task CE may train correction/state parameters, but not the Mask.
         route = transportability_low.detach()
@@ -525,8 +538,8 @@ def _checkpoint_payload(
             "output": "Host + T*DeltaL_transport + C_t",
             "semantic_state": "C_t = T*Warp(C_t-1, M_hat_t) + (1-T)*I_t",
             "semantic_head_role": "innovation I_t only",
-            "T_definition": "transportability probability under training pseudo-label distribution",
-            "mask_loss": "ordinary BCE; no class balancing",
+            "T_definition": "low-resolution local transportability probability over valid pixels",
+            "mask_loss": "ordinary BCE on low-resolution area-aggregated soft target; no class balancing",
             "role_only_inference_retired": True,
             "shared_frozen_motion": True,
             "mask_task_gradient": False,
@@ -536,7 +549,7 @@ def _checkpoint_payload(
             "role_target": "GT + frozen RAFT current-to-previous correspondence",
             "transport_head": "CE on transportable; zero residual off-role",
             "semantic_innovation_head": "CE on non-transportable; zero residual off-role",
-            "mask_head": "ordinary BCE transportability only",
+            "mask_head": "ordinary low-resolution BCE transportability only",
             "final_output_ce": "trains correction heads and carried state with T detached",
             "tbptt_semantic_state": "carried across sequence; detached every TBPTT window, never reset within sequence",
         },
@@ -692,7 +705,7 @@ def main(argv=None):
             "tbptt_steps": args.tbptt_steps,
             "lr": args.lr,
             "weight_decay": args.weight_decay,
-            "mask_loss": "ordinary BCE",
+            "mask_loss": "ordinary low-resolution BCE",
             "role_supervision_retained": True,
             "final_output_ce_mask_gradient": False,
         },
