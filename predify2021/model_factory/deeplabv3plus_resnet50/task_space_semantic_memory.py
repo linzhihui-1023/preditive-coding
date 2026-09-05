@@ -8,6 +8,11 @@ The recurrent state H_t is a 64-D temporal semantic evidence state, not logits
 and not a reconstruction target. Historical memory is motion-compensated and
 suppressed when geometry/semantic agreement makes the warped state unreliable.
 Current C1 appearance is re-injected every frame as a spatial anchor.
+
+Invalid historical sources are treated consistently: warped memory is zero,
+prediction-error evidence is zero, and transportability evidence is zero. This
+prevents the persistence fallback used by temporal-prior logits from leaking a
+synthetic history signal into newly visible/out-of-bounds regions.
 """
 
 import torch
@@ -23,8 +28,8 @@ class ReliabilityGatedSemanticMemory(nn.Module):
 
     Inputs intentionally avoid the linearly redundant tuple
     (P_host, P_prior, P_host-P_prior) in the recurrent seed. The seed uses
-    P_host and prediction error; P_prior is used only to estimate historical
-    agreement/reliability.
+    P_host and valid-history prediction error; P_prior is used only to estimate
+    historical agreement/reliability.
     """
 
     def __init__(
@@ -47,11 +52,15 @@ class ReliabilityGatedSemanticMemory(nn.Module):
             nn.SiLU(),
         )
 
-        # F_t + P_host + e_t + T_t -> current semantic seed.
+        # F_t + P_host + e_t(valid history only) + T_t(valid history only)
+        # -> current semantic seed.
         seed_channels = self.feature_channels + 2 * self.num_classes + 1
         self.current_seed = nn.Sequential(
             nn.Conv2d(seed_channels, self.memory_channels, 3, padding=1, bias=False),
-            nn.GroupNorm(8 if self.memory_channels % 8 == 0 else 1, self.memory_channels),
+            nn.GroupNorm(
+                8 if self.memory_channels % 8 == 0 else 1,
+                self.memory_channels,
+            ),
             nn.SiLU(),
         )
         self.recurrent = ConvGRUCell(self.memory_channels, self.memory_channels)
@@ -88,11 +97,33 @@ class ReliabilityGatedSemanticMemory(nn.Module):
             raise ValueError("Transportability and logits must share spatial size")
         if transportability_low.shape[1] != 1:
             raise ValueError("Transportability must be single-channel")
+        if backward_motion_low.shape[-2:] != host_logits_low.shape[-2:]:
+            raise ValueError("Motion and logits must share spatial size")
 
         host_probability = F.softmax(host_logits_low, dim=1)
         prior_probability = F.softmax(prior_logits_low, dim=1)
-        prediction_error = host_probability - prior_probability
+        raw_prediction_error = host_probability - prior_probability
         appearance = self.feature_projector(current_c1)
+
+        if previous_memory is None:
+            previous_memory = torch.zeros(
+                appearance.shape[0],
+                self.memory_channels,
+                appearance.shape[2],
+                appearance.shape[3],
+                device=appearance.device,
+                dtype=appearance.dtype,
+            )
+        warped_memory, valid = self._warp_zero_invalid(
+            previous_memory, backward_motion_low
+        )
+        history_valid = valid.unsqueeze(1).to(host_probability.dtype)
+
+        # Temporal-prior logits use persistence outside the motion grid, but C-V3
+        # must not interpret that fallback as real historical evidence. Invalid
+        # history therefore contributes neither prediction error nor T.
+        prediction_error = raw_prediction_error * history_valid
+        transportability_effective = transportability_low * history_valid
 
         seed = self.current_seed(
             torch.cat(
@@ -100,37 +131,21 @@ class ReliabilityGatedSemanticMemory(nn.Module):
                     appearance,
                     host_probability,
                     prediction_error,
-                    transportability_low,
+                    transportability_effective,
                 ),
                 dim=1,
             )
         )
 
-        if previous_memory is None:
-            previous_memory = torch.zeros(
-                seed.shape[0],
-                self.memory_channels,
-                seed.shape[2],
-                seed.shape[3],
-                device=seed.device,
-                dtype=seed.dtype,
-            )
-        warped_memory, valid = self._warp_zero_invalid(
-            previous_memory, backward_motion_low
-        )
-
         # Probability L1 lies in [0,2], so 1 - 0.5*L1 is naturally bounded
-        # in [0,1] and needs no tuned temperature or threshold.
+        # in [0,1] and needs no tuned temperature or threshold. Agreement is
+        # irrelevant where history is invalid because T_eff is exactly zero.
         agreement = (
             1.0
             - 0.5
-            * (host_probability - prior_probability).abs().sum(dim=1, keepdim=True)
+            * raw_prediction_error.abs().sum(dim=1, keepdim=True)
         ).clamp(0.0, 1.0)
-        reliability = (
-            transportability_low
-            * valid.unsqueeze(1).to(transportability_low.dtype)
-            * agreement
-        )
+        reliability = transportability_effective * agreement
         gated_history = reliability * warped_memory
         memory = self.recurrent(seed, gated_history)
 
@@ -139,10 +154,13 @@ class ReliabilityGatedSemanticMemory(nn.Module):
             "warped_memory": warped_memory,
             "memory_reliability": reliability,
             "agreement": agreement,
+            "history_valid": history_valid,
             "appearance": appearance,
             "host_probability": host_probability,
             "prior_probability": prior_probability,
+            "raw_prediction_error": raw_prediction_error,
             "prediction_error": prediction_error,
+            "transportability_effective": transportability_effective,
         }
 
 
@@ -171,13 +189,16 @@ class MultiScaleAdaptiveCorrectionReadout(nn.Module):
             self.memory_channels
             + self.feature_channels
             + self.num_classes  # P_host
-            + self.num_classes  # prediction error
-            + 1                 # T
+            + self.num_classes  # valid-history prediction error
+            + 1                 # valid-history T
             + self.num_classes  # frozen E1 C_t
         )
         self.pre = nn.Sequential(
             nn.Conv2d(input_channels, self.branch_channels, 1, bias=False),
-            nn.GroupNorm(8 if self.branch_channels % 8 == 0 else 1, self.branch_channels),
+            nn.GroupNorm(
+                8 if self.branch_channels % 8 == 0 else 1,
+                self.branch_channels,
+            ),
             nn.SiLU(),
         )
         self.local_branch = nn.Sequential(
@@ -282,7 +303,7 @@ class MotionGatedSemanticMemoryRefiner(nn.Module):
             row["appearance"],
             row["host_probability"],
             row["prediction_error"],
-            transportability_low,
+            row["transportability_effective"],
             semantic_state_low,
         )
         row["delta_refinement"] = delta_refinement
