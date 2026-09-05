@@ -158,8 +158,6 @@ def _transportability_partition(previous_gt, current_gt, teacher_full):
     transportable = current_valid & source_valid & (warped_previous_gt == current_gt_gpu)
     non_transportable = current_valid & ~transportable
 
-    # This is the only sanity check: the two regions must exactly partition all
-    # valid current-GT pixels. Do not branch into extra diagnostics here.
     if torch.any(transportable & non_transportable):
         raise RuntimeError("Transportability regions overlap")
     if not torch.equal(transportable | non_transportable, current_valid):
@@ -199,7 +197,6 @@ def evaluate(model, observer, residual, groups, raft):
         previous_gt = None
         previous_observed_motion = None
         pending_motion = None
-        pending_delta = None
         hidden = None
 
         for sample in groups[sequence]:
@@ -259,17 +256,15 @@ def evaluate(model, observer, residual, groups, raft):
                         target,
                     )
 
-            # Preserve the exact causal update order used by Stage 1B-2.
             current_observed_motion = _observe_motion(
                 observer, previous_low, previous_c1, host_low, c1
             )
             error_t = F.softmax(host_low, dim=1) - F.softmax(residual_warped_low, dim=1)
-            next_motion, next_delta, next_hidden = residual.predict_next(
+            next_motion, _, next_hidden = residual.predict_next(
                 current_observed_motion, error_t, hidden
             )
             previous_observed_motion = current_observed_motion.detach()
             pending_motion = next_motion.detach()
-            pending_delta = next_delta.detach()
             hidden = next_hidden.detach()
 
             previous = (image, host_low.detach(), c1.detach())
@@ -291,6 +286,10 @@ def evaluate(model, observer, residual, groups, raft):
                 metrics[region][name]["mIoU"] - host_miou
             )
 
+    lagged_gap = (
+        metrics["transportable"]["observer_lagged"]["delta_mIoU_vs_host"]
+        - metrics["non_transportable"]["observer_lagged"]["delta_mIoU_vs_host"]
+    )
     residual_gap = (
         metrics["transportable"]["observer_residual"]["delta_mIoU_vs_host"]
         - metrics["non_transportable"]["observer_residual"]["delta_mIoU_vs_host"]
@@ -322,11 +321,13 @@ def evaluate(model, observer, residual, groups, raft):
         },
         "region_metrics": metrics,
         "effect_summary": {
+            "observer_lagged_transport_minus_nontransport_gain": lagged_gap,
             "observer_residual_transport_minus_nontransport_gain": residual_gap,
-            "raft_prior_transport_minus_nontransport_gain": raft_gap,
-            "interpretation_rule": (
-                "Only treat a large, same-direction regional gap as evidence that transportability "
-                "is a useful architectural split. Do not chase sub-percentage differences."
+            "raft_prior_transport_minus_nontransport_gain_reference_only": raft_gap,
+            "decision_signal": (
+                "Use the Observer/Residual regional gaps as the decision signal. RAFT is part of "
+                "the oracle partition and is reference-only, not independent evidence. Only a "
+                "large regional separation is actionable; do not chase sub-percentage differences."
             ),
         },
     }
