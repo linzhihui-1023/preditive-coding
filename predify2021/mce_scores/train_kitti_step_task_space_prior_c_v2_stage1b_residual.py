@@ -41,11 +41,6 @@ from predify2021.mce_scores.train_kitti_step_task_space_prior_c_only import (
     _upsample_prior,
 )
 from predify2021.mce_scores.train_kitti_step_task_space_prior_c_v2_stage1b_observer import (
-    C1_CHANNELS,
-    CORRELATION_RADIUS,
-    HIDDEN_CHANNELS as OBSERVER_HIDDEN_CHANNELS,
-    MAX_DISPLACEMENT_LOW,
-    PROJECTED_CHANNELS,
     _host_observation,
 )
 from predify2021.mce_scores.train_kitti_step_temporal_joint import FrozenRAFT
@@ -84,14 +79,35 @@ def _load_frozen_observer(path):
     checks = row.get("stage1b1_checks", {})
     if not checks.get("observer_minimum_go", False):
         raise RuntimeError("Stage 1B-1 Observer did not pass observer_minimum_go")
+
     architecture = payload.get("architecture", {})
+    required = (
+        "c1_channels",
+        "num_classes",
+        "projected_channels",
+        "hidden_channels",
+        "correlation_radius",
+        "max_displacement_low",
+    )
+    missing = [key for key in required if key not in architecture]
+    if missing:
+        raise RuntimeError(
+            "Stage 1B-1 checkpoint is missing required architecture metadata: "
+            + ", ".join(missing)
+        )
+    checkpoint_num_classes = int(architecture["num_classes"])
+    if checkpoint_num_classes != NUM_CLASSES:
+        raise RuntimeError(
+            f"Observer checkpoint num_classes={checkpoint_num_classes}, expected {NUM_CLASSES}"
+        )
+
     observer = LocalCorrelationMotionObserver(
-        c1_channels=int(architecture.get("c1_channels", C1_CHANNELS)),
-        num_classes=NUM_CLASSES,
-        projected_channels=int(architecture.get("projected_channels", PROJECTED_CHANNELS)),
-        hidden_channels=int(architecture.get("hidden_channels", OBSERVER_HIDDEN_CHANNELS)),
-        correlation_radius=int(architecture.get("correlation_radius", CORRELATION_RADIUS)),
-        max_displacement_low=float(architecture.get("max_displacement_low", MAX_DISPLACEMENT_LOW)),
+        c1_channels=int(architecture["c1_channels"]),
+        num_classes=checkpoint_num_classes,
+        projected_channels=int(architecture["projected_channels"]),
+        hidden_channels=int(architecture["hidden_channels"]),
+        correlation_radius=int(architecture["correlation_radius"]),
+        max_displacement_low=float(architecture["max_displacement_low"]),
     ).cuda()
     observer.load_state_dict(payload["observer_state_dict"], strict=True)
     observer.requires_grad_(False).eval()
@@ -496,14 +512,39 @@ def _checks(metrics):
     }
 
 
+def _selected_candidate(row):
+    checks = row["stage1b2_checks"]
+    metrics = row["metrics"]["metrics"]
+    lagged_go = checks["observer_lagged"]["candidate_minimum_go"]
+    residual_go = checks["observer_residual"]["candidate_minimum_go"]
+
+    if lagged_go and not residual_go:
+        return "observer_lagged"
+    if residual_go and not lagged_go:
+        return "observer_residual"
+    if checks["residual_pareto_improves_lagged"]:
+        return "observer_residual"
+    if checks["lagged_pareto_dominates_residual"]:
+        return "observer_lagged"
+
+    # If both pass but trade off, or neither passes, keep checkpoint selection
+    # deterministic and diagnostic: mIoU first, mTC as tie-break. This does not
+    # turn a failed candidate into a GO; stage1b_candidate_exists remains separate.
+    lagged = metrics["observer_lagged"]
+    residual = metrics["observer_residual"]
+    if (residual["mIoU"], residual["mTC"]) > (lagged["mIoU"], lagged["mTC"]):
+        return "observer_residual"
+    return "observer_lagged"
+
+
 def _selection_key(row):
     checks = row["stage1b2_checks"]
-    residual = row["metrics"]["metrics"]["observer_residual"]
+    selected = _selected_candidate(row)
+    selected_metrics = row["metrics"]["metrics"][selected]
     return (
         int(checks["stage1b_candidate_exists"]),
-        int(checks["residual_pareto_improves_lagged"]),
-        residual["mIoU"],
-        residual["mTC"],
+        selected_metrics["mIoU"],
+        selected_metrics["mTC"],
     )
 
 
@@ -580,12 +621,14 @@ def main(argv=None):
             "metrics": metrics,
             "stage1b2_checks": checks,
         }
+        row["selected_candidate"] = _selected_candidate(row)
         history.append(row)
         payload = {
             "experiment": "c_v2_stage1b2_residual_motion",
             "epoch": epoch,
             "observer_checkpoint": args.observer_checkpoint,
             "observer_frozen": True,
+            "selected_candidate": row["selected_candidate"],
             "residual_state_dict": residual.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "architecture": {
@@ -608,6 +651,7 @@ def main(argv=None):
             best = {
                 "epoch": epoch,
                 "selection_key": _selection_key(row),
+                "selected_candidate": row["selected_candidate"],
                 "metrics": metrics,
                 "stage1b2_checks": checks,
             }
@@ -632,6 +676,7 @@ def main(argv=None):
         "observer": {
             "checkpoint": args.observer_checkpoint,
             "frozen": True,
+            "architecture": observer_payload["architecture"],
             "stage1b1_checks": observer_payload["row"]["stage1b1_checks"],
         },
         "frozen": ["Host", "Adapter", "Writeback", "Decoder", "Motion Observer", "all pre-existing temporal modules"],
@@ -648,6 +693,7 @@ def main(argv=None):
     print(json.dumps({
         "best_epoch": best["epoch"] if best else None,
         "stage1b_candidate_exists": best["stage1b2_checks"]["stage1b_candidate_exists"] if best else False,
+        "selected_candidate": best["selected_candidate"] if best else None,
         "motion_candidate_preference": best["stage1b2_checks"]["motion_candidate_preference"] if best else None,
         "checkpoint": str(output / "best.pt"),
         "result": str(result_output / "summary.json"),
