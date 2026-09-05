@@ -9,7 +9,6 @@ U never gates transport correction and never controls semantic-state evolution.
 It only gates the final writeback of the carried Semantic Correction State.
 """
 
-import torch
 from torch import nn
 from torch.nn import functional as F
 
@@ -42,9 +41,10 @@ class RecurrentCorrectionUtility(nn.Module):
         )
 
         # Evidence channels:
-        # host probability, temporal-prior probability, absolute prediction error,
-        # semantic-state candidate probability, transportability T, motion, appearance.
-        input_channels = 4 * self.num_classes + 1 + 2 + self.projected_channels
+        # Host probability, temporal-prior probability, absolute prediction error,
+        # transport-corrected probability, semantic-state candidate probability,
+        # transportability T, motion and current appearance.
+        input_channels = 5 * self.num_classes + 1 + 2 + self.projected_channels
         self.recurrent = ConvGRUCell(input_channels, self.hidden_channels)
         self.utility_head = nn.Sequential(
             nn.Conv2d(self.hidden_channels, self.hidden_channels, 3, padding=1),
@@ -52,8 +52,8 @@ class RecurrentCorrectionUtility(nn.Module):
             nn.Conv2d(self.hidden_channels, 1, 1),
         )
 
-        # At E0 semantic correction itself is zero-initialized, so U=0.5 still
-        # preserves exact Host output. U learns only from its direct utility target.
+        # The correction heads are zero-initialized in the parent architecture,
+        # so U=0.5 still preserves exact Host output at E0.
         nn.init.zeros_(self.utility_head[-1].weight)
         nn.init.zeros_(self.utility_head[-1].bias)
 
@@ -64,6 +64,7 @@ class RecurrentCorrectionUtility(nn.Module):
         prior_logits_low,
         transport_motion_low,
         transportability_low,
+        delta_transport_low,
         semantic_state_low,
         hidden=None,
     ):
@@ -75,30 +76,37 @@ class RecurrentCorrectionUtility(nn.Module):
             raise ValueError("Motion and task logits must share spatial size")
         if semantic_state_low.shape != host_logits_low.shape:
             raise ValueError("Semantic state and Host logits must share shape")
+        if delta_transport_low.shape != host_logits_low.shape:
+            raise ValueError("Transport correction and Host logits must share shape")
         if transportability_low.shape[-2:] != host_logits_low.shape[-2:]:
             raise ValueError("Transportability and task logits must share spatial size")
 
         host_probability = F.softmax(host_logits_low, dim=1)
         prior_probability = F.softmax(prior_logits_low, dim=1)
         prediction_error_abs = (host_probability - prior_probability).abs()
+        transport_base_logits = (
+            host_logits_low + transportability_low * delta_transport_low
+        )
+        transport_base_probability = F.softmax(transport_base_logits, dim=1)
         semantic_candidate_probability = F.softmax(
-            host_logits_low + semantic_state_low, dim=1
+            transport_base_logits + semantic_state_low, dim=1
         )
         normalized_motion = transport_motion_low / max(self.motion_scale, 1e-6)
         appearance = self.feature_projector(current_c1)
 
-        recurrent_input = torch.cat(
+        recurrent_input = F.relu(torch.cat(
             (
                 host_probability,
                 prior_probability,
                 prediction_error_abs,
+                transport_base_probability,
                 semantic_candidate_probability,
                 transportability_low,
                 normalized_motion,
                 appearance,
             ),
             dim=1,
-        )
+        ))
         hidden = self.recurrent(recurrent_input, hidden)
         utility_logit = self.utility_head(hidden)
         return utility_logit, hidden
