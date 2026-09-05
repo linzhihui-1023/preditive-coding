@@ -1,0 +1,46 @@
+{
+  "delta_vs_host": {
+    "mIoU": 0.0019187618533961226,
+    "mTC": -0.0026273241441444606,
+    "mVC16": 0.0031231647678496843,
+    "mVC8": 0.0022716012704450117
+  },
+  "diagnostics": {
+    "delta_transport_abs": 0.06240793434042424,
+    "frames_with_temporal_prior": 2963,
+    "mask_mean": 0.9581289187983971,
+    "semantic_innovation_abs": 0.12334286355153556,
+    "semantic_state_abs": 0.10185336777981253
+  },
+  "epoch": 2,
+  "metrics": {
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC16": 0.9289708560902963,
+      "mVC8": 0.9379464611218211
+    },
+    "spatial_mask": {
+      "mIoU": 0.6560361683901906,
+      "mTC": 0.7051567818581664,
+      "mVC16": 0.932094020858146,
+      "mVC8": 0.9402180623922661
+    }
+  },
+  "train": {
+    "delta_transport_abs": 0.046279937070909605,
+    "frames": 416.9166666666667,
+    "mask_bce": 0.18788879210929307,
+    "mask_mean": 0.9509202499539792,
+    "output_ce": 0.12800495907979315,
+    "semantic_innovation_abs": 0.11566084201807382,
+    "semantic_innovation_ce": 0.8972397057225563,
+    "semantic_offrole": 0.023842593636401243,
+    "semantic_state_abs": 0.09221869879829965,
+    "total": 1.330727783215685,
+    "transport_ce": 0.08545420414139394,
+    "transport_fraction": 0.9549921626014671,
+    "transport_offrole": 0.004531611708776973,
+    "windows": 52.5
+  }
+}

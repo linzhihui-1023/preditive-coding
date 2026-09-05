@@ -1,0 +1,179 @@
+{
+  "best": {
+    "delta_vs_host": {
+      "mIoU": 0.0012627592370381135,
+      "mTC": 0.00201051504742622,
+      "mVC16": 0.011368315832542608,
+      "mVC8": 0.00835945881013278
+    },
+    "epoch": 1,
+    "metrics": {
+      "mIoU": 0.6553801657738326,
+      "mTC": 0.7097946210497371,
+      "mVC16": 0.9403391719228389,
+      "mVC8": 0.9463059199319539
+    },
+    "selection_key": [
+      1,
+      0.7097946210497371,
+      0.6553801657738326
+    ]
+  },
+  "decision_scope": "Use this run to decide whether calibrated routing plus carried semantic state prevents the E1-to-E3 temporal degradation. Do not open threshold/loss sweeps.",
+  "experiment": "C-V2 Stage 1B Calibrated Spatial Mask + Semantic Correction State r2",
+  "frozen_motion": {
+    "observer_checkpoint": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_observer/best.pt",
+    "residual_checkpoint": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_task_alignment_r2/best.pt"
+  },
+  "history": [
+    {
+      "delta_vs_host": {
+        "mIoU": 0.0012627592370381135,
+        "mTC": 0.00201051504742622,
+        "mVC16": 0.011368315832542608,
+        "mVC8": 0.00835945881013278
+      },
+      "diagnostics": {
+        "delta_transport_abs": 0.0692579817942146,
+        "frames_with_temporal_prior": 2963,
+        "mask_mean": 0.9577721966467634,
+        "semantic_innovation_abs": 0.08527854299207334,
+        "semantic_state_abs": 0.060368896160907154
+      },
+      "epoch": 1,
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        },
+        "spatial_mask": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC16": 0.9403391719228389,
+          "mVC8": 0.9463059199319539
+        }
+      },
+      "train": {
+        "delta_transport_abs": 0.02893901822278232,
+        "frames": 416.9166666666667,
+        "mask_bce": 0.30737183969630527,
+        "mask_mean": 0.8202014625472946,
+        "output_ce": 0.13167511552744582,
+        "semantic_innovation_abs": 0.07160221612067565,
+        "semantic_innovation_ce": 0.9665754168827371,
+        "semantic_offrole": 0.011139341020603093,
+        "semantic_state_abs": 0.06281085775324477,
+        "total": 1.5120290069825166,
+        "transport_ce": 0.08957483178344507,
+        "transport_fraction": 0.9549921626014671,
+        "transport_offrole": 0.0017402120815191418,
+        "windows": 52.5
+      }
+    },
+    {
+      "delta_vs_host": {
+        "mIoU": 0.0019187618533961226,
+        "mTC": -0.0026273241441444606,
+        "mVC16": 0.0031231647678496843,
+        "mVC8": 0.0022716012704450117
+      },
+      "diagnostics": {
+        "delta_transport_abs": 0.06240793434042424,
+        "frames_with_temporal_prior": 2963,
+        "mask_mean": 0.9581289187983971,
+        "semantic_innovation_abs": 0.12334286355153556,
+        "semantic_state_abs": 0.10185336777981253
+      },
+      "epoch": 2,
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        },
+        "spatial_mask": {
+          "mIoU": 0.6560361683901906,
+          "mTC": 0.7051567818581664,
+          "mVC16": 0.932094020858146,
+          "mVC8": 0.9402180623922661
+        }
+      },
+      "train": {
+        "delta_transport_abs": 0.046279937070909605,
+        "frames": 416.9166666666667,
+        "mask_bce": 0.18788879210929307,
+        "mask_mean": 0.9509202499539792,
+        "output_ce": 0.12800495907979315,
+        "semantic_innovation_abs": 0.11566084201807382,
+        "semantic_innovation_ce": 0.8972397057225563,
+        "semantic_offrole": 0.023842593636401243,
+        "semantic_state_abs": 0.09221869879829965,
+        "total": 1.330727783215685,
+        "transport_ce": 0.08545420414139394,
+        "transport_fraction": 0.9549921626014671,
+        "transport_offrole": 0.004531611708776973,
+        "windows": 52.5
+      }
+    },
+    {
+      "delta_vs_host": {
+        "mIoU": 0.0020517932767202263,
+        "mTC": -0.006071757371696407,
+        "mVC16": 0.0019815978771333675,
+        "mVC8": 0.000985499431471193
+      },
+      "diagnostics": {
+        "delta_transport_abs": 0.06545227959530803,
+        "frames_with_temporal_prior": 2963,
+        "mask_mean": 0.9576949216689445,
+        "semantic_innovation_abs": 0.13289206772740933,
+        "semantic_state_abs": 0.11773467360430881
+      },
+      "epoch": 3,
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        },
+        "spatial_mask": {
+          "mIoU": 0.6561691998135147,
+          "mTC": 0.7017123486306145,
+          "mVC16": 0.9309524539674296,
+          "mVC8": 0.9389319605532923
+        }
+      },
+      "train": {
+        "delta_transport_abs": 0.048849038178309,
+        "frames": 416.9166666666667,
+        "mask_bce": 0.15340617267165493,
+        "mask_mean": 0.9488171250068693,
+        "output_ce": 0.1271428326386426,
+        "semantic_innovation_abs": 0.1321013876808986,
+        "semantic_innovation_ce": 0.847180607964408,
+        "semantic_offrole": 0.03172824655678074,
+        "semantic_state_abs": 0.11033450270551175,
+        "total": 1.2524017485445853,
+        "transport_ce": 0.08400004749582192,
+        "transport_fraction": 0.9549921626014671,
+        "transport_offrole": 0.005261474868028487,
+        "windows": 52.5
+      }
+    }
+  ],
+  "purpose": "Keep Spatial Mask mainline, restore probability meaning of T, and make Semantic Correction a transported state rather than a free per-frame residual.",
+  "selection_rule": "If Spatial Mask mIoU >= Host, select highest mTC; otherwise select highest mIoU. Uses existing main metrics only.",
+  "training": {
+    "epochs": 3,
+    "final_output_ce_mask_gradient": false,
+    "lr": 0.0001,
+    "mask_loss": "ordinary low-resolution BCE",
+    "role_supervision_retained": true,
+    "tbptt_steps": 8,
+    "weight_decay": 0.01
+  }
+}
