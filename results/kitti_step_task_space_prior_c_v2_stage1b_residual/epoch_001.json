@@ -1,0 +1,182 @@
+{
+  "epoch": 1,
+  "metrics": {
+    "delta_full_vs_deltaM_zero_lagged": {
+      "mIoU": 0.004462062668209699,
+      "mTC": -0.0030677751955562327,
+      "mVC16": 0.0009099489845743047,
+      "mVC8": 0.0012601815217255785
+    },
+    "delta_vs_host": {
+      "lagged_repair_only_oracle": {
+        "mIoU": 0.05531050645374114,
+        "mTC": 0.007595054337842577,
+        "mVC16": 0.02648815324037712,
+        "mVC8": 0.02189447138224465
+      },
+      "observer_lagged": {
+        "mIoU": -0.1310708623438378,
+        "mTC": -0.0413786897497872,
+        "mVC16": -0.013689917497591853,
+        "mVC8": -0.017769519172278758
+      },
+      "observer_residual": {
+        "mIoU": -0.1266087996756281,
+        "mTC": -0.044446464945343434,
+        "mVC16": -0.012779968513017548,
+        "mVC8": -0.01650933765055318
+      },
+      "residual_repair_only_oracle": {
+        "mIoU": 0.05534356019768427,
+        "mTC": 0.006879560249392291,
+        "mVC16": 0.02619942467837444,
+        "mVC8": 0.021632083418942072
+      },
+      "semantic_persistence": {
+        "mIoU": -0.14500289768119345,
+        "mTC": -0.03541884623934177,
+        "mVC16": -0.013754890319509494,
+        "mVC8": -0.019618977641125523
+      }
+    },
+    "delta_vs_persistence": {
+      "observer_lagged": {
+        "mIoU": 0.013932035337355653,
+        "mTC": -0.005959843510445428,
+        "mVC16": 6.497282191764153e-05,
+        "mVC8": 0.0018494584688467652
+      },
+      "observer_residual": {
+        "mIoU": 0.01839409800556535,
+        "mTC": -0.009027618706001661,
+        "mVC16": 0.0009749218064919463,
+        "mVC8": 0.0031096399905723437
+      }
+    },
+    "lagged_complementarity_causal_frames_only": {
+      "damage_rate_given_host_correct": 0.058922715144557034,
+      "four_way_fraction_of_valid": {
+        "host_correct_prior_correct": 0.8653683511026468,
+        "host_correct_prior_wrong": 0.054182428656716256,
+        "host_wrong_prior_correct": 0.015133384052398294,
+        "host_wrong_prior_wrong": 0.06531583618823864
+      },
+      "host_correct": 1229925468,
+      "host_correct_prior_correct": 1157454920,
+      "host_correct_prior_wrong": 72470548,
+      "host_wrong": 107603133,
+      "host_wrong_prior_correct": 20241334,
+      "host_wrong_prior_wrong": 87361799,
+      "host_wrong_rate": 0.08044922024063693,
+      "prior_correct": 1177696254,
+      "prior_wrong": 159832347,
+      "prior_wrong_rate": 0.11949826484495489,
+      "recoverable_rate_given_host_wrong": 0.1881110097416959,
+      "valid_pixels": 1337528601
+    },
+    "metrics": {
+      "host": {
+        "mIoU": 0.6541174065367945,
+        "mTC": 0.7077841060023109,
+        "mVC16": 0.9289708560902963,
+        "mVC8": 0.9379464611218211,
+        "valid_frame_pairs": 2972
+      },
+      "lagged_repair_only_oracle": {
+        "mIoU": 0.7094279129905356,
+        "mTC": 0.7153791603401535,
+        "mVC16": 0.9554590093306734,
+        "mVC8": 0.9598409325040658,
+        "valid_frame_pairs": 2972
+      },
+      "observer_lagged": {
+        "mIoU": 0.5230465441929567,
+        "mTC": 0.6664054162525237,
+        "mVC16": 0.9152809385927044,
+        "mVC8": 0.9201769419495424,
+        "valid_frame_pairs": 2972
+      },
+      "observer_residual": {
+        "mIoU": 0.5275086068611664,
+        "mTC": 0.6633376410569675,
+        "mVC16": 0.9161908875772787,
+        "mVC8": 0.9214371234712679,
+        "valid_frame_pairs": 2972
+      },
+      "residual_repair_only_oracle": {
+        "mIoU": 0.7094609667344788,
+        "mTC": 0.7146636662517032,
+        "mVC16": 0.9551702807686707,
+        "mVC8": 0.9595785445407632,
+        "valid_frame_pairs": 2972
+      },
+      "semantic_persistence": {
+        "mIoU": 0.5091145088556011,
+        "mTC": 0.6723652597629691,
+        "mVC16": 0.9152159657707868,
+        "mVC8": 0.9183274834806956,
+        "valid_frame_pairs": 2972
+      }
+    },
+    "residual_complementarity_causal_frames_only": {
+      "damage_rate_given_host_correct": 0.05692233214248719,
+      "four_way_fraction_of_valid": {
+        "host_correct_prior_correct": 0.8672078048520175,
+        "host_correct_prior_wrong": 0.05234297490734555,
+        "host_wrong_prior_correct": 0.01523585288924973,
+        "host_wrong_prior_wrong": 0.0652133673513872
+      },
+      "host_correct": 1229925468,
+      "host_correct_prior_correct": 1159915242,
+      "host_correct_prior_wrong": 70010226,
+      "host_wrong": 107603133,
+      "host_wrong_prior_correct": 20378389,
+      "host_wrong_prior_wrong": 87224744,
+      "host_wrong_rate": 0.08044922024063693,
+      "prior_correct": 1180293631,
+      "prior_wrong": 157234970,
+      "prior_wrong_rate": 0.11755634225873275,
+      "recoverable_rate_given_host_wrong": 0.1893847180081643,
+      "valid_pixels": 1337528601
+    },
+    "residual_diagnostics": {
+      "delta_abs_mean_low_pixels": 0.36921214583849987,
+      "delta_to_observed_amplitude_ratio": 0.6483767762317988,
+      "observed_motion_abs_mean_low_pixels": 0.5694407316441331,
+      "predicted_motion_abs_mean_low_pixels": 0.7682688658864211,
+      "predicted_pairs": 2963,
+      "predicted_teacher_l1_mean_low_pixels": 2.77601293562176,
+      "teacher_motion_abs_mean_low_pixels": 3.0180152230741664
+    }
+  },
+  "selected_candidate": "observer_residual",
+  "stage1b2_checks": {
+    "lagged_pareto_dominates_residual": false,
+    "motion_candidate_preference": "tradeoff_requires_metric_review",
+    "mvc16_is_gate": false,
+    "observer_lagged": {
+      "candidate_minimum_go": false,
+      "delta_mIoU_vs_persistence_ge_2pp": false,
+      "mTC_gt_persistence": false,
+      "repair_oracle_delta_mTC_ge_0p4pp": true
+    },
+    "observer_residual": {
+      "candidate_minimum_go": false,
+      "delta_mIoU_vs_persistence_ge_2pp": false,
+      "mTC_gt_persistence": false,
+      "repair_oracle_delta_mTC_ge_0p4pp": true
+    },
+    "residual_increment_mIoU": 0.004462062668209699,
+    "residual_increment_mTC": -0.0030677751955562327,
+    "residual_pareto_improves_lagged": false,
+    "stage1b_candidate_exists": false
+  },
+  "train": {
+    "delta_loss": 0.0033763151314364025,
+    "flow_loss": 0.010168500701189577,
+    "frames": 5003,
+    "semantic_loss": 0.33812816782839716,
+    "total_loss": 0.43984693699176347,
+    "windows": 630
+  }
+}

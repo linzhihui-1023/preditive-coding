@@ -1,0 +1,667 @@
+{
+  "epoch": 2,
+  "metrics": {
+    "complementarity_causal_frames_only": {
+      "damage_rate_given_host_correct": 0.04503060830999883,
+      "four_way_fraction_of_valid": {
+        "host_correct_prior_correct": 0.8781428487748651,
+        "host_correct_prior_wrong": 0.04140793098449788,
+        "host_wrong_prior_correct": 0.015156111790689103,
+        "host_wrong_prior_wrong": 0.06529310844994783
+      },
+      "host_correct": 1229925468,
+      "host_correct_prior_correct": 1174541176,
+      "host_correct_prior_wrong": 55384292,
+      "host_wrong": 107603133,
+      "host_wrong_prior_correct": 20271733,
+      "host_wrong_prior_wrong": 87331400,
+      "host_wrong_rate": 0.08044922024063693,
+      "prior_correct": 1194812909,
+      "prior_wrong": 142715692,
+      "prior_wrong_rate": 0.10670103943444571,
+      "recoverable_rate_given_host_wrong": 0.18839352010317395,
+      "valid_pixels": 1337528601
+    },
+    "delta_vs_host": {
+      "observer_repair_only_oracle": {
+        "mIoU": 0.056936514777270575,
+        "mTC": 0.008973390634330891,
+        "mVC16": 0.026675978681741097,
+        "mVC8": 0.022075267531138087
+      },
+      "observer_warp": {
+        "mIoU": -0.09820386760120925,
+        "mTC": -0.029084303519947508,
+        "mVC16": -4.508165058680902e-05,
+        "mVC8": -0.0044630291972780345
+      },
+      "raft_low_same_path_reference": {
+        "mIoU": -0.038354780109232656,
+        "mTC": 0.016700809816081685,
+        "mVC16": -0.016250530765958615,
+        "mVC8": -0.014091016948785229
+      },
+      "semantic_persistence": {
+        "mIoU": -0.14500289768119345,
+        "mTC": -0.03541884623934177,
+        "mVC16": -0.013754890319509494,
+        "mVC8": -0.019618977641125523
+      }
+    },
+    "delta_vs_persistence": {
+      "observer_warp": {
+        "mIoU": 0.046799030079984205,
+        "mTC": 0.006334542719394265,
+        "mVC16": 0.013709808668922685,
+        "mVC8": 0.015155948443847489
+      },
+      "raft_low_same_path_reference": {
+        "mIoU": 0.1066481175719608,
+        "mTC": 0.05211965605542346,
+        "mVC16": -0.002495640446449121,
+        "mVC8": 0.005527960692340295
+      }
+    },
+    "flow_diagnostics": {
+      "correlation_radius_low_pixels": 4,
+      "l1_mean_low_pixels_reachable": 2.8392082707558397,
+      "pairs": 2972,
+      "predicted_abs_mean_low_pixels_reachable": 0.5096573334340058,
+      "teacher_abs_mean_low_pixels_reachable": 2.9602602768882487,
+      "teacher_reachable_fraction_of_spatial_valid": 0.9978070643539718,
+      "teacher_within_correlation_radius_fraction": 0.5865278117620892
+    },
+    "metrics": {
+      "host": {
+        "mIoU": 0.6541174065367945,
+        "mTC": 0.7077841060023109,
+        "mVC16": 0.9289708560902963,
+        "mVC8": 0.9379464611218211,
+        "valid_frame_pairs": 2972
+      },
+      "observer_repair_only_oracle": {
+        "mIoU": 0.7110539213140651,
+        "mTC": 0.7167574966366418,
+        "mVC16": 0.9556468347720374,
+        "mVC8": 0.9600217286529592,
+        "valid_frame_pairs": 2972
+      },
+      "observer_warp": {
+        "mIoU": 0.5559135389355853,
+        "mTC": 0.6786998024823634,
+        "mVC16": 0.9289257744397095,
+        "mVC8": 0.9334834319245431,
+        "valid_frame_pairs": 2972
+      },
+      "raft_low_same_path_reference": {
+        "mIoU": 0.6157626264275619,
+        "mTC": 0.7244849158183926,
+        "mVC16": 0.9127203253243377,
+        "mVC8": 0.9238554441730359,
+        "valid_frame_pairs": 2972
+      },
+      "semantic_persistence": {
+        "mIoU": 0.5091145088556011,
+        "mTC": 0.6723652597629691,
+        "mVC16": 0.9152159657707868,
+        "mVC8": 0.9183274834806956,
+        "valid_frame_pairs": 2972
+      }
+    },
+    "per_sequence": {
+      "0002": {
+        "complementarity": {
+          "damage_rate_given_host_correct": 0.03559323440700489,
+          "four_way_fraction_of_valid": {
+            "host_correct_prior_correct": 0.8971907139534903,
+            "host_correct_prior_wrong": 0.033112500377264674,
+            "host_wrong_prior_correct": 0.01773891204194884,
+            "host_wrong_prior_wrong": 0.05195787362729621
+          },
+          "host_correct": 98914079,
+          "host_correct_prior_correct": 95393407,
+          "host_correct_prior_wrong": 3520672,
+          "host_wrong": 7410480,
+          "host_wrong_prior_correct": 1886082,
+          "host_wrong_prior_wrong": 5524398,
+          "host_wrong_rate": 0.06969678566924505,
+          "prior_correct": 97279489,
+          "prior_wrong": 9045070,
+          "prior_wrong_rate": 0.08507037400456088,
+          "recoverable_rate_given_host_wrong": 0.25451549697185605,
+          "valid_pixels": 106324559
+        },
+        "metrics": {
+          "host": {
+            "mIoU": 0.5299478306492617,
+            "mTC": 0.6990464998352629,
+            "mVC16": 0.9325444351442093,
+            "mVC8": 0.9403378162388787,
+            "valid_frame_pairs": 232
+          },
+          "observer_repair_only_oracle": {
+            "mIoU": 0.5804538289183591,
+            "mTC": 0.7095191066913066,
+            "mVC16": 0.9552863255453544,
+            "mVC8": 0.9598130762657584,
+            "valid_frame_pairs": 232
+          },
+          "observer_warp": {
+            "mIoU": 0.4874842094821714,
+            "mTC": 0.6874448380569848,
+            "mVC16": 0.9324379196026513,
+            "mVC8": 0.9374717384287035,
+            "valid_frame_pairs": 232
+          },
+          "raft_low_same_path_reference": {
+            "mIoU": 0.49617613186381543,
+            "mTC": 0.7144661869740108,
+            "mVC16": 0.9285873724755878,
+            "mVC8": 0.9319538603105391,
+            "valid_frame_pairs": 232
+          },
+          "semantic_persistence": {
+            "mIoU": 0.4512152524487713,
+            "mTC": 0.6771529308040944,
+            "mVC16": 0.9244462440556792,
+            "mVC8": 0.9270123315147671,
+            "valid_frame_pairs": 232
+          }
+        }
+      },
+      "0006": {
+        "complementarity": {
+          "damage_rate_given_host_correct": 0.04531911488087216,
+          "four_way_fraction_of_valid": {
+            "host_correct_prior_correct": 0.8790123098477038,
+            "host_correct_prior_wrong": 0.04172709485716584,
+            "host_wrong_prior_correct": 0.0200266563578862,
+            "host_wrong_prior_wrong": 0.05923393893724407
+          },
+          "host_correct": 114650827,
+          "host_correct_prior_correct": 109454953,
+          "host_correct_prior_wrong": 5195874,
+          "host_wrong": 9869560,
+          "host_wrong_prior_correct": 2493727,
+          "host_wrong_prior_wrong": 7375833,
+          "host_wrong_rate": 0.07926059529513027,
+          "prior_correct": 111948680,
+          "prior_wrong": 12571707,
+          "prior_wrong_rate": 0.1009610337944099,
+          "recoverable_rate_given_host_wrong": 0.25266850801859453,
+          "valid_pixels": 124520387
+        },
+        "metrics": {
+          "host": {
+            "mIoU": 0.48021890055460603,
+            "mTC": 0.7808228205312582,
+            "mVC16": 0.9730372186999953,
+            "mVC8": 0.967008803301099,
+            "valid_frame_pairs": 269
+          },
+          "observer_repair_only_oracle": {
+            "mIoU": 0.5165853516463189,
+            "mTC": 0.7796238409947871,
+            "mVC16": 0.9857237189804008,
+            "mVC8": 0.9819723457511687,
+            "valid_frame_pairs": 269
+          },
+          "observer_warp": {
+            "mIoU": 0.4279622248730517,
+            "mTC": 0.7552220047001892,
+            "mVC16": 0.9735175753089821,
+            "mVC8": 0.964392369361297,
+            "valid_frame_pairs": 269
+          },
+          "raft_low_same_path_reference": {
+            "mIoU": 0.4521616835347767,
+            "mTC": 0.7861675835856886,
+            "mVC16": 0.9645170098604985,
+            "mVC8": 0.9538010151066523,
+            "valid_frame_pairs": 269
+          },
+          "semantic_persistence": {
+            "mIoU": 0.4114418304695939,
+            "mTC": 0.7598974071383918,
+            "mVC16": 0.967561103158407,
+            "mVC8": 0.9546712240419282,
+            "valid_frame_pairs": 269
+          }
+        }
+      },
+      "0007": {
+        "complementarity": {
+          "damage_rate_given_host_correct": 0.05179716939789252,
+          "four_way_fraction_of_valid": {
+            "host_correct_prior_correct": 0.8723285118486177,
+            "host_correct_prior_wrong": 0.04765240752354902,
+            "host_wrong_prior_correct": 0.01567350728299985,
+            "host_wrong_prior_wrong": 0.06434557334483344
+          },
+          "host_correct": 339270856,
+          "host_correct_prior_correct": 321697586,
+          "host_correct_prior_wrong": 17573270,
+          "host_wrong": 29509462,
+          "host_wrong_prior_correct": 5780081,
+          "host_wrong_prior_wrong": 23729381,
+          "host_wrong_rate": 0.08001908062783329,
+          "prior_correct": 327477667,
+          "prior_wrong": 41302651,
+          "prior_wrong_rate": 0.11199798086838246,
+          "recoverable_rate_given_host_wrong": 0.1958721239987364,
+          "valid_pixels": 368780318
+        },
+        "metrics": {
+          "host": {
+            "mIoU": 0.5095172311317954,
+            "mTC": 0.6955485828104314,
+            "mVC16": 0.9165575054612568,
+            "mVC8": 0.9237506488033391,
+            "valid_frame_pairs": 799
+          },
+          "observer_repair_only_oracle": {
+            "mIoU": 0.5526066439688813,
+            "mTC": 0.701942982160285,
+            "mVC16": 0.9474192944288806,
+            "mVC8": 0.9491337478614051,
+            "valid_frame_pairs": 799
+          },
+          "observer_warp": {
+            "mIoU": 0.40381393406533755,
+            "mTC": 0.6557314565500311,
+            "mVC16": 0.9128664448840462,
+            "mVC8": 0.9130077084685954,
+            "valid_frame_pairs": 799
+          },
+          "raft_low_same_path_reference": {
+            "mIoU": 0.47454344421824984,
+            "mTC": 0.7039809383266585,
+            "mVC16": 0.9039501152226124,
+            "mVC8": 0.9142994603881545,
+            "valid_frame_pairs": 799
+          },
+          "semantic_persistence": {
+            "mIoU": 0.3660560073938603,
+            "mTC": 0.656996573855035,
+            "mVC16": 0.8919112294679493,
+            "mVC8": 0.89104427350496,
+            "valid_frame_pairs": 799
+          }
+        }
+      },
+      "0008": {
+        "complementarity": {
+          "damage_rate_given_host_correct": 0.045661119713940365,
+          "four_way_fraction_of_valid": {
+            "host_correct_prior_correct": 0.9053996432378486,
+            "host_correct_prior_wrong": 0.04331958212417199,
+            "host_wrong_prior_correct": 0.012531586392688155,
+            "host_wrong_prior_wrong": 0.03874918824529126
+          },
+          "host_correct": 171149767,
+          "host_correct_prior_correct": 163334877,
+          "host_correct_prior_wrong": 7814890,
+          "host_wrong": 9251096,
+          "host_wrong_prior_correct": 2260709,
+          "host_wrong_prior_wrong": 6990387,
+          "host_wrong_rate": 0.05128077463797942,
+          "prior_correct": 165595586,
+          "prior_wrong": 14805277,
+          "prior_wrong_rate": 0.08206877036946325,
+          "recoverable_rate_given_host_wrong": 0.2443720181911419,
+          "valid_pixels": 180400863
+        },
+        "metrics": {
+          "host": {
+            "mIoU": 0.39956804366821375,
+            "mTC": 0.628811291238071,
+            "mVC16": 0.9428216923951959,
+            "mVC8": 0.9547129583701566,
+            "valid_frame_pairs": 389
+          },
+          "observer_repair_only_oracle": {
+            "mIoU": 0.42867997882659464,
+            "mTC": 0.6388583206387289,
+            "mVC16": 0.9790133367015024,
+            "mVC8": 0.9812371167423871,
+            "valid_frame_pairs": 389
+          },
+          "observer_warp": {
+            "mIoU": 0.3064312823746753,
+            "mTC": 0.5939943057292073,
+            "mVC16": 0.9497391091834695,
+            "mVC8": 0.9537118708061744,
+            "valid_frame_pairs": 389
+          },
+          "raft_low_same_path_reference": {
+            "mIoU": 0.35336740445648257,
+            "mTC": 0.6578591465324524,
+            "mVC16": 0.9035670868218868,
+            "mVC8": 0.922579888080827,
+            "valid_frame_pairs": 389
+          },
+          "semantic_persistence": {
+            "mIoU": 0.28236503118760864,
+            "mTC": 0.5732113751389056,
+            "mVC16": 0.9279152212992474,
+            "mVC8": 0.9321100915457032,
+            "valid_frame_pairs": 389
+          }
+        }
+      },
+      "0010": {
+        "complementarity": {
+          "damage_rate_given_host_correct": 0.050440481437297756,
+          "four_way_fraction_of_valid": {
+            "host_correct_prior_correct": 0.8899422330562403,
+            "host_correct_prior_wrong": 0.04727361877714297,
+            "host_wrong_prior_correct": 0.014562228909330439,
+            "host_wrong_prior_wrong": 0.04822191925728629
+          },
+          "host_correct": 120242865,
+          "host_correct_prior_correct": 114177757,
+          "host_correct_prior_wrong": 6065108,
+          "host_wrong": 8055077,
+          "host_wrong_prior_correct": 1868304,
+          "host_wrong_prior_wrong": 6186773,
+          "host_wrong_rate": 0.06278414816661673,
+          "prior_correct": 116046061,
+          "prior_wrong": 12251881,
+          "prior_wrong_rate": 0.09549553803442927,
+          "recoverable_rate_given_host_wrong": 0.23194117200865988,
+          "valid_pixels": 128297942
+        },
+        "metrics": {
+          "host": {
+            "mIoU": 0.5155959138226346,
+            "mTC": 0.6288838691816656,
+            "mVC16": 0.929314904824978,
+            "mVC8": 0.9303802896093907,
+            "valid_frame_pairs": 293
+          },
+          "observer_repair_only_oracle": {
+            "mIoU": 0.5515331706541083,
+            "mTC": 0.637505765122972,
+            "mVC16": 0.958200161613238,
+            "mVC8": 0.9572846438312687,
+            "valid_frame_pairs": 293
+          },
+          "observer_warp": {
+            "mIoU": 0.3631762705522159,
+            "mTC": 0.5905241616617966,
+            "mVC16": 0.92903816415977,
+            "mVC8": 0.92895797800329,
+            "valid_frame_pairs": 293
+          },
+          "raft_low_same_path_reference": {
+            "mIoU": 0.46173641366585755,
+            "mTC": 0.6558166569847239,
+            "mVC16": 0.9135104040293703,
+            "mVC8": 0.9127510613502358,
+            "valid_frame_pairs": 293
+          },
+          "semantic_persistence": {
+            "mIoU": 0.3366551755540758,
+            "mTC": 0.57767067016077,
+            "mVC16": 0.9182358561860336,
+            "mVC8": 0.9128056755065709,
+            "valid_frame_pairs": 293
+          }
+        }
+      },
+      "0013": {
+        "complementarity": {
+          "damage_rate_given_host_correct": 0.054424471466866,
+          "four_way_fraction_of_valid": {
+            "host_correct_prior_correct": 0.881729074138668,
+            "host_correct_prior_wrong": 0.050749662389644394,
+            "host_wrong_prior_correct": 0.014505547467806981,
+            "host_wrong_prior_wrong": 0.053015716003880636
+          },
+          "host_correct": 124692419,
+          "host_correct_prior_correct": 117906100,
+          "host_correct_prior_wrong": 6786319,
+          "host_wrong": 9029042,
+          "host_wrong_prior_correct": 1939703,
+          "host_wrong_prior_wrong": 7089339,
+          "host_wrong_rate": 0.06752126347168762,
+          "prior_correct": 119845803,
+          "prior_wrong": 13875658,
+          "prior_wrong_rate": 0.10376537839352502,
+          "recoverable_rate_given_host_wrong": 0.2148293251930825,
+          "valid_pixels": 133721461
+        },
+        "metrics": {
+          "host": {
+            "mIoU": 0.45964091939645724,
+            "mTC": 0.703867301882372,
+            "mVC16": 0.9170357797839588,
+            "mVC8": 0.9372367955792951,
+            "valid_frame_pairs": 339
+          },
+          "observer_repair_only_oracle": {
+            "mIoU": 0.5028397127558875,
+            "mTC": 0.7211128900173284,
+            "mVC16": 0.941637921913968,
+            "mVC8": 0.9567602540341761,
+            "valid_frame_pairs": 339
+          },
+          "observer_warp": {
+            "mIoU": 0.35434911676760367,
+            "mTC": 0.672064505051478,
+            "mVC16": 0.9210233362510275,
+            "mVC8": 0.9357867522126225,
+            "valid_frame_pairs": 339
+          },
+          "raft_low_same_path_reference": {
+            "mIoU": 0.4293358375571297,
+            "mTC": 0.7267154937647249,
+            "mVC16": 0.8850942695257068,
+            "mVC8": 0.9150692710091328,
+            "valid_frame_pairs": 339
+          },
+          "semantic_persistence": {
+            "mIoU": 0.3108048863032591,
+            "mTC": 0.6655929431730802,
+            "mVC16": 0.9042043846471828,
+            "mVC8": 0.9196530117491393,
+            "valid_frame_pairs": 339
+          }
+        }
+      },
+      "0014": {
+        "complementarity": {
+          "damage_rate_given_host_correct": 0.05003716853982231,
+          "four_way_fraction_of_valid": {
+            "host_correct_prior_correct": 0.8656977327853386,
+            "host_correct_prior_wrong": 0.04559869283868702,
+            "host_wrong_prior_correct": 0.01640701580886731,
+            "host_wrong_prior_wrong": 0.07229655856710712
+          },
+          "host_correct": 43000075,
+          "host_correct_prior_correct": 40848473,
+          "host_correct_prior_wrong": 2151602,
+          "host_wrong": 4185532,
+          "host_wrong_prior_correct": 774175,
+          "host_wrong_prior_wrong": 3411357,
+          "host_wrong_rate": 0.08870357437597444,
+          "prior_correct": 41622648,
+          "prior_wrong": 5562959,
+          "prior_wrong_rate": 0.11789525140579414,
+          "recoverable_rate_given_host_wrong": 0.1849645397526527,
+          "valid_pixels": 47185607
+        },
+        "metrics": {
+          "host": {
+            "mIoU": 0.4450716155240012,
+            "mTC": 0.707590841752099,
+            "mVC16": 0.8738927454463733,
+            "mVC8": 0.9144335088100457,
+            "valid_frame_pairs": 105
+          },
+          "observer_repair_only_oracle": {
+            "mIoU": 0.4756316540248444,
+            "mTC": 0.716039163730261,
+            "mVC16": 0.9169433117904292,
+            "mVC8": 0.9445361110918464,
+            "valid_frame_pairs": 105
+          },
+          "observer_warp": {
+            "mIoU": 0.33446037561658865,
+            "mTC": 0.6564091196639329,
+            "mVC16": 0.8761468813284946,
+            "mVC8": 0.9103780234093933,
+            "valid_frame_pairs": 105
+          },
+          "raft_low_same_path_reference": {
+            "mIoU": 0.4217113278123532,
+            "mTC": 0.7317089145095164,
+            "mVC16": 0.8710171239723628,
+            "mVC8": 0.9100479289833943,
+            "valid_frame_pairs": 105
+          },
+          "semantic_persistence": {
+            "mIoU": 0.3020819598447349,
+            "mTC": 0.6615515302565717,
+            "mVC16": 0.8630220378586553,
+            "mVC8": 0.8972705366679443,
+            "valid_frame_pairs": 105
+          }
+        }
+      },
+      "0016": {
+        "complementarity": {
+          "damage_rate_given_host_correct": 0.0401114375513434,
+          "four_way_fraction_of_valid": {
+            "host_correct_prior_correct": 0.7669636432273564,
+            "host_correct_prior_wrong": 0.03204956854677645,
+            "host_wrong_prior_correct": 0.013582399478786,
+            "host_wrong_prior_wrong": 0.18740438874708115
+          },
+          "host_correct": 73870252,
+          "host_correct_prior_correct": 70907210,
+          "host_correct_prior_wrong": 2963042,
+          "host_wrong": 18581601,
+          "host_wrong_prior_correct": 1255718,
+          "host_wrong_prior_wrong": 17325883,
+          "host_wrong_rate": 0.20098678822586716,
+          "prior_correct": 72162928,
+          "prior_wrong": 20288925,
+          "prior_wrong_rate": 0.21945395729385758,
+          "recoverable_rate_given_host_wrong": 0.06757856871428894,
+          "valid_pixels": 92451853
+        },
+        "metrics": {
+          "host": {
+            "mIoU": 0.5335461650405007,
+            "mTC": 0.8429647538138314,
+            "mVC16": 0.947303018667206,
+            "mVC8": 0.9510053070480615,
+            "valid_frame_pairs": 208
+          },
+          "observer_repair_only_oracle": {
+            "mIoU": 0.5621134970150542,
+            "mTC": 0.8537143068151593,
+            "mVC16": 0.9568811251667739,
+            "mVC8": 0.9604026116720936,
+            "valid_frame_pairs": 208
+          },
+          "observer_warp": {
+            "mIoU": 0.46626283587237904,
+            "mTC": 0.8351924171668448,
+            "mVC16": 0.9460207823040511,
+            "mVC8": 0.9490192846411133,
+            "valid_frame_pairs": 208
+          },
+          "raft_low_same_path_reference": {
+            "mIoU": 0.5024429231409739,
+            "mTC": 0.8519076432532202,
+            "mVC16": 0.9427344892820869,
+            "mVC8": 0.9455598382421297,
+            "valid_frame_pairs": 208
+          },
+          "semantic_persistence": {
+            "mIoU": 0.4673862476406408,
+            "mTC": 0.8317551996682523,
+            "mVC16": 0.9428766219091295,
+            "mVC8": 0.9455137024838937,
+            "valid_frame_pairs": 208
+          }
+        }
+      },
+      "0018": {
+        "complementarity": {
+          "damage_rate_given_host_correct": 0.02298907585707133,
+          "four_way_fraction_of_valid": {
+            "host_correct_prior_correct": 0.9035917796876551,
+            "host_correct_prior_wrong": 0.02126152272584693,
+            "host_wrong_prior_correct": 0.012918130880182439,
+            "host_wrong_prior_wrong": 0.06222856670631552
+          },
+          "host_correct": 144134328,
+          "host_correct_prior_correct": 140820813,
+          "host_correct_prior_wrong": 3313515,
+          "host_wrong": 11711283,
+          "host_wrong_prior_correct": 2013234,
+          "host_wrong_prior_wrong": 9698049,
+          "host_wrong_rate": 0.07514669758649796,
+          "prior_correct": 142834047,
+          "prior_wrong": 13011564,
+          "prior_wrong_rate": 0.08349008943216245,
+          "recoverable_rate_given_host_wrong": 0.17190550343630157,
+          "valid_pixels": 155845611
+        },
+        "metrics": {
+          "host": {
+            "mIoU": 0.39567697286467857,
+            "mTC": 0.764661627844471,
+            "mVC16": 0.9220785127874898,
+            "mVC8": 0.9342149449983105,
+            "valid_frame_pairs": 338
+          },
+          "observer_repair_only_oracle": {
+            "mIoU": 0.41216482288122713,
+            "mTC": 0.776640703087131,
+            "mVC16": 0.9470529764036246,
+            "mVC8": 0.9543466123711492,
+            "valid_frame_pairs": 338
+          },
+          "observer_warp": {
+            "mIoU": 0.36259724845523417,
+            "mTC": 0.757290667624559,
+            "mVC16": 0.9187021947166979,
+            "mVC8": 0.9309613771715288,
+            "valid_frame_pairs": 338
+          },
+          "raft_low_same_path_reference": {
+            "mIoU": 0.3769004386102882,
+            "mTC": 0.7840499941499466,
+            "mVC16": 0.9139321008421456,
+            "mVC8": 0.9282999596646896,
+            "valid_frame_pairs": 338
+          },
+          "semantic_persistence": {
+            "mIoU": 0.34309923923193353,
+            "mTC": 0.7440138337539838,
+            "mVC16": 0.9161754891005203,
+            "mVC8": 0.9261991077970809,
+            "valid_frame_pairs": 338
+          }
+        }
+      }
+    }
+  },
+  "stage1b1_checks": {
+    "observer_delta_mIoU_vs_persistence_ge_2pp": true,
+    "observer_fraction_of_raft_same_path_mIoU_gain": 0.4388172163320798,
+    "observer_mTC_gt_persistence": true,
+    "observer_minimum_go": true,
+    "observer_recovers_half_raft_gain_diagnostic": false
+  },
+  "train": {
+    "flow_loss": 0.006691615535984543,
+    "pairs": 5015,
+    "total_loss": 0.28297787062519214,
+    "warp_loss": 0.21606171550387043
+  }
+}

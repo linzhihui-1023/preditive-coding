@@ -1,0 +1,54 @@
+{
+  "c1_shape": [
+    1,
+    256,
+    94,
+    311
+  ],
+  "causal_ledger": [
+    {
+      "error": "e_1",
+      "motion": "M_1",
+      "observed_pair": [
+        0,
+        1
+      ],
+      "predicts": "M_hat_2",
+      "state": "H_1"
+    },
+    {
+      "error": "e_2",
+      "motion": "M_2",
+      "observed_pair": [
+        1,
+        2
+      ],
+      "predicts": "M_hat_3",
+      "state": "H_2"
+    }
+  ],
+  "experiment": "C-V2 Stage 1B sanity",
+  "hidden_shape": [
+    1,
+    64,
+    94,
+    311
+  ],
+  "low_logit_shape": [
+    1,
+    19,
+    94,
+    311
+  ],
+  "observer_e0_flow_max_abs": 0.0,
+  "observer_motion_shape": [
+    1,
+    2,
+    94,
+    311
+  ],
+  "passed": true,
+  "residual_e0_delta_max_abs": 0.0,
+  "residual_e0_equals_lagged_max_abs": 0.0,
+  "training": false
+}
