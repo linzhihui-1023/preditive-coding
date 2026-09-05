@@ -1,22 +1,18 @@
 """C-V2 Stage 1B: simultaneous Role-Supervision vs Spatial-Mask candidates.
 
-This experiment reuses exactly the same frozen Host, Motion Observer and Stage
-1B-2 residual-motion predictor for both candidates.  Motion is never updated.
-The only difference between the two evaluated candidates is how the two semantic
-correction roles are routed at inference:
+Both candidates reuse exactly the same frozen Host, Motion Observer and Stage
+1B-2 residual-motion predictor.  Motion is never updated by semantic loss.
 
-1) training-only role supervision:
-       L_role = L_host + DeltaL_transport + DeltaL_semantic
+Candidate A -- training-only role supervision:
+    L_role = L_host + DeltaL_transport + DeltaL_semantic
 
-2) recurrent spatial mask:
-       L_mask = L_host + T * DeltaL_transport + (1-T) * DeltaL_semantic
+Candidate B -- recurrent spatial routing:
+    L_mask = L_host + T * DeltaL_transport + (1-T) * DeltaL_semantic
 
-where T is transportability, not a Host/Prior fusion weight.
-
-During training, GT + frozen RAFT define role supervision only.  The mask is
-trained directly from that role target.  Final semantic CE never backpropagates
-through T, so the mask cannot lower the task loss by collapsing to an all-Host
-shortcut.  Motion is frozen and therefore cannot be suppressed by the mask.
+T is transportability, not a Host/Prior fusion weight.  GT + frozen RAFT are
+used only during training to supervise role separation and T.  Semantic CE never
+backpropagates through T, so the mask cannot lower task loss by collapsing to an
+all-Host shortcut.  T also never gates Motion gradients because Motion is frozen.
 """
 
 import argparse
@@ -68,7 +64,6 @@ from predify2021.model_factory.deeplabv3plus_resnet50.task_space_role_decoupling
     RoleSeparatedTaskCorrection,
 )
 
-
 SEED = 0
 EPOCHS = 3
 TBPTT_STEPS = 8
@@ -91,12 +86,11 @@ def _load_frozen_residual(path, observer):
     if payload.get("experiment") != "c_v2_stage1b2_residual_motion":
         raise RuntimeError("Residual checkpoint is not a Stage 1B-2 checkpoint")
     architecture = payload.get("architecture", {})
-    max_residual_low = float(architecture.get("max_residual_low", 16.0))
     residual = MotionResidualPredictor(
         num_classes=NUM_CLASSES,
         hidden_channels=RESIDUAL_HIDDEN_CHANNELS,
         max_observed_displacement_low=observer.max_displacement_low,
-        max_residual_displacement_low=max_residual_low,
+        max_residual_displacement_low=float(architecture.get("max_residual_low", 16.0)),
     ).cuda()
     residual.load_state_dict(payload["residual_state_dict"], strict=True)
     residual.requires_grad_(False).eval()
@@ -104,7 +98,6 @@ def _load_frozen_residual(path, observer):
 
 
 def _warp_label_nearest(previous_gt, backward_flow):
-    """Nearest-neighbor warp of previous GT using current->previous full flow."""
     height, width = previous_gt.shape
     if tuple(backward_flow.shape[-2:]) != (height, width):
         raise ValueError("GT and RAFT flow must share full-resolution shape")
@@ -142,7 +135,7 @@ def _warp_label_nearest(previous_gt, backward_flow):
 
 
 def _role_masks(previous_gt, current_gt_cpu, teacher_full):
-    """Training-only role target: transportable vs non-transportable semantics."""
+    """Training-only transportable/non-transportable role target."""
     warped_previous_gt, source_valid = _warp_label_nearest(previous_gt, teacher_full)
     current_gt = current_gt_cpu.cuda(non_blocking=True)
     valid = current_gt != IGNORE_LABEL
@@ -158,10 +151,7 @@ def _role_masks(previous_gt, current_gt_cpu, teacher_full):
 def _masked_cross_entropy(logits, target_cpu, mask_gpu):
     target = target_cpu.cuda(non_blocking=True).unsqueeze(0)
     per_pixel = F.cross_entropy(
-        logits,
-        target,
-        ignore_index=IGNORE_LABEL,
-        reduction="none",
+        logits, target, ignore_index=IGNORE_LABEL, reduction="none"
     )[0]
     if not bool(mask_gpu.any()):
         return logits.sum() * 0.0
@@ -177,7 +167,7 @@ def _masked_zero_residual(delta_logits, mask_gpu):
 
 
 def _balanced_transportability_bce(mask_logits_full, transportable, valid):
-    """Class-balanced direct role supervision; no downstream CE gradient to mask."""
+    """Balanced direct role supervision; no task CE gradient enters this head."""
     target = transportable.float().unsqueeze(0).unsqueeze(0)
     valid4 = valid.unsqueeze(0).unsqueeze(0)
     selected_target = target[valid4]
@@ -186,40 +176,27 @@ def _balanced_transportability_bce(mask_logits_full, transportable, valid):
         return mask_logits_full.sum() * 0.0
 
     positive = selected_target.sum()
-    total = torch.tensor(
-        float(selected_target.numel()), device=selected_target.device, dtype=selected_target.dtype
-    )
+    total = selected_target.new_tensor(float(selected_target.numel()))
     negative = total - positive
     positive_weight = total / (2.0 * positive.clamp_min(1.0))
     negative_weight = total / (2.0 * negative.clamp_min(1.0))
     weights = torch.where(
-        selected_target > 0.5,
-        positive_weight,
-        negative_weight,
+        selected_target > 0.5, positive_weight, negative_weight
     )
     loss = F.binary_cross_entropy_with_logits(
-        selected_logits,
-        selected_target,
-        reduction="none",
+        selected_logits, selected_target, reduction="none"
     )
     return (loss * weights).mean()
 
 
-def _detach_hidden(hidden):
-    return hidden.detach() if hidden is not None else None
-
-
-def _initialize_frozen_motion(observer, residual, frame0, frame1):
-    """Establish M_hat_2 from frames 0 and 1 using the frozen Stage-1B causal path."""
+def _initialize_motion(observer, residual, frame0, frame1):
     _, _, low0, c10, _ = frame0
     _, _, low1, c11, _ = frame1
     with torch.no_grad():
-        observed_motion = _observe_motion(observer, low0, c10, low1, c11)
+        observed = _observe_motion(observer, low0, c10, low1, c11)
         error = F.softmax(low1, dim=1) - F.softmax(low0, dim=1)
-        pending_motion, pending_delta, motion_hidden = residual.predict_next(
-            observed_motion, error, None
-        )
-    return observed_motion.detach(), pending_motion.detach(), pending_delta.detach(), motion_hidden.detach()
+        pending, _, hidden = residual.predict_next(observed, error, None)
+    return pending.detach(), hidden.detach()
 
 
 def _train_sequence(
@@ -238,19 +215,15 @@ def _train_sequence(
 
     frame0 = _host_observation(model, samples[0])
     frame1 = _host_observation(model, samples[1])
-    previous_gt = semantic_mask_from_panoptic_png(samples[1]["mask_path"])
-    previous_observed_motion, pending_motion, _, motion_hidden = _initialize_frozen_motion(
-        observer, residual, frame0, frame1
-    )
+    pending_motion, motion_hidden = _initialize_motion(observer, residual, frame0, frame1)
     previous_image, _, previous_low, previous_c1, _ = frame1
+    previous_gt = semantic_mask_from_panoptic_png(samples[1]["mask_path"])
 
-    transport_hidden = None
-    semantic_hidden = None
-    mask_hidden = None
-    buffered = []
+    transport_hidden = semantic_hidden = mask_hidden = None
+    buffered_losses = []
     totals = {
-        "windows": 0,
         "frames": 0,
+        "windows": 0,
         "transport_ce": 0.0,
         "semantic_ce": 0.0,
         "transport_offrole": 0.0,
@@ -276,7 +249,7 @@ def _train_sequence(
                 previous_gt, current_gt, teacher_full
             )
 
-        correction_row = correction(
+        row = correction(
             current_c1.detach(),
             host_low.detach(),
             prior_low.detach(),
@@ -284,12 +257,10 @@ def _train_sequence(
             transport_hidden,
             semantic_hidden,
         )
-        transport_hidden = correction_row["transport_hidden"]
-        semantic_hidden = correction_row["semantic_hidden"]
-        delta_transport_low = correction_row["delta_transport"]
-        delta_semantic_low = correction_row["delta_semantic"]
-        delta_transport_full = _upsample_prior(delta_transport_low, output_size)
-        delta_semantic_full = _upsample_prior(delta_semantic_low, output_size)
+        transport_hidden = row["transport_hidden"]
+        semantic_hidden = row["semantic_hidden"]
+        delta_transport = _upsample_prior(row["delta_transport"], output_size)
+        delta_semantic = _upsample_prior(row["delta_semantic"], output_size)
 
         mask_logits_low, mask_hidden = mask_predictor(
             current_c1.detach(),
@@ -298,28 +269,22 @@ def _train_sequence(
             pending_motion.detach(),
             mask_hidden,
         )
-        mask_logits_full = _upsample_prior(mask_logits_low, output_size)
+        mask_logits = _upsample_prior(mask_logits_low, output_size)
 
-        # Each correction head is supervised only for its physical role.
         transport_ce = _masked_cross_entropy(
-            host_logits.detach() + delta_transport_full,
-            current_gt,
-            transportable,
+            host_logits.detach() + delta_transport, current_gt, transportable
         )
         semantic_ce = _masked_cross_entropy(
-            host_logits.detach() + delta_semantic_full,
-            current_gt,
-            non_transportable,
+            host_logits.detach() + delta_semantic, current_gt, non_transportable
         )
-        # Off-role zero is direct role supervision, not a global sparsity penalty.
         transport_offrole = _masked_zero_residual(
-            delta_transport_full, non_transportable
+            delta_transport, non_transportable
         )
         semantic_offrole = _masked_zero_residual(
-            delta_semantic_full, transportable
+            delta_semantic, transportable
         )
         mask_bce = _balanced_transportability_bce(
-            mask_logits_full, transportable, valid
+            mask_logits, transportable, valid
         )
         total = (
             transport_ce
@@ -330,26 +295,24 @@ def _train_sequence(
         )
         if not torch.isfinite(total):
             raise FloatingPointError("Non-finite role-vs-mask training loss")
-        buffered.append(total)
+        buffered_losses.append(total)
 
         with torch.no_grad():
-            current_observed_motion = _observe_motion(
+            observed_motion = _observe_motion(
                 observer, previous_low, previous_c1, host_low, current_c1
             )
-            error_t = F.softmax(host_low, dim=1) - F.softmax(prior_low, dim=1)
-            next_motion, next_delta, next_motion_hidden = residual.predict_next(
-                current_observed_motion,
-                error_t,
-                motion_hidden,
+            prediction_error = F.softmax(host_low, dim=1) - F.softmax(prior_low, dim=1)
+            next_motion, _, next_motion_hidden = residual.predict_next(
+                observed_motion, prediction_error, motion_hidden
             )
 
         totals["frames"] += 1
         totals["transport_fraction"] += float(
             transportable.sum().item() / max(valid.sum().item(), 1)
         )
-        totals["mask_mean"] += float(torch.sigmoid(mask_logits_full).mean().detach().item())
-        totals["delta_transport_abs"] += float(delta_transport_full.abs().mean().detach().item())
-        totals["delta_semantic_abs"] += float(delta_semantic_full.abs().mean().detach().item())
+        totals["mask_mean"] += float(torch.sigmoid(mask_logits).mean().detach().item())
+        totals["delta_transport_abs"] += float(delta_transport.abs().mean().detach().item())
+        totals["delta_semantic_abs"] += float(delta_semantic.abs().mean().detach().item())
         for key, value in (
             ("transport_ce", transport_ce),
             ("semantic_ce", semantic_ce),
@@ -359,24 +322,23 @@ def _train_sequence(
         ):
             totals[key] += float(value.detach().item())
 
-        boundary = len(buffered) == tbptt_steps or frame_index == len(samples) - 1
+        boundary = len(buffered_losses) == tbptt_steps or frame_index == len(samples) - 1
         if boundary:
-            window_loss = torch.stack(buffered).mean()
+            window_loss = torch.stack(buffered_losses).mean()
             optimizer.zero_grad(set_to_none=True)
             window_loss.backward()
             optimizer.step()
             totals["windows"] += 1
             totals["total"] += float(window_loss.detach().item())
-            buffered = []
-            transport_hidden = _detach_hidden(transport_hidden)
-            semantic_hidden = _detach_hidden(semantic_hidden)
-            mask_hidden = _detach_hidden(mask_hidden)
+            buffered_losses = []
+            transport_hidden = transport_hidden.detach()
+            semantic_hidden = semantic_hidden.detach()
+            mask_hidden = mask_hidden.detach()
 
         previous_image = current_image
         previous_low = host_low.detach()
         previous_c1 = current_c1.detach()
         previous_gt = current_gt
-        previous_observed_motion = current_observed_motion.detach()
         pending_motion = next_motion.detach()
         motion_hidden = next_motion_hidden.detach()
 
@@ -411,8 +373,7 @@ def _train_epoch(
 ):
     correction.train()
     mask_predictor.train()
-    accumulated = None
-    sequence_count = 0
+    rows = []
     for samples in groups.values():
         row = _train_sequence(
             model,
@@ -425,18 +386,14 @@ def _train_epoch(
             optimizer,
             tbptt_steps,
         )
-        if row is None:
-            continue
-        if accumulated is None:
-            accumulated = {key: 0.0 for key in row}
-        for key, value in row.items():
-            accumulated[key] += float(value)
-        sequence_count += 1
-    if accumulated is None:
+        if row is not None:
+            rows.append(row)
+    if not rows:
         raise RuntimeError("No valid training sequences")
-    for key in accumulated:
-        accumulated[key] /= max(sequence_count, 1)
-    return accumulated
+    return {
+        key: sum(row[key] for row in rows) / len(rows)
+        for key in rows[0]
+    }
 
 
 @torch.inference_mode()
@@ -459,46 +416,36 @@ def _evaluate(model, observer, residual, correction, mask_predictor, groups, raf
     }
 
     for sequence in FULL9:
-        samples = groups[sequence]
         previous = None
-        previous_observed_motion = None
-        pending_motion = None
-        motion_hidden = None
-        transport_hidden = None
-        semantic_hidden = None
-        mask_hidden = None
+        pending_motion = motion_hidden = None
+        transport_hidden = semantic_hidden = mask_hidden = None
         previous_predictions = {}
         seq_vc = {name: VideoConsistency() for name in CANDIDATES}
 
-        for index, sample in enumerate(samples):
+        for index, sample in enumerate(groups[sequence]):
             image, host_logits, host_low, current_c1, output_size = _host_observation(
                 model, sample
             )
             host_pred = host_logits.argmax(1)
             gt_cpu = semantic_mask_from_panoptic_png(sample["mask_path"])
-            teacher_full = None
+            previous_image_for_mtc = previous[0] if previous is not None else None
 
             if previous is None:
                 role_pred = spatial_pred = host_pred
                 previous = (image, host_low.detach(), current_c1.detach())
             elif pending_motion is None:
-                # The second frame establishes observed motion and M_hat for the
-                # following frame; no future prior exists yet.
                 previous_image, previous_low, previous_c1 = previous
-                current_observed_motion = _observe_motion(
+                observed = _observe_motion(
                     observer, previous_low, previous_c1, host_low, current_c1
                 )
-                error_t = F.softmax(host_low, dim=1) - F.softmax(previous_low, dim=1)
-                pending_motion, _, motion_hidden = residual.predict_next(
-                    current_observed_motion, error_t, None
-                )
-                previous_observed_motion = current_observed_motion.detach()
+                error = F.softmax(host_low, dim=1) - F.softmax(previous_low, dim=1)
+                pending_motion, _, motion_hidden = residual.predict_next(observed, error, None)
                 role_pred = spatial_pred = host_pred
                 previous = (image, host_low.detach(), current_c1.detach())
             else:
                 previous_image, previous_low, previous_c1 = previous
                 prior_low, _ = warp_low_logits(previous_low, pending_motion)
-                correction_row = correction(
+                row = correction(
                     current_c1,
                     host_low,
                     prior_low,
@@ -506,14 +453,10 @@ def _evaluate(model, observer, residual, correction, mask_predictor, groups, raf
                     transport_hidden,
                     semantic_hidden,
                 )
-                transport_hidden = correction_row["transport_hidden"]
-                semantic_hidden = correction_row["semantic_hidden"]
-                delta_transport_full = _upsample_prior(
-                    correction_row["delta_transport"], output_size
-                )
-                delta_semantic_full = _upsample_prior(
-                    correction_row["delta_semantic"], output_size
-                )
+                transport_hidden = row["transport_hidden"]
+                semantic_hidden = row["semantic_hidden"]
+                delta_transport = _upsample_prior(row["delta_transport"], output_size)
+                delta_semantic = _upsample_prior(row["delta_semantic"], output_size)
                 mask_logits_low, mask_hidden = mask_predictor(
                     current_c1,
                     host_low,
@@ -525,31 +468,27 @@ def _evaluate(model, observer, residual, correction, mask_predictor, groups, raf
                     _upsample_prior(mask_logits_low, output_size)
                 )
 
-                role_logits = (
-                    host_logits + delta_transport_full + delta_semantic_full
-                )
-                spatial_logits = host_logits + (
-                    transportability * delta_transport_full
-                    + (1.0 - transportability) * delta_semantic_full
-                )
-                role_pred = role_logits.argmax(1)
-                spatial_pred = spatial_logits.argmax(1)
+                role_pred = (
+                    host_logits + delta_transport + delta_semantic
+                ).argmax(1)
+                spatial_pred = (
+                    host_logits
+                    + transportability * delta_transport
+                    + (1.0 - transportability) * delta_semantic
+                ).argmax(1)
 
                 diag["frames_with_temporal_prior"] += 1
                 diag["mask_mean"] += float(transportability.mean().item())
-                diag["delta_transport_abs"] += float(delta_transport_full.abs().mean().item())
-                diag["delta_semantic_abs"] += float(delta_semantic_full.abs().mean().item())
+                diag["delta_transport_abs"] += float(delta_transport.abs().mean().item())
+                diag["delta_semantic_abs"] += float(delta_semantic.abs().mean().item())
 
-                current_observed_motion = _observe_motion(
+                observed = _observe_motion(
                     observer, previous_low, previous_c1, host_low, current_c1
                 )
-                error_t = F.softmax(host_low, dim=1) - F.softmax(prior_low, dim=1)
+                error = F.softmax(host_low, dim=1) - F.softmax(prior_low, dim=1)
                 pending_motion, _, motion_hidden = residual.predict_next(
-                    current_observed_motion,
-                    error_t,
-                    motion_hidden,
+                    observed, error, motion_hidden
                 )
-                previous_observed_motion = current_observed_motion.detach()
                 previous = (image, host_low.detach(), current_c1.detach())
 
             predictions = {
@@ -562,28 +501,19 @@ def _evaluate(model, observer, residual, correction, mask_predictor, groups, raf
                 update_confusion_matrix(confusion[name], pc, gt_cpu)
                 seq_vc[name].update(gt_cpu, pc)
 
-            if index > 0:
-                if teacher_full is None:
-                    previous_image = samples[index - 1]
-                    # mTC needs actual images; use the stored previous frame tensor.
-                    stored_previous_image = previous[0] if False else None
-                # Recompute teacher only for mTC when the temporal-correction path
-                # did not already need it. RAFT remains evaluation support only.
-                if teacher_full is None:
-                    if index == 1:
-                        # At this point previous has already been replaced, so obtain
-                        # the preceding image directly through the frozen Host helper.
-                        prev_image = _host_observation(model, samples[index - 1])[0]
-                    else:
-                        prev_image = _host_observation(model, samples[index - 1])[0]
-                    teacher_full = raft.current_to_previous(image, prev_image)
+            if previous_image_for_mtc is not None:
+                teacher_full = raft.current_to_previous(image, previous_image_for_mtc)
                 for name, prediction in predictions.items():
-                    score = _pair_mtc(previous_predictions[name], prediction, teacher_full)
+                    score = _pair_mtc(
+                        previous_predictions[name], prediction, teacher_full
+                    )
                     if math.isfinite(score):
                         mtc_sum[name] += score
                         mtc_count[name] += 1
 
-            previous_predictions = {name: pred.detach() for name, pred in predictions.items()}
+            previous_predictions = {
+                name: prediction.detach() for name, prediction in predictions.items()
+            }
 
         for name in CANDIDATES:
             stats = seq_vc[name].stats()
@@ -610,7 +540,7 @@ def _evaluate(model, observer, residual, correction, mask_predictor, groups, raf
     return metrics, diagnostics
 
 
-def _payload(
+def _checkpoint_payload(
     epoch,
     args,
     correction,
@@ -635,8 +565,8 @@ def _payload(
         },
         "training_contract": {
             "role_target": "GT + frozen RAFT current-to-previous correspondence",
-            "transport_head": "CE on transportable region; zero residual on non-transportable region",
-            "semantic_head": "CE on non-transportable region; zero residual on transportable region",
+            "transport_head": "CE on transportable; zero residual off-role",
+            "semantic_head": "CE on non-transportable; zero residual off-role",
             "mask_head": "class-balanced direct transportability BCE only",
             "no_global_sparse_lambda": True,
             "no_Host_Prior_soft_fusion": True,
@@ -720,10 +650,7 @@ def main(argv=None):
     result_output.mkdir(parents=True, exist_ok=True)
 
     history = []
-    best = {
-        "role_supervision": None,
-        "spatial_mask": None,
-    }
+    best = {"role_supervision": None, "spatial_mask": None}
     for epoch in range(1, args.epochs + 1):
         train_stats = _train_epoch(
             model,
@@ -745,21 +672,22 @@ def main(argv=None):
             val_groups,
             raft,
         )
+        delta_vs_host = {
+            candidate: {
+                metric: metrics[candidate][metric] - metrics["host"][metric]
+                for metric in ("mIoU", "mTC", "mVC8", "mVC16")
+            }
+            for candidate in ("role_supervision", "spatial_mask")
+        }
         row = {
             "epoch": epoch,
             "train": train_stats,
             "metrics": metrics,
             "diagnostics": diagnostics,
-            "delta_vs_host": {
-                candidate: {
-                    metric: metrics[candidate][metric] - metrics["host"][metric]
-                    for metric in ("mIoU", "mTC", "mVC8", "mVC16")
-                }
-                for candidate in ("role_supervision", "spatial_mask")
-            },
+            "delta_vs_host": delta_vs_host,
         }
         history.append(row)
-        payload = _payload(
+        payload = _checkpoint_payload(
             epoch,
             args,
             correction,
@@ -782,10 +710,9 @@ def main(argv=None):
                     "epoch": epoch,
                     "mIoU": score,
                     "metrics": metrics[candidate],
-                    "delta_vs_host": row["delta_vs_host"][candidate],
+                    "delta_vs_host": delta_vs_host[candidate],
                 }
                 torch.save(payload, output / f"best_{candidate}.pt")
-
         print(json.dumps(row, sort_keys=True), flush=True)
 
     summary = {
@@ -807,9 +734,9 @@ def main(argv=None):
         "history": history,
         "best": best,
         "decision_rule": (
-            "Use the existing main metrics. Prefer a candidate only if its semantic gain is not "
-            "bought by a material temporal-consistency loss. Do not create threshold sweeps or "
-            "additional micro-diagnostics from this run."
+            "Use existing main metrics only. Prefer a candidate only if semantic gain is not "
+            "bought by a material temporal-consistency loss. Do not create threshold sweeps "
+            "or additional micro-diagnostics from this run."
         ),
     }
     (result_output / "summary.json").write_text(
