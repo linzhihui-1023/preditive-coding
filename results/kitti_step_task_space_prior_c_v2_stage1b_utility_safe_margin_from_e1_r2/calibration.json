@@ -1,0 +1,9 @@
+{
+  "aggregation": "median_of_frame_quantiles",
+  "calibrated_frames": 5003,
+  "frame_quantile": 0.9,
+  "frame_quantile_mean": 1.378084421157837,
+  "frame_quantile_median": 1.3143032789230347,
+  "kappa_base": 1.3143032789230347,
+  "stable_pixels": 125589584
+}
