@@ -1,0 +1,222 @@
+{
+  "best": {
+    "role_supervision": {
+      "delta_vs_host": {
+        "mIoU": 0.00030938727324869575,
+        "mTC": -0.026440686903566935,
+        "mVC16": 0.002384320079965918,
+        "mVC8": -8.103677932302933e-05
+      },
+      "epoch": 3,
+      "mIoU": 0.6544267938100432,
+      "metrics": {
+        "mIoU": 0.6544267938100432,
+        "mTC": 0.681343419098744,
+        "mVC16": 0.9313551761702622,
+        "mVC8": 0.9378654243424981
+      }
+    },
+    "spatial_mask": {
+      "delta_vs_host": {
+        "mIoU": 0.003722786291323721,
+        "mTC": -0.017956346899632325,
+        "mVC16": 0.002073178792456609,
+        "mVC8": 0.00028599842431686895
+      },
+      "epoch": 3,
+      "mIoU": 0.6578401928281182,
+      "metrics": {
+        "mIoU": 0.6578401928281182,
+        "mTC": 0.6898277591026786,
+        "mVC16": 0.9310440348827529,
+        "mVC8": 0.938232459546138
+      }
+    }
+  },
+  "decision_rule": "Use existing main metrics only. Prefer a candidate only if semantic gain is not bought by a material temporal-consistency loss. Do not create threshold sweeps or additional micro-diagnostics from this run.",
+  "experiment": "C-V2 Stage 1B Role Supervision vs Spatial Mask",
+  "frozen_motion": {
+    "observer_checkpoint": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_observer/best.pt",
+    "residual_checkpoint": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_task_alignment_r2/best.pt"
+  },
+  "history": [
+    {
+      "delta_vs_host": {
+        "role_supervision": {
+          "mIoU": 0.00015711919912253514,
+          "mTC": -0.0033605914534431403,
+          "mVC16": 0.011405739144578764,
+          "mVC8": 0.007938943320893288
+        },
+        "spatial_mask": {
+          "mIoU": 0.0025106854996722605,
+          "mTC": -0.0034713577233042026,
+          "mVC16": 0.006073199162056397,
+          "mVC8": 0.004150017914119064
+        }
+      },
+      "diagnostics": {
+        "delta_semantic_abs": 0.10062704408064188,
+        "delta_transport_abs": 0.04694017768471961,
+        "frames_with_temporal_prior": 2963,
+        "mask_mean": 0.6793431120469205
+      },
+      "epoch": 1,
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        },
+        "role_supervision": {
+          "mIoU": 0.654274525735917,
+          "mTC": 0.7044235145488678,
+          "mVC16": 0.940376595234875,
+          "mVC8": 0.9458854044427144
+        },
+        "spatial_mask": {
+          "mIoU": 0.6566280920364668,
+          "mTC": 0.7043127482790067,
+          "mVC16": 0.9350440552523527,
+          "mVC8": 0.9420964790359402
+        }
+      },
+      "train": {
+        "delta_semantic_abs": 0.07320161130249242,
+        "delta_transport_abs": 0.02050112096166463,
+        "frames": 416.9166666666667,
+        "mask_bce": 0.5562674627473919,
+        "mask_mean": 0.6007375128671006,
+        "semantic_ce": 0.9631146586902718,
+        "semantic_offrole": 0.012266193322036387,
+        "total": 1.6264644874036998,
+        "transport_ce": 0.0900852865720173,
+        "transport_fraction": 0.9549921626014671,
+        "transport_offrole": 0.0009058127017585989,
+        "windows": 52.5
+      }
+    },
+    {
+      "delta_vs_host": {
+        "role_supervision": {
+          "mIoU": -0.0006840824850481431,
+          "mTC": -0.019002427580404047,
+          "mVC16": 0.004803296219169195,
+          "mVC8": 0.0021713348313681102
+        },
+        "spatial_mask": {
+          "mIoU": 0.002524048044410976,
+          "mTC": -0.014059797166991572,
+          "mVC16": 0.002453249146220582,
+          "mVC8": 0.0008559366535998425
+        }
+      },
+      "diagnostics": {
+        "delta_semantic_abs": 0.13301482827849295,
+        "delta_transport_abs": 0.043177550065152316,
+        "frames_with_temporal_prior": 2963,
+        "mask_mean": 0.6799774822193426
+      },
+      "epoch": 2,
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        },
+        "role_supervision": {
+          "mIoU": 0.6534333240517464,
+          "mTC": 0.6887816784219069,
+          "mVC16": 0.9337741523094655,
+          "mVC8": 0.9401177959531892
+        },
+        "spatial_mask": {
+          "mIoU": 0.6566414545812055,
+          "mTC": 0.6937243088353193,
+          "mVC16": 0.9314241052365169,
+          "mVC8": 0.938802397775421
+        }
+      },
+      "train": {
+        "delta_semantic_abs": 0.11929628034930324,
+        "delta_transport_abs": 0.030541373132392715,
+        "frames": 416.9166666666667,
+        "mask_bce": 0.46790774288443093,
+        "mask_mean": 0.6789821068275467,
+        "semantic_ce": 0.8868522156591693,
+        "semantic_offrole": 0.026711347239194896,
+        "total": 1.4742043664451614,
+        "transport_ce": 0.08694949249963242,
+        "transport_fraction": 0.9549921626014671,
+        "transport_offrole": 0.002036413716340601,
+        "windows": 52.5
+      }
+    },
+    {
+      "delta_vs_host": {
+        "role_supervision": {
+          "mIoU": 0.00030938727324869575,
+          "mTC": -0.026440686903566935,
+          "mVC16": 0.002384320079965918,
+          "mVC8": -8.103677932302933e-05
+        },
+        "spatial_mask": {
+          "mIoU": 0.003722786291323721,
+          "mTC": -0.017956346899632325,
+          "mVC16": 0.002073178792456609,
+          "mVC8": 0.00028599842431686895
+        }
+      },
+      "diagnostics": {
+        "delta_semantic_abs": 0.1363968042517851,
+        "delta_transport_abs": 0.04202693896170126,
+        "frames_with_temporal_prior": 2963,
+        "mask_mean": 0.6847815999419875
+      },
+      "epoch": 3,
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        },
+        "role_supervision": {
+          "mIoU": 0.6544267938100432,
+          "mTC": 0.681343419098744,
+          "mVC16": 0.9313551761702622,
+          "mVC8": 0.9378654243424981
+        },
+        "spatial_mask": {
+          "mIoU": 0.6578401928281182,
+          "mTC": 0.6898277591026786,
+          "mVC16": 0.9310440348827529,
+          "mVC8": 0.938232459546138
+        }
+      },
+      "train": {
+        "delta_semantic_abs": 0.13439056453894319,
+        "delta_transport_abs": 0.030949074586706083,
+        "frames": 416.9166666666667,
+        "mask_bce": 0.44396384422175,
+        "mask_mean": 0.6964594800729659,
+        "semantic_ce": 0.8409926553305703,
+        "semantic_offrole": 0.03451898021782701,
+        "total": 1.411136301052822,
+        "transport_ce": 0.08575878835849281,
+        "transport_fraction": 0.9549921626014671,
+        "transport_offrole": 0.002352430741616788,
+        "windows": 52.5
+      }
+    }
+  ],
+  "purpose": "One shared frozen-motion run comparing implicit training-only role separation against explicit recurrent transportability routing.",
+  "training": {
+    "epochs": 3,
+    "lr": 0.0001,
+    "tbptt_steps": 8,
+    "weight_decay": 0.01
+  }
+}
