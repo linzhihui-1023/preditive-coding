@@ -1,8 +1,9 @@
 """C-V2 Stage 1B Role-Supervision vs Spatial-Mask on the bounded r=2 motion base.
 
 Both semantic candidates must share a Stage 1B-2 checkpoint whose task-alignment
-residual is structurally bounded to +/-2 low-resolution pixels.  Old +/-16
-residual-motion checkpoints are rejected explicitly.
+residual is structurally bounded to +/-2 low-resolution pixels. Old +/-16
+residual-motion checkpoints are rejected explicitly. The checkpoint must also
+carry the bounded-task-alignment role contract written by the r=2 trainer.
 """
 
 import argparse
@@ -15,6 +16,7 @@ from predify2021.mce_scores import (
 )
 from predify2021.mce_scores.train_kitti_step_task_space_prior_c_v2_stage1b_task_alignment_r2 import (
     MAX_TASK_ALIGNMENT_RESIDUAL_LOW,
+    TASK_ALIGNMENT_ROLE,
 )
 
 
@@ -37,11 +39,20 @@ def _validate_bounded_motion_checkpoint(path):
         raise RuntimeError("Checkpoint is not a Stage 1B-2 residual-motion checkpoint")
     architecture = payload.get("architecture", {})
     bound = float(architecture.get("max_residual_low", float("nan")))
+    role = architecture.get("residual_role")
+    explicit_task_bound = float(
+        architecture.get("max_task_alignment_residual_low", float("nan"))
+    )
     if bound != MAX_TASK_ALIGNMENT_RESIDUAL_LOW:
         raise RuntimeError(
             "Role/Mask r=2 mainline requires max_residual_low=2.0, "
             f"but checkpoint reports {bound}. Re-train the bounded task-alignment "
             "layer first; old +/-16 checkpoints are not accepted."
+        )
+    if role != TASK_ALIGNMENT_ROLE or explicit_task_bound != MAX_TASK_ALIGNMENT_RESIDUAL_LOW:
+        raise RuntimeError(
+            "Checkpoint has the right numeric bound but is not stamped as the current "
+            "bounded-task-alignment mainline. Re-run the r=2 task-alignment trainer."
         )
     return payload
 
