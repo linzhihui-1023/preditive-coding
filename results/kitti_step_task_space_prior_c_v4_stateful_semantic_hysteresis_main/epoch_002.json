@@ -1,0 +1,161 @@
+{
+  "epoch": 2,
+  "train": {
+    "frames": 5003,
+    "supervised_frames": 5003,
+    "optimizer_steps": 630,
+    "supervised_pixels": 141157231,
+    "controller_bce_per_pixel": 0.3915919958238332,
+    "hard_keep_fraction_of_conflicts": 0.06656479286474679,
+    "keep_probability_on_conflicts": 0.23062544136304225,
+    "prediction_error_abs": 0.0075051109940131935,
+    "dynamics_error_abs": 0.003170820366715565,
+    "targets": {
+      "valid_pixels": 2236783486,
+      "conflict_pixels": 142659132,
+      "supervised_conflict_pixels": 141157231,
+      "keep_target_pixels": 23047293,
+      "semantic_keep_pixels": 20575412,
+      "current_correct_history_wrong": 114212955,
+      "current_wrong_history_correct": 20575412,
+      "both_wrong_history_temporal_better": 2471881,
+      "both_wrong_current_temporal_better": 3896983,
+      "both_wrong_temporal_tie_or_invalid": 1501901,
+      "conflict_fraction_of_valid": 0.06377869511863876,
+      "supervised_fraction_of_conflicts": 0.9894721005312159,
+      "keep_target_fraction_of_supervised": 0.1632739097864565,
+      "semantic_keep_fraction_of_conflicts": 0.14422779468474545,
+      "current_correct_history_wrong_fraction_of_conflicts": 0.8006003779694945,
+      "current_wrong_history_correct_fraction_of_conflicts": 0.14422779468474545,
+      "both_wrong_history_temporal_better_fraction_of_conflicts": 0.017327183793603904,
+      "both_wrong_current_temporal_better_fraction_of_conflicts": 0.027316744083372105,
+      "both_wrong_temporal_tie_or_invalid_fraction_of_conflicts": 0.010527899468784095
+    }
+  },
+  "metrics": {
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC8": 0.9379464611218211,
+      "mVC16": 0.9289708560902963
+    },
+    "e1_base": {
+      "mIoU": 0.6553801657738326,
+      "mTC": 0.7097946210497371,
+      "mVC8": 0.9463059199319539,
+      "mVC16": 0.9403391719228389
+    },
+    "c_v3_base": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC8": 0.94442277549366,
+      "mVC16": 0.9364251481219616
+    },
+    "hysteresis": {
+      "mIoU": 0.6637739071008685,
+      "mTC": 0.7126707488339122,
+      "mVC8": 0.9476405481635821,
+      "mVC16": 0.940649507337775
+    },
+    "semantic_oracle": {
+      "mIoU": 0.711747729361678,
+      "mTC": 0.7174500914334904,
+      "mVC8": 0.9618522790455194,
+      "mVC16": 0.958333056752774
+    },
+    "semantic_temporal_oracle": {
+      "mIoU": 0.7083754412463757,
+      "mTC": 0.724701040652116,
+      "mVC8": 0.9618616199012575,
+      "mVC16": 0.9583186701947116
+    }
+  },
+  "diagnostics": {
+    "decision_frames": 2963,
+    "conflict_fraction_of_valid": 0.07298864351356193,
+    "hard_keep_fraction_of_conflicts": 0.0970352715072997,
+    "keep_probability_on_conflicts": 0.2400410911571127,
+    "prediction_error_abs": 0.008153316377917663,
+    "dynamics_error_abs": 0.0032760581341927286,
+    "history_valid_fraction": 0.9990849113922615,
+    "target_distribution": {
+      "valid_pixels": 1333491312,
+      "conflict_pixels": 97329722,
+      "supervised_conflict_pixels": 95832430,
+      "keep_target_pixels": 19196059,
+      "semantic_keep_pixels": 15905319,
+      "current_correct_history_wrong": 71479525,
+      "current_wrong_history_correct": 15905319,
+      "both_wrong_history_temporal_better": 3290740,
+      "both_wrong_current_temporal_better": 5156846,
+      "both_wrong_temporal_tie_or_invalid": 1497292,
+      "conflict_fraction_of_valid": 0.07298864351356193,
+      "supervised_fraction_of_conflicts": 0.9846162922359935,
+      "keep_target_fraction_of_supervised": 0.20030859073489005,
+      "semantic_keep_fraction_of_conflicts": 0.1634168748576103,
+      "current_correct_history_wrong_fraction_of_conflicts": 0.7344059299789226,
+      "current_wrong_history_correct_fraction_of_conflicts": 0.1634168748576103,
+      "both_wrong_history_temporal_better_fraction_of_conflicts": 0.033810227054794216,
+      "both_wrong_current_temporal_better_fraction_of_conflicts": 0.05298326034466635,
+      "both_wrong_temporal_tie_or_invalid_fraction_of_conflicts": 0.01538370776400656
+    },
+    "semantic_history_source": "previous frozen C-V3 full-resolution logits",
+    "controller_output_feedback": false,
+    "controller_uses_c1": false,
+    "dynamics_motion_compensated": true,
+    "invalid_history_prediction_error_zeroed": true,
+    "decision_resolution": "full output resolution",
+    "oracle_interpretation": "semantic_oracle is correctness-only. semantic_temporal_oracle adds temporal preference only when both candidates are GT-wrong; neither oracle is a strict upper bound on all possible mTC policies."
+  },
+  "delta_vs_c_v3_base": {
+    "hysteresis": {
+      "mIoU": 0.0010670723071894983,
+      "mTC": 0.0009863858635317246,
+      "mVC8": 0.00321777266992207,
+      "mVC16": 0.0042243592158133225
+    },
+    "semantic_oracle": {
+      "mIoU": 0.04904089456799898,
+      "mTC": 0.005765728463109854,
+      "mVC8": 0.01742950355185935,
+      "mVC16": 0.02190790863081238
+    },
+    "semantic_temporal_oracle": {
+      "mIoU": 0.04566860645269677,
+      "mTC": 0.013016677681735533,
+      "mVC8": 0.017438844407597465,
+      "mVC16": 0.02189352207274997
+    }
+  },
+  "delta_vs_host": {
+    "c_v3_base": {
+      "mIoU": 0.008589428256884468,
+      "mTC": 0.0039002569680696153,
+      "mVC8": 0.0064763143718389315,
+      "mVC16": 0.007454292031665366
+    },
+    "hysteresis": {
+      "mIoU": 0.009656500564073967,
+      "mTC": 0.00488664283160134,
+      "mVC8": 0.009694087041761001,
+      "mVC16": 0.011678651247478689
+    },
+    "semantic_oracle": {
+      "mIoU": 0.05763032282488345,
+      "mTC": 0.009665985431179469,
+      "mVC8": 0.02390581792369828,
+      "mVC16": 0.029362200662477744
+    },
+    "semantic_temporal_oracle": {
+      "mIoU": 0.05425803470958124,
+      "mTC": 0.01691693464980515,
+      "mVC8": 0.023915158779436396,
+      "mVC16": 0.029347814104415337
+    }
+  },
+  "selection_key": [
+    1,
+    0.7126707488339122,
+    0.6637739071008685
+  ]
+}
