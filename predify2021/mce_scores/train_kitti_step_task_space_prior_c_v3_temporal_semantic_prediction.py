@@ -1,10 +1,10 @@
-"""C-V3 temporal semantic prediction and selector-oracle evaluation.
+"""C-V3 temporal semantic prediction and correctness-oracle evaluation.
 
-This stage does not train a Selector. It asks one architecture question first:
-does the frozen best C-V3 memory contain a useful independent temporal semantic
-hypothesis before the current-frame memory update?
+This stage does not train a Selector. It asks whether the frozen best C-V3
+memory contains a useful independent temporal semantic hypothesis before the
+current-frame memory update.
 
-Causal temporal candidate:
+Causal temporal hypothesis:
     H_pred_t = Warp(H_{t-1}, M_hat_t)
     L_temp_t = TemporalSemanticDecoder(H_pred_t)
 
@@ -13,14 +13,15 @@ semantic correction state, or updated H_t. The frozen C-V3 base still updates
 its own memory from current evidence after H_pred_t has been formed.
 
 Training uses RAFT only to define a strict semantic-stability supervision mask.
-The decoder itself receives the inference-time predicted motion state, not RAFT
+The decoder itself receives the inference-time predicted-motion warp, not RAFT
 features or RAFT-warped memory.
 
-Evaluation reports Host, E1 Base, frozen best C-V3 Base, Temporal Prediction and
-a training-infeasible correctness Selector Oracle. The oracle chooses Temporal
-only when C-V3 Base is wrong and Temporal is correct. Its mIoU/mTC therefore
-measures the upper bound of the proposed correctness-based selector family,
-not the performance of a learned selector.
+Evaluation reports Host, E1 Base, frozen best C-V3 Base, a Temporal Candidate
+(raw temporal prediction on valid history with C-V3 fallback elsewhere), and a
+training-infeasible Correctness Oracle. The oracle chooses Temporal only when
+C-V3 Base is wrong and Temporal is correct. It measures semantic
+complementarity; its mTC is an observed property of that correctness policy and
+MUST NOT be interpreted as an upper bound on temporal-consistency selection.
 """
 
 import argparse
@@ -95,7 +96,7 @@ from predify2021.model_factory.deeplabv3plus_resnet50.task_space_temporal_semant
 
 SEED = 0
 EPOCHS = 3
-TBPTT_STEPS = 8
+GRAD_ACCUMULATION_FRAMES = 8
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-2
 
@@ -114,8 +115,8 @@ CANDIDATES = (
     "host",
     "e1_base",
     "c_v3_base",
-    "temporal",
-    "selector_oracle",
+    "temporal_candidate",
+    "correctness_oracle",
 )
 
 
@@ -158,6 +159,19 @@ def _history_valid_full(memory_row, output_size):
     )
 
 
+def _update_masked_confusion(confusion, prediction_cpu, target_cpu, mask_cpu):
+    keep = mask_cpu & (target_cpu != IGNORE_LABEL)
+    if not bool(keep.any()):
+        return 0, 0
+    encoded = NUM_CLASSES * target_cpu[keep] + prediction_cpu[keep]
+    confusion += torch.bincount(
+        encoded,
+        minlength=NUM_CLASSES * NUM_CLASSES,
+    ).reshape(NUM_CLASSES, NUM_CLASSES).cpu()
+    correct = int((prediction_cpu[keep] == target_cpu[keep]).sum().item())
+    return correct, int(keep.sum().item())
+
+
 def _frozen_cv3_step(
     refiner,
     current_c1,
@@ -198,7 +212,7 @@ def _train_sequence(
     raft,
     samples,
     optimizer,
-    tbptt_steps,
+    grad_accumulation_frames,
 ):
     if len(samples) < 4:
         return None
@@ -222,7 +236,7 @@ def _train_sequence(
     totals = {
         "frames": 0,
         "supervised_frames": 0,
-        "windows": 0,
+        "optimizer_steps": 0,
         "temporal_ce": 0.0,
         "strict_supervision_fraction": 0.0,
         "predicted_history_valid_fraction": 0.0,
@@ -330,7 +344,7 @@ def _train_sequence(
             )
 
         boundary = (
-            len(buffered_losses) >= tbptt_steps
+            len(buffered_losses) >= grad_accumulation_frames
             or frame_index == len(samples) - 1
         )
         if boundary and buffered_losses:
@@ -338,8 +352,7 @@ def _train_sequence(
             optimizer.zero_grad(set_to_none=True)
             window_loss.backward()
             optimizer.step()
-
-            totals["windows"] += 1
+            totals["optimizer_steps"] += 1
             buffered_losses = []
 
         previous_image = current_image
@@ -371,7 +384,7 @@ def _train_epoch(
     raft,
     groups,
     optimizer,
-    tbptt_steps,
+    grad_accumulation_frames,
 ):
     decoder.train()
     refiner.eval()
@@ -391,7 +404,7 @@ def _train_epoch(
             raft,
             samples,
             optimizer,
-            tbptt_steps,
+            grad_accumulation_frames,
         )
         if row is not None and row["supervised_frames"] > 0:
             rows.append(row)
@@ -421,11 +434,11 @@ def _new_complementarity_counts():
 def _update_complementarity_counts(
     counts,
     base_pred,
-    temporal_pred,
+    temporal_candidate_pred,
     gt_cpu,
 ):
     base = base_pred.squeeze(0).cpu()
-    temporal = temporal_pred.squeeze(0).cpu()
+    temporal = temporal_candidate_pred.squeeze(0).cpu()
     valid = gt_cpu != IGNORE_LABEL
     base_correct = base == gt_cpu
     temporal_correct = temporal == gt_cpu
@@ -505,6 +518,12 @@ def _evaluate(
         name: torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64)
         for name in CANDIDATES
     }
+    raw_temporal_valid_confusion = torch.zeros(
+        (NUM_CLASSES, NUM_CLASSES), dtype=torch.int64
+    )
+    raw_temporal_valid_correct = 0
+    raw_temporal_valid_pixels = 0
+
     mtc_sum = {name: 0.0 for name in CANDIDATES}
     mtc_count = {name: 0 for name in CANDIDATES}
     vc_sum = {
@@ -544,7 +563,8 @@ def _evaluate(
             previous_image_for_mtc = previous[0] if previous is not None else None
 
             if previous is None:
-                e1_pred = c_v3_pred = temporal_pred = selector_oracle_pred = host_pred
+                e1_pred = c_v3_pred = host_pred
+                temporal_candidate_pred = correctness_oracle_pred = host_pred
                 semantic_state_low = torch.zeros_like(host_low)
                 previous = (
                     image,
@@ -569,7 +589,8 @@ def _evaluate(
                     error,
                     None,
                 )
-                e1_pred = c_v3_pred = temporal_pred = selector_oracle_pred = host_pred
+                e1_pred = c_v3_pred = host_pred
+                temporal_candidate_pred = correctness_oracle_pred = host_pred
                 previous = (
                     image,
                     host_low.detach(),
@@ -623,24 +644,40 @@ def _evaluate(
                         memory_row,
                         output_size,
                     )
-                    temporal_pred = c_v3_pred.clone()
-                    temporal_pred[0][history_valid_full] = raw_temporal_pred[0][history_valid_full]
 
-                    selector_oracle_pred = c_v3_pred.clone()
+                    raw_cpu = raw_temporal_pred.squeeze(0).cpu()
+                    history_valid_cpu = history_valid_full.cpu()
+                    correct, count = _update_masked_confusion(
+                        raw_temporal_valid_confusion,
+                        raw_cpu,
+                        gt_cpu,
+                        history_valid_cpu,
+                    )
+                    raw_temporal_valid_correct += correct
+                    raw_temporal_valid_pixels += count
+
+                    temporal_candidate_pred = c_v3_pred.clone()
+                    temporal_candidate_pred[0][history_valid_full] = (
+                        raw_temporal_pred[0][history_valid_full]
+                    )
+
+                    correctness_oracle_pred = c_v3_pred.clone()
                     gt_gpu = gt_cpu.to(
                         c_v3_pred.device,
                         non_blocking=True,
                     )
                     valid = gt_gpu != IGNORE_LABEL
                     base_wrong = c_v3_pred[0] != gt_gpu
-                    temporal_correct = temporal_pred[0] == gt_gpu
+                    temporal_correct = temporal_candidate_pred[0] == gt_gpu
                     choose_temporal = valid & base_wrong & temporal_correct
-                    selector_oracle_pred[0][choose_temporal] = temporal_pred[0][choose_temporal]
+                    correctness_oracle_pred[0][choose_temporal] = (
+                        temporal_candidate_pred[0][choose_temporal]
+                    )
 
                     _update_complementarity_counts(
                         complementarity,
                         c_v3_pred,
-                        temporal_pred,
+                        temporal_candidate_pred,
                         gt_cpu,
                     )
                     diagnostics["frames_with_temporal_prediction"] += 1
@@ -654,8 +691,8 @@ def _evaluate(
                         (~history_valid_full).float().mean().item()
                     )
                 else:
-                    temporal_pred = c_v3_pred
-                    selector_oracle_pred = c_v3_pred
+                    temporal_candidate_pred = c_v3_pred
+                    correctness_oracle_pred = c_v3_pred
 
                 observed = _observe_motion(
                     observer,
@@ -683,8 +720,8 @@ def _evaluate(
                 "host": host_pred,
                 "e1_base": e1_pred,
                 "c_v3_base": c_v3_pred,
-                "temporal": temporal_pred,
-                "selector_oracle": selector_oracle_pred,
+                "temporal_candidate": temporal_candidate_pred,
+                "correctness_oracle": correctness_oracle_pred,
             }
 
             for name, prediction in predictions.items():
@@ -757,6 +794,19 @@ def _evaluate(
     ):
         diagnostics[key] /= frames
 
+    raw_iou = compute_iou(raw_temporal_valid_confusion)
+    diagnostics["raw_temporal_history_valid"] = {
+        "mIoU": float(torch.nanmean(raw_iou).item()),
+        "pixel_accuracy": (
+            raw_temporal_valid_correct / max(raw_temporal_valid_pixels, 1)
+        ),
+        "valid_pixels": int(raw_temporal_valid_pixels),
+        "definition": (
+            "raw TemporalSemanticDecoder prediction evaluated only where "
+            "predicted-motion history is valid; no C-V3 fallback"
+        ),
+    }
+
     return (
         metrics,
         diagnostics,
@@ -765,11 +815,12 @@ def _evaluate(
 
 
 def _selection_key(metrics):
-    oracle = metrics["selector_oracle"]
+    oracle = metrics["correctness_oracle"]
+    candidate = metrics["temporal_candidate"]
     return (
-        oracle["mTC"],
         oracle["mIoU"],
-        metrics["temporal"]["mIoU"],
+        candidate["mTC"],
+        candidate["mIoU"],
     )
 
 
@@ -806,9 +857,9 @@ def main(argv=None):
     )
     parser.add_argument("--epochs", type=int, default=EPOCHS)
     parser.add_argument(
-        "--tbptt-steps",
+        "--gradient-accumulation-frames",
         type=int,
-        default=TBPTT_STEPS,
+        default=GRAD_ACCUMULATION_FRAMES,
     )
     parser.add_argument(
         "--lr",
@@ -825,8 +876,10 @@ def main(argv=None):
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required")
-    if args.epochs <= 0 or args.tbptt_steps <= 0:
-        raise ValueError("epochs and tbptt-steps must be positive")
+    if args.epochs <= 0 or args.gradient_accumulation_frames <= 0:
+        raise ValueError(
+            "epochs and gradient-accumulation-frames must be positive"
+        )
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -934,7 +987,7 @@ def main(argv=None):
             raft,
             train_groups,
             optimizer,
-            args.tbptt_steps,
+            args.gradient_accumulation_frames,
         )
         metrics, diagnostics, complementarity = _evaluate(
             model,
@@ -962,8 +1015,8 @@ def main(argv=None):
             for name in (
                 "e1_base",
                 "c_v3_base",
-                "temporal",
-                "selector_oracle",
+                "temporal_candidate",
+                "correctness_oracle",
             )
         }
         delta_vs_cv3 = {
@@ -978,8 +1031,8 @@ def main(argv=None):
                 )
             }
             for name in (
-                "temporal",
-                "selector_oracle",
+                "temporal_candidate",
+                "correctness_oracle",
             )
         }
 
@@ -1010,6 +1063,14 @@ def main(argv=None):
                 "temporal_decoder": "64->64->32->19",
                 "current_inputs_to_decoder": [],
                 "selector_trained": False,
+                "temporal_candidate": (
+                    "raw temporal prediction on history-valid pixels; "
+                    "C-V3 Base fallback elsewhere"
+                ),
+                "correctness_oracle": (
+                    "choose Temporal only where C-V3 Base is wrong and "
+                    "Temporal Candidate is GT-correct"
+                ),
             },
             "training_contract": {
                 "only_trainable": "TemporalSemanticDecoder",
@@ -1019,7 +1080,10 @@ def main(argv=None):
                 ),
                 "raft_in_decoder": False,
                 "raft_in_inference": False,
-                "tbptt_steps": args.tbptt_steps,
+                "gradient_accumulation_frames": (
+                    args.gradient_accumulation_frames
+                ),
+                "tbptt": False,
             },
             "frozen": [
                 "Host",
@@ -1073,17 +1137,15 @@ def main(argv=None):
                 "metrics": metrics,
                 "delta_vs_host": delta_vs_host,
                 "delta_vs_c_v3_base": delta_vs_cv3,
+                "diagnostics": diagnostics,
                 "complementarity": complementarity,
             }
             torch.save(payload, output / "best.pt")
 
         print(json.dumps(row, sort_keys=True), flush=True)
 
-    target_reachable = bool(
-        best["delta_vs_host"]["selector_oracle"]["mIoU"]
-        >= 0.010
-        and best["delta_vs_host"]["selector_oracle"]["mTC"]
-        >= 0.040
+    semantic_headroom_ge_1pp = bool(
+        best["delta_vs_host"]["correctness_oracle"]["mIoU"] >= 0.010
     )
 
     summary = {
@@ -1091,10 +1153,9 @@ def main(argv=None):
             "C-V3 Temporal Semantic Prediction"
         ),
         "purpose": (
-            "Decide whether the frozen C-V3 historical memory "
-            "contains an independent semantic hypothesis with "
-            "enough Base/Temporal complementarity to justify "
-            "building a Stateful Selector."
+            "Measure the quality and semantic complementarity of an independent "
+            "historical semantic hypothesis before deciding whether to build a "
+            "Stateful Selector."
         ),
         "c_v3_checkpoint": args.c_v3_checkpoint,
         "c_v3_checkpoint_epoch": int(
@@ -1103,7 +1164,10 @@ def main(argv=None):
         "training": {
             "only_trainable": "TemporalSemanticDecoder",
             "epochs": args.epochs,
-            "tbptt_steps": args.tbptt_steps,
+            "gradient_accumulation_frames": (
+                args.gradient_accumulation_frames
+            ),
+            "tbptt": False,
             "lr": args.lr,
             "weight_decay": args.weight_decay,
             "decoder_current_frame_inputs": False,
@@ -1114,21 +1178,22 @@ def main(argv=None):
         },
         "history": history,
         "best": best,
-        "selector_oracle_gate": {
-            "target_reachable": target_reachable,
-            "criterion": (
-                "best correctness Selector Oracle Full9 "
-                "delta_vs_host mIoU >= +1.0 pp AND "
-                "mTC >= +4.0 pp"
+        "selector_evidence": {
+            "semantic_headroom_ge_1pp_vs_host": semantic_headroom_ge_1pp,
+            "semantic_headroom_measure": (
+                "Correctness Oracle delta_vs_host mIoU"
             ),
-            "if_false": (
-                "Do not build or tune a learned Selector; "
-                "the candidate pair does not expose enough "
-                "upper-bound headroom for the stated target."
+            "correctness_oracle_mtc_is_upper_bound": False,
+            "mtc_interpretation": (
+                "Correctness Oracle mTC is only the mTC produced by the "
+                "GT-correctness selection policy. A lower value does not prove "
+                "that a stateful temporal selector lacks mTC headroom."
             ),
-            "if_true": (
-                "Proceed to Stateful Conflict Selector using "
-                "prediction error and causal reliability evidence."
+            "decision_rule": (
+                "Do not issue an mTC NO-GO from Correctness Oracle alone. Use "
+                "semantic complementarity, raw history-valid temporal quality, "
+                "and observed candidate temporal behavior to decide the next "
+                "structural step."
             ),
         },
     }
@@ -1145,7 +1210,10 @@ def main(argv=None):
         json.dumps(
             {
                 "best": best,
-                "selector_target_reachable": target_reachable,
+                "semantic_headroom_ge_1pp_vs_host": (
+                    semantic_headroom_ge_1pp
+                ),
+                "correctness_oracle_mtc_is_upper_bound": False,
                 "checkpoint": str(output / "best.pt"),
                 "result": str(
                     result_output / "summary.json"
