@@ -1,0 +1,476 @@
+{
+  "best": {
+    "complementarity": {
+      "base_correct_temporal_correct": 1129145104,
+      "base_correct_temporal_wrong": 94604190,
+      "base_correct_temporal_wrong_fraction_of_valid": 0.07116038629090345,
+      "base_win_rate_on_conflicts": 0.723730343071163,
+      "base_wrong_temporal_correct": 17583568,
+      "base_wrong_temporal_correct_fraction_of_valid": 0.013226195280064957,
+      "base_wrong_temporal_wrong": 88117341,
+      "conflict_fraction": 0.09832444773412848,
+      "conflict_pixels": 130717457,
+      "damage_rate_given_base_correct": 0.07730683928794978,
+      "recoverable_rate_given_base_wrong": 0.16635209825868197,
+      "same_prediction": 1198732746,
+      "same_prediction_fraction": 0.9016755522658715,
+      "temporal_win_rate_on_conflicts": 0.13451583593765903,
+      "valid_pixels": 1329450203
+    },
+    "delta_vs_c_v3_base": {
+      "correctness_oracle": {
+        "mIoU": 0.027985697864683412,
+        "mTC": -0.005005067465389534,
+        "mVC16": 0.02337558571525733,
+        "mVC8": 0.017679571467549726
+      },
+      "temporal_candidate": {
+        "mIoU": -0.3536474994065012,
+        "mTC": -0.06202830137329096,
+        "mVC16": -0.011990362456534509,
+        "mVC8": -0.018597727892524896
+      }
+    },
+    "delta_vs_host": {
+      "c_v3_base": {
+        "mIoU": 0.008589428256884468,
+        "mTC": 0.0039002569680696153,
+        "mVC16": 0.007454292031665366,
+        "mVC8": 0.0064763143718389315
+      },
+      "correctness_oracle": {
+        "mIoU": 0.03657512612156788,
+        "mTC": -0.001104810497319919,
+        "mVC16": 0.030829877746922696,
+        "mVC8": 0.024155885839388658
+      },
+      "e1_base": {
+        "mIoU": 0.0012627592370381135,
+        "mTC": 0.00201051504742622,
+        "mVC16": 0.011368315832542608,
+        "mVC8": 0.00835945881013278
+      },
+      "temporal_candidate": {
+        "mIoU": -0.34505807114961673,
+        "mTC": -0.058128044405221346,
+        "mVC16": -0.004536070424869143,
+        "mVC8": -0.012121413520685964
+      }
+    },
+    "diagnostics": {
+      "frames_with_temporal_prediction": 2954,
+      "predicted_history_valid_fraction": 0.9991225078853305,
+      "raw_temporal_history_valid": {
+        "definition": "raw TemporalSemanticDecoder prediction evaluated only where predicted-motion history is valid; no C-V3 fallback",
+        "mIoU": 0.30637409140327304,
+        "pixel_accuracy": 0.8625563893107352,
+        "valid_pixels": 1328267477
+      },
+      "temporal_fallback_fraction": 0.0008774832426398186,
+      "temporal_logit_abs": 1.2567535973757444
+    },
+    "epoch": 3,
+    "metrics": {
+      "c_v3_base": {
+        "mIoU": 0.662706834793679,
+        "mTC": 0.7116843629703805,
+        "mVC16": 0.9364251481219616,
+        "mVC8": 0.94442277549366
+      },
+      "correctness_oracle": {
+        "mIoU": 0.6906925326583624,
+        "mTC": 0.706679295504991,
+        "mVC16": 0.959800733837219,
+        "mVC8": 0.9621023469612098
+      },
+      "e1_base": {
+        "mIoU": 0.6553801657738326,
+        "mTC": 0.7097946210497371,
+        "mVC16": 0.9403391719228389,
+        "mVC8": 0.9463059199319539
+      },
+      "host": {
+        "mIoU": 0.6541174065367945,
+        "mTC": 0.7077841060023109,
+        "mVC16": 0.9289708560902963,
+        "mVC8": 0.9379464611218211
+      },
+      "temporal_candidate": {
+        "mIoU": 0.3090593353871778,
+        "mTC": 0.6496560615970896,
+        "mVC16": 0.9244347856654271,
+        "mVC8": 0.9258250476011352
+      }
+    },
+    "selection_key": [
+      0.6906925326583624,
+      0.6496560615970896,
+      0.3090593353871778
+    ]
+  },
+  "c_v3_checkpoint": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v3_memory_supervision_stage_a/best.pt",
+  "c_v3_checkpoint_epoch": 1,
+  "experiment": "C-V3 Temporal Semantic Prediction",
+  "history": [
+    {
+      "complementarity": {
+        "base_correct_temporal_correct": 1114646052,
+        "base_correct_temporal_wrong": 109103242,
+        "base_correct_temporal_wrong_fraction_of_valid": 0.08206643750461709,
+        "base_win_rate_on_conflicts": 0.7243724541571177,
+        "base_wrong_temporal_correct": 17091520,
+        "base_wrong_temporal_correct_fraction_of_valid": 0.012856081379679928,
+        "base_wrong_temporal_wrong": 88609389,
+        "conflict_fraction": 0.11329315055210082,
+        "conflict_pixels": 150617602,
+        "damage_rate_given_base_correct": 0.08915489678721727,
+        "recoverable_rate_given_base_wrong": 0.16169700111093652,
+        "same_prediction": 1178832601,
+        "same_prediction_fraction": 0.8867068494478991,
+        "temporal_win_rate_on_conflicts": 0.11347624562499674,
+        "valid_pixels": 1329450203
+      },
+      "delta_vs_c_v3_base": {
+        "correctness_oracle": {
+          "mIoU": 0.02438056572943037,
+          "mTC": -0.005490623428015207,
+          "mVC16": 0.02341403263212738,
+          "mVC8": 0.01763765572726772
+        },
+        "temporal_candidate": {
+          "mIoU": -0.3918067079010482,
+          "mTC": -0.035301481725959705,
+          "mVC16": -0.014692293965484327,
+          "mVC8": -0.022397807893458688
+        }
+      },
+      "delta_vs_host": {
+        "c_v3_base": {
+          "mIoU": 0.008589428256884468,
+          "mTC": 0.0039002569680696153,
+          "mVC16": 0.007454292031665366,
+          "mVC8": 0.0064763143718389315
+        },
+        "correctness_oracle": {
+          "mIoU": 0.03296999398631484,
+          "mTC": -0.0015903664599455913,
+          "mVC16": 0.030868324663792746,
+          "mVC8": 0.024113970099106652
+        },
+        "e1_base": {
+          "mIoU": 0.0012627592370381135,
+          "mTC": 0.00201051504742622,
+          "mVC16": 0.011368315832542608,
+          "mVC8": 0.00835945881013278
+        },
+        "temporal_candidate": {
+          "mIoU": -0.38321727964416374,
+          "mTC": -0.03140122475789009,
+          "mVC16": -0.0072380019338189605,
+          "mVC8": -0.015921493521619756
+        }
+      },
+      "diagnostics": {
+        "frames_with_temporal_prediction": 2954,
+        "predicted_history_valid_fraction": 0.9991225078853305,
+        "raw_temporal_history_valid": {
+          "definition": "raw TemporalSemanticDecoder prediction evaluated only where predicted-motion history is valid; no C-V3 fallback",
+          "mIoU": 0.2676553271760657,
+          "pixel_accuracy": 0.851270183588181,
+          "valid_pixels": 1328267477
+        },
+        "temporal_fallback_fraction": 0.0008774832426398186,
+        "temporal_logit_abs": 0.6543719327239952
+      },
+      "epoch": 1,
+      "metrics": {
+        "c_v3_base": {
+          "mIoU": 0.662706834793679,
+          "mTC": 0.7116843629703805,
+          "mVC16": 0.9364251481219616,
+          "mVC8": 0.94442277549366
+        },
+        "correctness_oracle": {
+          "mIoU": 0.6870874005231093,
+          "mTC": 0.7061937395423653,
+          "mVC16": 0.959839180754089,
+          "mVC8": 0.9620604312209278
+        },
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC16": 0.9403391719228389,
+          "mVC8": 0.9463059199319539
+        },
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        },
+        "temporal_candidate": {
+          "mIoU": 0.27090012689263077,
+          "mTC": 0.6763828812444208,
+          "mVC16": 0.9217328541564773,
+          "mVC8": 0.9220249676002014
+        }
+      },
+      "train": {
+        "frames": 416.9166666666667,
+        "optimizer_steps": 52.333333333333336,
+        "predicted_history_valid_fraction": 0.9991965750607251,
+        "strict_supervision_fraction": 0.9279724268219071,
+        "supervised_frames": 415.9166666666667,
+        "temporal_ce": 1.4457823642721446,
+        "temporal_logit_abs": 0.44775114872485844
+      }
+    },
+    {
+      "complementarity": {
+        "base_correct_temporal_correct": 1122698202,
+        "base_correct_temporal_wrong": 101051092,
+        "base_correct_temporal_wrong_fraction_of_valid": 0.07600968563694296,
+        "base_win_rate_on_conflicts": 0.7268624819026325,
+        "base_wrong_temporal_correct": 17921125,
+        "base_wrong_temporal_correct_fraction_of_valid": 0.013480102496174503,
+        "base_wrong_temporal_wrong": 87779784,
+        "conflict_fraction": 0.1045723056691278,
+        "conflict_pixels": 139023673,
+        "damage_rate_given_base_correct": 0.08257499513621783,
+        "recoverable_rate_given_base_wrong": 0.16954560911108155,
+        "same_prediction": 1190426530,
+        "same_prediction_fraction": 0.8954276943308722,
+        "temporal_win_rate_on_conflicts": 0.1289070027663562,
+        "valid_pixels": 1329450203
+      },
+      "delta_vs_c_v3_base": {
+        "correctness_oracle": {
+          "mIoU": 0.027051293034945134,
+          "mTC": -0.0053669139314428405,
+          "mVC16": 0.02405761621959579,
+          "mVC8": 0.018215196827697455
+        },
+        "temporal_candidate": {
+          "mIoU": -0.3822711645771482,
+          "mTC": -0.03981289980919345,
+          "mVC16": -0.010594447486037994,
+          "mVC8": -0.018472529880248167
+        }
+      },
+      "delta_vs_host": {
+        "c_v3_base": {
+          "mIoU": 0.008589428256884468,
+          "mTC": 0.0039002569680696153,
+          "mVC16": 0.007454292031665366,
+          "mVC8": 0.0064763143718389315
+        },
+        "correctness_oracle": {
+          "mIoU": 0.0356407212918296,
+          "mTC": -0.0014666569633732252,
+          "mVC16": 0.031511908251261156,
+          "mVC8": 0.024691511199536387
+        },
+        "e1_base": {
+          "mIoU": 0.0012627592370381135,
+          "mTC": 0.00201051504742622,
+          "mVC16": 0.011368315832542608,
+          "mVC8": 0.00835945881013278
+        },
+        "temporal_candidate": {
+          "mIoU": -0.37368173632026375,
+          "mTC": -0.03591264284112383,
+          "mVC16": -0.0031401554543726284,
+          "mVC8": -0.011996215508409236
+        }
+      },
+      "diagnostics": {
+        "frames_with_temporal_prediction": 2954,
+        "predicted_history_valid_fraction": 0.9991225078853305,
+        "raw_temporal_history_valid": {
+          "definition": "raw TemporalSemanticDecoder prediction evaluated only where predicted-motion history is valid; no C-V3 fallback",
+          "mIoU": 0.27737548727028366,
+          "pixel_accuracy": 0.857956905316895,
+          "valid_pixels": 1328267477
+        },
+        "temporal_fallback_fraction": 0.0008774832426398186,
+        "temporal_logit_abs": 1.0002665703935887
+      },
+      "epoch": 2,
+      "metrics": {
+        "c_v3_base": {
+          "mIoU": 0.662706834793679,
+          "mTC": 0.7116843629703805,
+          "mVC16": 0.9364251481219616,
+          "mVC8": 0.94442277549366
+        },
+        "correctness_oracle": {
+          "mIoU": 0.6897581278286241,
+          "mTC": 0.7063174490389377,
+          "mVC16": 0.9604827643415574,
+          "mVC8": 0.9626379723213575
+        },
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC16": 0.9403391719228389,
+          "mVC8": 0.9463059199319539
+        },
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        },
+        "temporal_candidate": {
+          "mIoU": 0.28043567021653076,
+          "mTC": 0.6718714631611871,
+          "mVC16": 0.9258307006359237,
+          "mVC8": 0.9259502456134119
+        }
+      },
+      "train": {
+        "frames": 416.9166666666667,
+        "optimizer_steps": 52.333333333333336,
+        "predicted_history_valid_fraction": 0.9991965750607251,
+        "strict_supervision_fraction": 0.9279724268219071,
+        "supervised_frames": 415.9166666666667,
+        "temporal_ce": 0.8085899424193209,
+        "temporal_logit_abs": 0.7745937019994323
+      }
+    },
+    {
+      "complementarity": {
+        "base_correct_temporal_correct": 1129145104,
+        "base_correct_temporal_wrong": 94604190,
+        "base_correct_temporal_wrong_fraction_of_valid": 0.07116038629090345,
+        "base_win_rate_on_conflicts": 0.723730343071163,
+        "base_wrong_temporal_correct": 17583568,
+        "base_wrong_temporal_correct_fraction_of_valid": 0.013226195280064957,
+        "base_wrong_temporal_wrong": 88117341,
+        "conflict_fraction": 0.09832444773412848,
+        "conflict_pixels": 130717457,
+        "damage_rate_given_base_correct": 0.07730683928794978,
+        "recoverable_rate_given_base_wrong": 0.16635209825868197,
+        "same_prediction": 1198732746,
+        "same_prediction_fraction": 0.9016755522658715,
+        "temporal_win_rate_on_conflicts": 0.13451583593765903,
+        "valid_pixels": 1329450203
+      },
+      "delta_vs_c_v3_base": {
+        "correctness_oracle": {
+          "mIoU": 0.027985697864683412,
+          "mTC": -0.005005067465389534,
+          "mVC16": 0.02337558571525733,
+          "mVC8": 0.017679571467549726
+        },
+        "temporal_candidate": {
+          "mIoU": -0.3536474994065012,
+          "mTC": -0.06202830137329096,
+          "mVC16": -0.011990362456534509,
+          "mVC8": -0.018597727892524896
+        }
+      },
+      "delta_vs_host": {
+        "c_v3_base": {
+          "mIoU": 0.008589428256884468,
+          "mTC": 0.0039002569680696153,
+          "mVC16": 0.007454292031665366,
+          "mVC8": 0.0064763143718389315
+        },
+        "correctness_oracle": {
+          "mIoU": 0.03657512612156788,
+          "mTC": -0.001104810497319919,
+          "mVC16": 0.030829877746922696,
+          "mVC8": 0.024155885839388658
+        },
+        "e1_base": {
+          "mIoU": 0.0012627592370381135,
+          "mTC": 0.00201051504742622,
+          "mVC16": 0.011368315832542608,
+          "mVC8": 0.00835945881013278
+        },
+        "temporal_candidate": {
+          "mIoU": -0.34505807114961673,
+          "mTC": -0.058128044405221346,
+          "mVC16": -0.004536070424869143,
+          "mVC8": -0.012121413520685964
+        }
+      },
+      "diagnostics": {
+        "frames_with_temporal_prediction": 2954,
+        "predicted_history_valid_fraction": 0.9991225078853305,
+        "raw_temporal_history_valid": {
+          "definition": "raw TemporalSemanticDecoder prediction evaluated only where predicted-motion history is valid; no C-V3 fallback",
+          "mIoU": 0.30637409140327304,
+          "pixel_accuracy": 0.8625563893107352,
+          "valid_pixels": 1328267477
+        },
+        "temporal_fallback_fraction": 0.0008774832426398186,
+        "temporal_logit_abs": 1.2567535973757444
+      },
+      "epoch": 3,
+      "metrics": {
+        "c_v3_base": {
+          "mIoU": 0.662706834793679,
+          "mTC": 0.7116843629703805,
+          "mVC16": 0.9364251481219616,
+          "mVC8": 0.94442277549366
+        },
+        "correctness_oracle": {
+          "mIoU": 0.6906925326583624,
+          "mTC": 0.706679295504991,
+          "mVC16": 0.959800733837219,
+          "mVC8": 0.9621023469612098
+        },
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC16": 0.9403391719228389,
+          "mVC8": 0.9463059199319539
+        },
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC16": 0.9289708560902963,
+          "mVC8": 0.9379464611218211
+        },
+        "temporal_candidate": {
+          "mIoU": 0.3090593353871778,
+          "mTC": 0.6496560615970896,
+          "mVC16": 0.9244347856654271,
+          "mVC8": 0.9258250476011352
+        }
+      },
+      "train": {
+        "frames": 416.9166666666667,
+        "optimizer_steps": 52.333333333333336,
+        "predicted_history_valid_fraction": 0.9991965750607251,
+        "strict_supervision_fraction": 0.9279724268219071,
+        "supervised_frames": 415.9166666666667,
+        "temporal_ce": 0.5742266990818763,
+        "temporal_logit_abs": 1.08855780881376
+      }
+    }
+  ],
+  "purpose": "Measure the quality and semantic complementarity of an independent historical semantic hypothesis before deciding whether to build a Stateful Selector.",
+  "selector_evidence": {
+    "correctness_oracle_mtc_is_upper_bound": false,
+    "decision_rule": "Do not issue an mTC NO-GO from Correctness Oracle alone. Use semantic complementarity, raw history-valid temporal quality, and observed candidate temporal behavior to decide the next structural step.",
+    "mtc_interpretation": "Correctness Oracle mTC is only the mTC produced by the GT-correctness selection policy. A lower value does not prove that a stateful temporal selector lacks mTC headroom.",
+    "semantic_headroom_ge_1pp_vs_host": true,
+    "semantic_headroom_measure": "Correctness Oracle delta_vs_host mIoU"
+  },
+  "training": {
+    "Q_mem_not_used_by_decoder": true,
+    "T_frozen": true,
+    "decoder_current_frame_inputs": false,
+    "epochs": 3,
+    "gradient_accumulation_frames": 8,
+    "lr": 0.0001,
+    "memory_frozen": true,
+    "motion_frozen": true,
+    "only_trainable": "TemporalSemanticDecoder",
+    "tbptt": false,
+    "weight_decay": 0.01
+  }
+}

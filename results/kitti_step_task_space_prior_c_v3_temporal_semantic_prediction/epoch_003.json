@@ -1,0 +1,113 @@
+{
+  "complementarity": {
+    "base_correct_temporal_correct": 1129145104,
+    "base_correct_temporal_wrong": 94604190,
+    "base_correct_temporal_wrong_fraction_of_valid": 0.07116038629090345,
+    "base_win_rate_on_conflicts": 0.723730343071163,
+    "base_wrong_temporal_correct": 17583568,
+    "base_wrong_temporal_correct_fraction_of_valid": 0.013226195280064957,
+    "base_wrong_temporal_wrong": 88117341,
+    "conflict_fraction": 0.09832444773412848,
+    "conflict_pixels": 130717457,
+    "damage_rate_given_base_correct": 0.07730683928794978,
+    "recoverable_rate_given_base_wrong": 0.16635209825868197,
+    "same_prediction": 1198732746,
+    "same_prediction_fraction": 0.9016755522658715,
+    "temporal_win_rate_on_conflicts": 0.13451583593765903,
+    "valid_pixels": 1329450203
+  },
+  "delta_vs_c_v3_base": {
+    "correctness_oracle": {
+      "mIoU": 0.027985697864683412,
+      "mTC": -0.005005067465389534,
+      "mVC16": 0.02337558571525733,
+      "mVC8": 0.017679571467549726
+    },
+    "temporal_candidate": {
+      "mIoU": -0.3536474994065012,
+      "mTC": -0.06202830137329096,
+      "mVC16": -0.011990362456534509,
+      "mVC8": -0.018597727892524896
+    }
+  },
+  "delta_vs_host": {
+    "c_v3_base": {
+      "mIoU": 0.008589428256884468,
+      "mTC": 0.0039002569680696153,
+      "mVC16": 0.007454292031665366,
+      "mVC8": 0.0064763143718389315
+    },
+    "correctness_oracle": {
+      "mIoU": 0.03657512612156788,
+      "mTC": -0.001104810497319919,
+      "mVC16": 0.030829877746922696,
+      "mVC8": 0.024155885839388658
+    },
+    "e1_base": {
+      "mIoU": 0.0012627592370381135,
+      "mTC": 0.00201051504742622,
+      "mVC16": 0.011368315832542608,
+      "mVC8": 0.00835945881013278
+    },
+    "temporal_candidate": {
+      "mIoU": -0.34505807114961673,
+      "mTC": -0.058128044405221346,
+      "mVC16": -0.004536070424869143,
+      "mVC8": -0.012121413520685964
+    }
+  },
+  "diagnostics": {
+    "frames_with_temporal_prediction": 2954,
+    "predicted_history_valid_fraction": 0.9991225078853305,
+    "raw_temporal_history_valid": {
+      "definition": "raw TemporalSemanticDecoder prediction evaluated only where predicted-motion history is valid; no C-V3 fallback",
+      "mIoU": 0.30637409140327304,
+      "pixel_accuracy": 0.8625563893107352,
+      "valid_pixels": 1328267477
+    },
+    "temporal_fallback_fraction": 0.0008774832426398186,
+    "temporal_logit_abs": 1.2567535973757444
+  },
+  "epoch": 3,
+  "metrics": {
+    "c_v3_base": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC16": 0.9364251481219616,
+      "mVC8": 0.94442277549366
+    },
+    "correctness_oracle": {
+      "mIoU": 0.6906925326583624,
+      "mTC": 0.706679295504991,
+      "mVC16": 0.959800733837219,
+      "mVC8": 0.9621023469612098
+    },
+    "e1_base": {
+      "mIoU": 0.6553801657738326,
+      "mTC": 0.7097946210497371,
+      "mVC16": 0.9403391719228389,
+      "mVC8": 0.9463059199319539
+    },
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC16": 0.9289708560902963,
+      "mVC8": 0.9379464611218211
+    },
+    "temporal_candidate": {
+      "mIoU": 0.3090593353871778,
+      "mTC": 0.6496560615970896,
+      "mVC16": 0.9244347856654271,
+      "mVC8": 0.9258250476011352
+    }
+  },
+  "train": {
+    "frames": 416.9166666666667,
+    "optimizer_steps": 52.333333333333336,
+    "predicted_history_valid_fraction": 0.9991965750607251,
+    "strict_supervision_fraction": 0.9279724268219071,
+    "supervised_frames": 415.9166666666667,
+    "temporal_ce": 0.5742266990818763,
+    "temporal_logit_abs": 1.08855780881376
+  }
+}
