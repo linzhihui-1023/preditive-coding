@@ -18,11 +18,16 @@ history for the next frame; the next history always originates from the frozen
 C-V3 base. This cuts the positive feedback path that would otherwise allow a
 wrong Keep decision to become self-reinforcing drift.
 
-Training uses ordinary unbalanced BCE on conflict pixels. Targets are
-semantic-safe: if exactly one candidate is correct, choose the correct one; if
-both are wrong, RAFT-aligned GT temporal stability decides whether preserving
-history is preferable. No C1 feature is visible to the controller. RAFT is
-training/evaluation supervision only and is absent from inference.
+Training uses ordinary unbalanced BCE on conflict pixels with a lexicographic
+target:
+  1) semantic correctness first -- if exactly one candidate is GT-correct,
+     choose it;
+  2) only when both candidates are GT-wrong, use frozen RAFT to ask which
+     candidate better matches the RAFT-aligned previous frozen C-V3 prediction.
+
+Thus temporal consistency is optimized only after semantic correctness is tied.
+No C1 feature is visible to the controller. RAFT is training/evaluation
+supervision only and is absent from inference.
 """
 
 import argparse
@@ -122,7 +127,7 @@ CANDIDATES = (
     "e1_base",
     "c_v3_base",
     "hysteresis",
-    "semantic_safe_oracle",
+    "semantic_temporal_oracle",
 )
 
 
@@ -131,54 +136,52 @@ def _downsample_label(label_cpu, low_size, device):
     return F.interpolate(label, size=low_size, mode="nearest")[0, 0].long()
 
 
-def _low_semantic_stability(previous_gt_cpu, current_gt_cpu, teacher_full, low_size):
-    """RAFT-aligned low-resolution GT stability for training-only decisions."""
-    device = teacher_full.device
-    previous_low = _downsample_label(previous_gt_cpu, low_size, device)
-    current_low = _downsample_label(current_gt_cpu, low_size, device)
+def _raft_warp_previous_base_prediction(previous_cv3_low, teacher_full):
+    """Training-only temporal reference from previous frozen C-V3 prediction."""
+    low_size = tuple(previous_cv3_low.shape[-2:])
     teacher_low = downsample_backward_flow(teacher_full, low_size)
     grid, flow_valid = low_flow_grid(teacher_low)
-    warped_previous = F.grid_sample(
-        previous_low.float()[None, None],
+    previous_prediction = previous_cv3_low.argmax(dim=1).float().unsqueeze(1)
+    warped = F.grid_sample(
+        previous_prediction,
         grid,
         mode="nearest",
         padding_mode="zeros",
         align_corners=True,
-    )[0, 0].long()
-    valid = (
-        flow_valid[0]
-        & (previous_low != IGNORE_LABEL)
-        & (warped_previous != IGNORE_LABEL)
-        & (current_low != IGNORE_LABEL)
-    )
-    stable = valid & (warped_previous == current_low)
-    changed = valid & (warped_previous != current_low)
-    return current_low, valid, stable, changed
+    )[:, 0].long()
+    return warped[0], flow_valid[0]
 
 
 def _decision_target(
     current_probability,
     history_probability,
     history_valid_low,
-    previous_gt_cpu,
+    previous_cv3_low,
     current_gt_cpu,
     teacher_full,
 ):
-    """Build semantic-safe Keep-History targets only on prediction conflicts.
+    """Build semantic-first, temporal-second Keep-History targets.
 
-    Rules on a current/history conflict:
+    On a current/history conflict:
       - current correct, history wrong -> Use Current;
       - history correct, current wrong -> Keep History;
-      - both wrong + GT temporally stable -> Keep History;
-      - both wrong + GT truly changed -> Use Current;
-      - both wrong + invalid teacher geometry -> do not supervise.
+      - both wrong -> use RAFT-aligned previous frozen C-V3 prediction as the
+        temporal reference, but supervise only when exactly one candidate
+        matches that reference;
+      - invalid RAFT geometry or a temporal tie -> do not supervise.
+
+    This is a lexicographic target: temporal consistency never overrides a
+    known semantic-correctness advantage.
     """
     low_size = tuple(current_probability.shape[-2:])
-    current_gt, teacher_valid, gt_stable, gt_changed = _low_semantic_stability(
-        previous_gt_cpu,
+    current_gt = _downsample_label(
         current_gt_cpu,
-        teacher_full,
         low_size,
+        current_probability.device,
+    )
+    teacher_previous_pred, teacher_valid = _raft_warp_previous_base_prediction(
+        previous_cv3_low,
+        teacher_full,
     )
 
     current_pred = current_probability.argmax(dim=1)[0]
@@ -192,12 +195,23 @@ def _decision_target(
     exactly_one_correct = current_correct ^ history_correct
     both_wrong = ~current_correct & ~history_correct
 
+    current_temporal_match = current_pred == teacher_previous_pred
+    history_temporal_match = history_pred == teacher_previous_pred
+    temporal_discriminable = (
+        teacher_valid
+        & (current_temporal_match ^ history_temporal_match)
+    )
+
     supervised = conflict & (
-        exactly_one_correct | (both_wrong & teacher_valid)
+        exactly_one_correct | (both_wrong & temporal_discriminable)
     )
     keep_history = supervised & (
         (history_correct & ~current_correct)
-        | (both_wrong & gt_stable)
+        | (
+            both_wrong
+            & history_temporal_match
+            & ~current_temporal_match
+        )
     )
 
     diagnostics = {
@@ -211,11 +225,30 @@ def _decision_target(
         "current_wrong_history_correct": int(
             (conflict & ~current_correct & history_correct).sum().item()
         ),
-        "both_wrong_stable": int(
-            (conflict & both_wrong & gt_stable).sum().item()
+        "both_wrong_history_temporal_better": int(
+            (
+                conflict
+                & both_wrong
+                & teacher_valid
+                & history_temporal_match
+                & ~current_temporal_match
+            ).sum().item()
         ),
-        "both_wrong_changed": int(
-            (conflict & both_wrong & gt_changed).sum().item()
+        "both_wrong_current_temporal_better": int(
+            (
+                conflict
+                & both_wrong
+                & teacher_valid
+                & current_temporal_match
+                & ~history_temporal_match
+            ).sum().item()
+        ),
+        "both_wrong_temporal_tie_or_invalid": int(
+            (
+                conflict
+                & both_wrong
+                & ~temporal_discriminable
+            ).sum().item()
         ),
     }
     return keep_history, supervised, conflict, diagnostics
@@ -282,8 +315,9 @@ def _new_target_totals():
         "keep_target_pixels": 0,
         "current_correct_history_wrong": 0,
         "current_wrong_history_correct": 0,
-        "both_wrong_stable": 0,
-        "both_wrong_changed": 0,
+        "both_wrong_history_temporal_better": 0,
+        "both_wrong_current_temporal_better": 0,
+        "both_wrong_temporal_tie_or_invalid": 0,
     }
 
 
@@ -311,11 +345,14 @@ def _target_rates(total):
         "current_wrong_history_correct_fraction_of_conflicts": (
             total["current_wrong_history_correct"] / conflict
         ),
-        "both_wrong_stable_fraction_of_conflicts": (
-            total["both_wrong_stable"] / conflict
+        "both_wrong_history_temporal_better_fraction_of_conflicts": (
+            total["both_wrong_history_temporal_better"] / conflict
         ),
-        "both_wrong_changed_fraction_of_conflicts": (
-            total["both_wrong_changed"] / conflict
+        "both_wrong_current_temporal_better_fraction_of_conflicts": (
+            total["both_wrong_current_temporal_better"] / conflict
+        ),
+        "both_wrong_temporal_tie_or_invalid_fraction_of_conflicts": (
+            total["both_wrong_temporal_tie_or_invalid"] / conflict
         ),
     }
 
@@ -343,7 +380,6 @@ def _train_sequence(
         observer, residual, frame0, frame1
     )
     previous_image, _, previous_low, previous_c1, _ = frame1
-    previous_gt = semantic_mask_from_panoptic_png(samples[1]["mask_path"])
 
     # Frozen C-V3 uses Host fallback on the first two frames, matching evaluation.
     previous_cv3_low = previous_low.detach()
@@ -439,7 +475,7 @@ def _train_sequence(
                 current_probability,
                 history_probability,
                 history_valid_low,
-                previous_gt,
+                previous_cv3_low,
                 current_gt,
                 teacher_full,
             )
@@ -511,7 +547,6 @@ def _train_sequence(
             dynamics_state = dynamics_state.detach()
 
         previous_image = current_image
-        previous_gt = current_gt
         previous_low = host_low.detach()
         previous_c1 = current_c1.detach()
         previous_cv3_low = current_cv3_low.detach()  # never Controller output
@@ -634,7 +669,6 @@ def _evaluate(
 
     for sequence in FULL9:
         previous = None
-        previous_gt = None
         previous_cv3_low = None
         pending_motion = motion_hidden = None
         transport_hidden = semantic_hidden = mask_hidden = None
@@ -657,7 +691,6 @@ def _evaluate(
                 e1_pred = c_v3_pred = hysteresis_pred = oracle_pred = host_pred
                 semantic_state_low = torch.zeros_like(host_low)
                 previous_cv3_low = host_low.detach()
-                previous_gt = gt_cpu
                 previous = (image, host_low.detach(), current_c1.detach())
             elif pending_motion is None:
                 previous_image, previous_low, previous_c1 = previous
@@ -670,7 +703,6 @@ def _evaluate(
                 )
                 e1_pred = c_v3_pred = hysteresis_pred = oracle_pred = host_pred
                 previous_cv3_low = host_low.detach()
-                previous_gt = gt_cpu
                 previous = (image, host_low.detach(), current_c1.detach())
             else:
                 previous_image, previous_low, previous_c1 = previous
@@ -758,7 +790,7 @@ def _evaluate(
                     current_probability,
                     history_probability,
                     history_valid_low,
-                    previous_gt,
+                    previous_cv3_low,
                     gt_cpu,
                     teacher_full,
                 )
@@ -805,7 +837,6 @@ def _evaluate(
                     motion_hidden,
                 )
                 previous_cv3_low = current_cv3_low.detach()  # never hysteresis output
-                previous_gt = gt_cpu
                 previous = (image, host_low.detach(), current_c1.detach())
 
             predictions = {
@@ -813,7 +844,7 @@ def _evaluate(
                 "e1_base": e1_pred,
                 "c_v3_base": c_v3_pred,
                 "hysteresis": hysteresis_pred,
-                "semantic_safe_oracle": oracle_pred,
+                "semantic_temporal_oracle": oracle_pred,
             }
             for name, prediction in predictions.items():
                 pred_cpu = prediction.squeeze(0).cpu()
@@ -864,6 +895,10 @@ def _evaluate(
     diagnostics["semantic_history_source"] = "previous frozen C-V3 base only"
     diagnostics["controller_output_feedback"] = False
     diagnostics["controller_uses_c1"] = False
+    diagnostics["oracle_interpretation"] = (
+        "semantic correctness first; temporal consistency only when both candidates "
+        "are GT-wrong. This policy is diagnostic, not a strict mTC upper bound."
+    )
     return metrics, diagnostics
 
 
@@ -1005,8 +1040,8 @@ def main(argv=None):
                 "hysteresis": _delta_metrics(
                     metrics["hysteresis"], metrics["c_v3_base"]
                 ),
-                "semantic_safe_oracle": _delta_metrics(
-                    metrics["semantic_safe_oracle"], metrics["c_v3_base"]
+                "semantic_temporal_oracle": _delta_metrics(
+                    metrics["semantic_temporal_oracle"], metrics["c_v3_base"]
                 ),
             },
             "delta_vs_host": {
@@ -1042,6 +1077,7 @@ def main(argv=None):
                         "controller_output_feedback": False,
                         "decision_scope": "current/history argmax conflicts only",
                         "hard_inference_rule": "keep_logit > 0",
+                        "target_priority": "semantic correctness then temporal consistency",
                     },
                 },
                 output / "best.pt",
@@ -1079,7 +1115,7 @@ def main(argv=None):
             "prediction_error": "P_current_CV3 - P_warped_previous_CV3",
             "dynamics_error_role": "temporal decision evidence only",
             "decision_scope": "Base/History class conflicts only",
-            "training_loss": "ordinary unbalanced BCE on semantic-safe conflict targets",
+            "training_loss": "ordinary unbalanced BCE on semantic-first temporal-second conflict targets",
             "raft_inference": False,
         },
         "selection_rule": {
