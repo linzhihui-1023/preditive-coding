@@ -1,0 +1,133 @@
+{
+  "metrics": {
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC8": 0.9379464611218211,
+      "mVC16": 0.9289708560902963
+    },
+    "e1_base": {
+      "mIoU": 0.6553801657738326,
+      "mTC": 0.7097946210497371,
+      "mVC8": 0.9463059199319539,
+      "mVC16": 0.9403391719228389
+    },
+    "c_v3_base": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC8": 0.94442277549366,
+      "mVC16": 0.9364251481219616
+    },
+    "c_v5": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC8": 0.94442277549366,
+      "mVC16": 0.9364251481219616
+    },
+    "multiframe_semantic_oracle": {
+      "mIoU": 0.7539421929720997,
+      "mTC": 0.7154459409433206,
+      "mVC8": 0.974203193247358,
+      "mVC16": 0.9720679489927996
+    },
+    "multiframe_semantic_temporal_oracle": {
+      "mIoU": 0.7500711370213475,
+      "mTC": 0.7227557180867604,
+      "mVC8": 0.9741931495725435,
+      "mVC16": 0.9720356096055563
+    }
+  },
+  "diagnostics": {
+    "target_distribution": {
+      "valid_pixels": 1329450203,
+      "decision_pixels": 235305325,
+      "semantic_supervised_pixels": 217086226,
+      "temporal_supervised_pixels": 233586170,
+      "current_correct_decision_pixels": 185546590,
+      "semantic_rescue_pixels": 31539636,
+      "semantic_rescue_by_age": [
+        15852523,
+        7219768,
+        4849576,
+        3617769
+      ],
+      "temporal_current_pixels": 13203713,
+      "temporal_history_by_age": [
+        2788929,
+        309064,
+        121328,
+        76910
+      ],
+      "unsupervised_decision_pixels": 1719155,
+      "decision_fraction_of_valid": 0.1769944631765948,
+      "semantic_rescue_fraction_of_decisions": 0.134037068646874,
+      "semantic_supervised_fraction_of_decisions": 0.9225725172177893,
+      "temporal_supervised_fraction_of_decisions": 0.9926939392468063
+    },
+    "single_frame_target_distribution": {
+      "valid_pixels": 1329450203,
+      "decision_pixels": 97064299,
+      "semantic_supervised_pixels": 87164102,
+      "temporal_supervised_pixels": 95570514,
+      "current_correct_decision_pixels": 71311579,
+      "semantic_rescue_pixels": 15852523,
+      "semantic_rescue_by_age": [
+        15852523
+      ],
+      "temporal_current_pixels": 5129281,
+      "temporal_history_by_age": [
+        3277131
+      ],
+      "unsupervised_decision_pixels": 1493785,
+      "decision_fraction_of_valid": 0.07301085725585466,
+      "semantic_rescue_fraction_of_decisions": 0.1633198113345464,
+      "semantic_supervised_fraction_of_decisions": 0.8980037243147452,
+      "temporal_supervised_fraction_of_decisions": 0.9846103560692279
+    },
+    "selected_candidate_counts": [
+      1370928702,
+      0,
+      0,
+      0,
+      0
+    ],
+    "history_length": 4,
+    "semantic_history_source": "detached raw frozen C-V3 logits only; Host never enters history",
+    "history_logits_resampling": "one final warp per candidate",
+    "controller_output_feedback": false,
+    "prediction_error_reference": "t-1 frozen C-V3 only",
+    "dynamics_error_reference": "t-1 prediction error only",
+    "dynamics_motion_compensated": true,
+    "dynamics_transportability_masked": true,
+    "raft_inference": false,
+    "same_run_oracle_comparison": {
+      "k1": {
+        "mIoU": 0.7083005558561792,
+        "mTC": 0.7246141017353284,
+        "mVC8": 0.9618533550454061,
+        "mVC16": 0.9583154199140913
+      },
+      "k4": {
+        "mIoU": 0.7500711370213475,
+        "mTC": 0.7227557180867604,
+        "mVC8": 0.9741931495725435,
+        "mVC16": 0.9720356096055563
+      },
+      "delta_k4_minus_k1": {
+        "mIoU": 0.0417705811651683,
+        "mTC": -0.0018583836485679406,
+        "mVC8": 0.012339794527137404,
+        "mVC16": 0.013720189691465046
+      },
+      "decision_question": "Do t-2..t-4 add semantic/temporal information beyond t-1 under the same Full9 run?"
+    }
+  },
+  "delta_multiframe_oracle_vs_c_v3": {
+    "mIoU": 0.08736430222766856,
+    "mTC": 0.01107135511637991,
+    "mVC8": 0.0297703740788835,
+    "mVC16": 0.0356104614835947
+  },
+  "single_frame_semantic_temporal_oracle_mTC": 0.7246141017353284,
+  "multiframe_oracle_exceeds_single_frame_oracle_mTC": false
+}
