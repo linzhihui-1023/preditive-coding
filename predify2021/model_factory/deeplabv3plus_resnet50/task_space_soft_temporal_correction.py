@@ -26,7 +26,7 @@ class SetBasedSoftTemporalCorrector(nn.Module):
 
     The module runs at the existing low controller resolution. Full-resolution
     history probabilities are mixed later with upsampled attention scores and
-    full-resolution validity masks, so semantic logits are never recursively
+    full-resolution validity masks, so semantic content is never recursively
     resampled through the history window.
     """
 
@@ -36,7 +36,7 @@ class SetBasedSoftTemporalCorrector(nn.Module):
         history_length=4,
         attention_hidden_channels=16,
         correction_hidden_channels=32,
-        gate_init_bias=-4.0,
+        gate_init_bias=-20.0,
     ):
         super().__init__()
         self.num_classes = int(num_classes)
@@ -48,9 +48,7 @@ class SetBasedSoftTemporalCorrector(nn.Module):
         # Per-history evidence:
         # current P, history P, |current-history|, valid, normalized age, T, Q.
         attention_in = 3 * self.num_classes + 4
-        attention_groups = (
-            4 if self.attention_hidden_channels % 4 == 0 else 1
-        )
+        attention_groups = 4 if self.attention_hidden_channels % 4 == 0 else 1
         self.history_score_encoder = nn.Sequential(
             nn.Conv2d(
                 attention_in,
@@ -68,22 +66,19 @@ class SetBasedSoftTemporalCorrector(nn.Module):
             1,
             bias=True,
         )
-        # Equal valid-history attention at initialization. The final soft gate is
-        # near zero, so initialization stays close to frozen C-V3.
+        # Equal valid-history attention at initialization.
         nn.init.zeros_(self.history_score_head.weight)
         nn.init.zeros_(self.history_score_head.bias)
 
         # Correction evidence:
         # current P, attended history P, history-current delta,
-        # one-step prediction error, Dynamics Error.
+        # one-step Prediction Error, Dynamics Error.
         semantic_channels = 5 * self.num_classes
         # current margin, history margin, T, Q, history available,
         # attention peak, weighted history age.
         scalar_channels = 7
         correction_in = semantic_channels + scalar_channels
-        correction_groups = (
-            8 if self.correction_hidden_channels % 8 == 0 else 1
-        )
+        correction_groups = 8 if self.correction_hidden_channels % 8 == 0 else 1
         self.correction_encoder = nn.Sequential(
             nn.Conv2d(
                 correction_in,
@@ -106,6 +101,8 @@ class SetBasedSoftTemporalCorrector(nn.Module):
             bias=True,
         )
         nn.init.zeros_(self.lambda_head.weight)
+        # sigmoid(-20) ~= 2e-9. This is numerically C-V3-equivalent while BCE
+        # still provides an O(1) positive-class gradient for rescue pixels.
         nn.init.constant_(self.lambda_head.bias, self.gate_init_bias)
 
     @staticmethod
