@@ -1,0 +1,470 @@
+{
+  "experiment": "C-V6 Set-based Deep Semantic Evidence + Soft Stateful Correction",
+  "implementation": "probability_warp_supervision_fix",
+  "source_decision_evidence": {
+    "c_v5_oracle_commit": "ff404d4",
+    "decision": "K=4 adds strong semantic rescue but does not improve hard-selection mTC; deep history is therefore retained as soft semantic evidence rather than direct final-output candidates."
+  },
+  "zero_step_check": {
+    "sequences": [
+      "0002",
+      "0010",
+      "0018"
+    ],
+    "c_v6_vs_c_v3_disagreement_pixels": 0,
+    "passed": true,
+    "c_v3_base": {
+      "mIoU": 0.591419269159285,
+      "mTC": 0.7065278336801233,
+      "mVC8": 0.9434064108477351,
+      "mVC16": 0.9359542980785811
+    },
+    "c_v6": {
+      "mIoU": 0.591419269159285,
+      "mTC": 0.7065278336801233,
+      "mVC8": 0.9434064108477351,
+      "mVC16": 0.9359542980785811
+    },
+    "gate_init_bias": -20.0
+  },
+  "best": {
+    "epoch": 3,
+    "train": {
+      "frames": 5003,
+      "supervised_frames": 4991,
+      "optimizer_steps": 628,
+      "attention_supervised_pixels": 2095378485,
+      "rescue_pixels": 36806181,
+      "protection_pixels": 78705186,
+      "gate_supervised_pixels": 115511367,
+      "persistence_pixels": 2,
+      "seg_loss": 0.1175716620806677,
+      "attention_loss": 1.3333899225674657,
+      "gate_loss": 7.308723065734172,
+      "persistence_loss": 3.313064776105717e-12,
+      "total_loss": 8.759684650197197,
+      "lambda_mean": 5.327799561611152e-07,
+      "prediction_error_abs": 0.007497986032122023,
+      "dynamics_error_abs": 0.003013362155128994,
+      "lambda_on_rescue": 5.346022850457604e-07,
+      "lambda_on_protection": 5.34570264094986e-07,
+      "lambda_rescue_frames": 4991,
+      "lambda_protection_frames": 4991,
+      "attention_mass_by_age": [
+        0.2793677521836325,
+        0.2501684398769877,
+        0.2394101505809227,
+        0.23507899765891335
+      ]
+    },
+    "metrics": {
+      "host": {
+        "mIoU": 0.6541174065367945,
+        "mTC": 0.7077841060023109,
+        "mVC8": 0.9379464611218211,
+        "mVC16": 0.9289708560902963
+      },
+      "e1_base": {
+        "mIoU": 0.6553801657738326,
+        "mTC": 0.7097946210497371,
+        "mVC8": 0.9463059199319539,
+        "mVC16": 0.9403391719228389
+      },
+      "c_v3_base": {
+        "mIoU": 0.662706834793679,
+        "mTC": 0.7116843629703805,
+        "mVC8": 0.94442277549366,
+        "mVC16": 0.9364251481219616
+      },
+      "c_v6": {
+        "mIoU": 0.6627068664537655,
+        "mTC": 0.7116842842807075,
+        "mVC8": 0.9444228254177426,
+        "mVC16": 0.9364251834704014
+      }
+    },
+    "diagnostics": {
+      "decision_frames": 2954,
+      "c_v6_vs_c_v3_disagreement_pixels": 62,
+      "lambda_mean": 1.2691158610420157e-06,
+      "lambda_on_rescue": 1.2765262086117687e-06,
+      "lambda_on_protection": 1.2763205627847635e-06,
+      "attention_supervised_pixels": 1205729255,
+      "rescue_pixels": 31530875,
+      "protection_pixels": 48521629,
+      "attention_mass_by_age": [
+        0.2798823537601356,
+        0.25123357635706106,
+        0.2394572199355273,
+        0.23458592949526116
+      ],
+      "history_length": 4,
+      "history_source": "detached raw frozen C-V3 logits only",
+      "history_transport": "softmax(raw C-V3 logits) -> one final probability warp -> renormalize",
+      "controller_output_feedback": false,
+      "semantic_state_recursive": false,
+      "prediction_error_reference": "t-1 frozen C-V3 only",
+      "dynamics_error_reference": "t-1 prediction error only",
+      "raft_inference": false
+    },
+    "delta_vs_c_v3_base": {
+      "mIoU": 3.166008655242081e-08,
+      "mTC": -7.86896729998432e-08,
+      "mVC8": 4.992408253468028e-08,
+      "mVC16": 3.534843973085344e-08
+    },
+    "delta_vs_host": {
+      "mIoU": 0.00858945991697102,
+      "mTC": 0.0039001782783966155,
+      "mVC8": 0.006476364295921466,
+      "mVC16": 0.007454327380105097
+    },
+    "selection_key": [
+      0,
+      0.6627068664537655,
+      0.7116842842807075
+    ]
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train": {
+        "frames": 5003,
+        "supervised_frames": 4991,
+        "optimizer_steps": 628,
+        "attention_supervised_pixels": 2095378485,
+        "rescue_pixels": 36806181,
+        "protection_pixels": 78705186,
+        "gate_supervised_pixels": 115511367,
+        "persistence_pixels": 0,
+        "seg_loss": 0.11757172902878445,
+        "attention_loss": 1.3582381263473808,
+        "gate_loss": 9.426887080368932,
+        "persistence_loss": 0.0,
+        "total_loss": 10.90269692783436,
+        "lambda_mean": 7.864256337795615e-09,
+        "prediction_error_abs": 0.007497986032122023,
+        "dynamics_error_abs": 0.003013362155128994,
+        "lambda_on_rescue": 7.884325566783165e-09,
+        "lambda_on_protection": 7.883236361697371e-09,
+        "lambda_rescue_frames": 4991,
+        "lambda_protection_frames": 4991,
+        "attention_mass_by_age": [
+          0.2708607620966981,
+          0.252777189668773,
+          0.24313338292912265,
+          0.23731048586510506
+        ]
+      },
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC8": 0.9379464611218211,
+          "mVC16": 0.9289708560902963
+        },
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC8": 0.9463059199319539,
+          "mVC16": 0.9403391719228389
+        },
+        "c_v3_base": {
+          "mIoU": 0.662706834793679,
+          "mTC": 0.7116843629703805,
+          "mVC8": 0.94442277549366,
+          "mVC16": 0.9364251481219616
+        },
+        "c_v6": {
+          "mIoU": 0.662706831569677,
+          "mTC": 0.7116843580396095,
+          "mVC8": 0.94442277549366,
+          "mVC16": 0.9364251481219616
+        }
+      },
+      "diagnostics": {
+        "decision_frames": 2954,
+        "c_v6_vs_c_v3_disagreement_pixels": 3,
+        "lambda_mean": 1.9163332948325148e-08,
+        "lambda_on_rescue": 1.923891480730923e-08,
+        "lambda_on_protection": 1.923435695558286e-08,
+        "attention_supervised_pixels": 1205729255,
+        "rescue_pixels": 31530875,
+        "protection_pixels": 48521629,
+        "attention_mass_by_age": [
+          0.27559721487030114,
+          0.2510980617514288,
+          0.24152424922898127,
+          0.23698917484890286
+        ],
+        "history_length": 4,
+        "history_source": "detached raw frozen C-V3 logits only",
+        "history_transport": "softmax(raw C-V3 logits) -> one final probability warp -> renormalize",
+        "controller_output_feedback": false,
+        "semantic_state_recursive": false,
+        "prediction_error_reference": "t-1 frozen C-V3 only",
+        "dynamics_error_reference": "t-1 prediction error only",
+        "raft_inference": false
+      },
+      "delta_vs_c_v3_base": {
+        "mIoU": -3.2240019542939535e-09,
+        "mTC": -4.930771013711421e-09,
+        "mVC8": 0.0,
+        "mVC16": 0.0
+      },
+      "delta_vs_host": {
+        "mIoU": 0.008589425032882514,
+        "mTC": 0.0039002520372986016,
+        "mVC8": 0.0064763143718389315,
+        "mVC16": 0.007454292031665366
+      },
+      "selection_key": [
+        0,
+        0.662706831569677,
+        0.7116843580396095
+      ]
+    },
+    {
+      "epoch": 2,
+      "train": {
+        "frames": 5003,
+        "supervised_frames": 4991,
+        "optimizer_steps": 628,
+        "attention_supervised_pixels": 2095378485,
+        "rescue_pixels": 36806181,
+        "protection_pixels": 78705186,
+        "gate_supervised_pixels": 115511367,
+        "persistence_pixels": 0,
+        "seg_loss": 0.11757172168270007,
+        "attention_loss": 1.3372652175144164,
+        "gate_loss": 8.35683613926011,
+        "persistence_loss": 0.0,
+        "total_loss": 9.81167307589819,
+        "lambda_mean": 6.564180252050373e-08,
+        "prediction_error_abs": 0.007497986032122023,
+        "dynamics_error_abs": 0.003013362155128994,
+        "lambda_on_rescue": 6.586155764561842e-08,
+        "lambda_on_protection": 6.585558288131214e-08,
+        "lambda_rescue_frames": 4991,
+        "lambda_protection_frames": 4991,
+        "attention_mass_by_age": [
+          0.27897369254330456,
+          0.2507439976440996,
+          0.23970417186050846,
+          0.23460469606184936
+        ]
+      },
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC8": 0.9379464611218211,
+          "mVC16": 0.9289708560902963
+        },
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC8": 0.9463059199319539,
+          "mVC16": 0.9403391719228389
+        },
+        "c_v3_base": {
+          "mIoU": 0.662706834793679,
+          "mTC": 0.7116843629703805,
+          "mVC8": 0.94442277549366,
+          "mVC16": 0.9364251481219616
+        },
+        "c_v6": {
+          "mIoU": 0.6627068461005339,
+          "mTC": 0.711684408968292,
+          "mVC8": 0.9444227816811454,
+          "mVC16": 0.9364251492602549
+        }
+      },
+      "diagnostics": {
+        "decision_frames": 2954,
+        "c_v6_vs_c_v3_disagreement_pixels": 7,
+        "lambda_mean": 1.570582889356556e-07,
+        "lambda_on_rescue": 1.5783585343095642e-07,
+        "lambda_on_protection": 1.5780212539847786e-07,
+        "attention_supervised_pixels": 1205729255,
+        "rescue_pixels": 31530875,
+        "protection_pixels": 48521629,
+        "attention_mass_by_age": [
+          0.27825499306821955,
+          0.250909531298639,
+          0.24024097321489038,
+          0.2357729314271199
+        ],
+        "history_length": 4,
+        "history_source": "detached raw frozen C-V3 logits only",
+        "history_transport": "softmax(raw C-V3 logits) -> one final probability warp -> renormalize",
+        "controller_output_feedback": false,
+        "semantic_state_recursive": false,
+        "prediction_error_reference": "t-1 frozen C-V3 only",
+        "dynamics_error_reference": "t-1 prediction error only",
+        "raft_inference": false
+      },
+      "delta_vs_c_v3_base": {
+        "mIoU": 1.1306854896808716e-08,
+        "mTC": 4.599791147974486e-08,
+        "mVC8": 6.187485301900608e-09,
+        "mVC16": 1.1382932374459642e-09
+      },
+      "delta_vs_host": {
+        "mIoU": 0.008589439563739365,
+        "mTC": 0.003900302965981095,
+        "mVC8": 0.0064763205593242335,
+        "mVC16": 0.0074542931699586035
+      },
+      "selection_key": [
+        0,
+        0.6627068461005339,
+        0.711684408968292
+      ]
+    },
+    {
+      "epoch": 3,
+      "train": {
+        "frames": 5003,
+        "supervised_frames": 4991,
+        "optimizer_steps": 628,
+        "attention_supervised_pixels": 2095378485,
+        "rescue_pixels": 36806181,
+        "protection_pixels": 78705186,
+        "gate_supervised_pixels": 115511367,
+        "persistence_pixels": 2,
+        "seg_loss": 0.1175716620806677,
+        "attention_loss": 1.3333899225674657,
+        "gate_loss": 7.308723065734172,
+        "persistence_loss": 3.313064776105717e-12,
+        "total_loss": 8.759684650197197,
+        "lambda_mean": 5.327799561611152e-07,
+        "prediction_error_abs": 0.007497986032122023,
+        "dynamics_error_abs": 0.003013362155128994,
+        "lambda_on_rescue": 5.346022850457604e-07,
+        "lambda_on_protection": 5.34570264094986e-07,
+        "lambda_rescue_frames": 4991,
+        "lambda_protection_frames": 4991,
+        "attention_mass_by_age": [
+          0.2793677521836325,
+          0.2501684398769877,
+          0.2394101505809227,
+          0.23507899765891335
+        ]
+      },
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC8": 0.9379464611218211,
+          "mVC16": 0.9289708560902963
+        },
+        "e1_base": {
+          "mIoU": 0.6553801657738326,
+          "mTC": 0.7097946210497371,
+          "mVC8": 0.9463059199319539,
+          "mVC16": 0.9403391719228389
+        },
+        "c_v3_base": {
+          "mIoU": 0.662706834793679,
+          "mTC": 0.7116843629703805,
+          "mVC8": 0.94442277549366,
+          "mVC16": 0.9364251481219616
+        },
+        "c_v6": {
+          "mIoU": 0.6627068664537655,
+          "mTC": 0.7116842842807075,
+          "mVC8": 0.9444228254177426,
+          "mVC16": 0.9364251834704014
+        }
+      },
+      "diagnostics": {
+        "decision_frames": 2954,
+        "c_v6_vs_c_v3_disagreement_pixels": 62,
+        "lambda_mean": 1.2691158610420157e-06,
+        "lambda_on_rescue": 1.2765262086117687e-06,
+        "lambda_on_protection": 1.2763205627847635e-06,
+        "attention_supervised_pixels": 1205729255,
+        "rescue_pixels": 31530875,
+        "protection_pixels": 48521629,
+        "attention_mass_by_age": [
+          0.2798823537601356,
+          0.25123357635706106,
+          0.2394572199355273,
+          0.23458592949526116
+        ],
+        "history_length": 4,
+        "history_source": "detached raw frozen C-V3 logits only",
+        "history_transport": "softmax(raw C-V3 logits) -> one final probability warp -> renormalize",
+        "controller_output_feedback": false,
+        "semantic_state_recursive": false,
+        "prediction_error_reference": "t-1 frozen C-V3 only",
+        "dynamics_error_reference": "t-1 prediction error only",
+        "raft_inference": false
+      },
+      "delta_vs_c_v3_base": {
+        "mIoU": 3.166008655242081e-08,
+        "mTC": -7.86896729998432e-08,
+        "mVC8": 4.992408253468028e-08,
+        "mVC16": 3.534843973085344e-08
+      },
+      "delta_vs_host": {
+        "mIoU": 0.00858945991697102,
+        "mTC": 0.0039001782783966155,
+        "mVC8": 0.006476364295921466,
+        "mVC16": 0.007454327380105097
+      },
+      "selection_key": [
+        0,
+        0.6627068664537655,
+        0.7116842842807075
+      ]
+    }
+  ],
+  "frozen_checkpoints": {
+    "fast_b": "/home/lin/predify/experiments/kitti_step_semantic_v3_joint_c4_fast_ab_5754714/fast_b_joint_c4_weak_z4/best.pt",
+    "observer": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_observer/best.pt",
+    "residual": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_task_alignment_r2/best.pt",
+    "e1_base": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_spatial_mask_semantic_state_r2/epoch_001.pt",
+    "c_v3_base": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v3_memory_supervision_stage_a/best.pt",
+    "c_v3_checkpoint_epoch": 1,
+    "residual_experiment": "c_v2_stage1b2_residual_motion",
+    "e1_experiment": "c_v2_stage1b_spatial_mask_semantic_state_r2"
+  },
+  "selection_rule": {
+    "hard_constraint": "C-V6 mIoU >= 0.6637739071008685",
+    "objective_after_constraint": "maximize C-V6 mTC, then mIoU"
+  },
+  "targets": {
+    "mIoU_floor": 0.6637739071008685,
+    "mIoU_preserved": false,
+    "mTC_previous_best_reference": 0.712733,
+    "mTC_milestone_72": 0.72,
+    "mTC_reached_72": false,
+    "mTC_target_low": 0.74,
+    "mTC_target_high": 0.76
+  },
+  "architecture": {
+    "history_length": 4,
+    "history_attention": "candidate-preserving pixel-wise soft attention",
+    "history_probability_warp": true,
+    "soft_gate": true,
+    "recursive_semantic_state": false,
+    "controller_output_feedback": false,
+    "raft_inference": false
+  },
+  "losses": {
+    "segmentation": "full-resolution final-output NLL",
+    "attention": "uniform mass over every GT-correct valid history wherever one exists",
+    "gate": "balanced Rescue=1; Protection=0 only when Current is correct and no history is correct",
+    "persistence": "RAFT+GT stable correspondence; consecutive rescue plus previous C-V6 actually correct",
+    "weights": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "epochs": 3,
+  "tbptt_steps": 8
+}
