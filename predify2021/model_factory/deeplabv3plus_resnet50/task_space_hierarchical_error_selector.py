@@ -4,10 +4,12 @@
 
 Structural split:
 1. Stage-1 gate answers Current vs History.
-   It uses only t-1 Prediction Error, explicit Dynamics Error and reliability
-   evidence. It does not decide which history age is best.
+   It sees all K validity-gated Prediction Errors so t-2..t-K-only rescue is
+   observable, plus the explicit t-1 Dynamics Error and reliability evidence.
+   Dynamics Error remains a temporal-persistence signal, not an age selector.
 2. Stage-2 history selector answers t-1 / ... / t-K only after History is chosen.
-   It uses the K validity-gated prediction errors and per-history reliability.
+   It uses the K validity-gated prediction errors and per-history reliability,
+   but deliberately excludes Dynamics Error.
 
 Raw Current / History semantic probabilities never enter either controller.
 The final 1+K logits are composed so that argmax exactly implements the
@@ -16,7 +18,6 @@ hierarchy: first Current-vs-History, then the best valid history age.
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 
 from .semantic_recurrent_predictor import ConvGRUCell
 from .task_space_multihypothesis_error_selector import signed_error_channels
@@ -34,11 +35,12 @@ class HierarchicalMultiHypothesisErrorSelector(nn.Module):
         groups = 8 if self.hidden_channels % 8 == 0 else 1
 
         # Stage 1 / Current-vs-History.
-        # Semantic evidence is deliberately limited to the strict t-1 error and
-        # its explicit temporal Dynamics Error state.  Other inputs are scalar
-        # reliability evidence, not raw semantic probabilities.
-        gate_semantic_channels = 4 * self.num_classes  # signed e1 + signed epsilon
-        gate_scalar_channels = 6  # current margin, best hist margin, T, Q, V1, anyV
+        # All K errors are visible so a useful deep history cannot be hidden
+        # merely because t-1 is unhelpful.  The single Dynamics Error remains
+        # the explicit temporal state of strict t-1 Prediction Error.
+        gate_semantic_channels = 2 * self.num_classes * (self.history_length + 1)
+        # current margin + best history margin + T + Q + V1 + any-history-valid
+        gate_scalar_channels = 6
         self.gate_pre = nn.Sequential(
             nn.Conv2d(
                 gate_semantic_channels + gate_scalar_channels,
@@ -81,8 +83,8 @@ class HierarchicalMultiHypothesisErrorSelector(nn.Module):
             bias=True,
         )
 
-        # E0 hard prediction falls back to Current.  With all heads at zero,
-        # the composed Current and best-History scores tie at zero; index 0 wins.
+        # E0 hard prediction falls back to Current. With all heads at zero,
+        # Current and the best History tie at zero and output index 0 wins.
         for head in (self.gate_head, self.history_head):
             nn.init.zeros_(head.weight)
             nn.init.zeros_(head.bias)
@@ -130,7 +132,7 @@ class HierarchicalMultiHypothesisErrorSelector(nn.Module):
         best_history_margin = torch.stack(history_margins, dim=1).max(dim=1).values
         gate_evidence = torch.cat(
             (
-                signed_error_channels(prediction_errors[0]),
+                *[signed_error_channels(error) for error in prediction_errors],
                 signed_error_channels(dynamics_error),
                 current_margin,
                 best_history_margin,
@@ -144,12 +146,16 @@ class HierarchicalMultiHypothesisErrorSelector(nn.Module):
         gate_encoded = self.gate_pre(gate_evidence)
         gate_hidden = self.gate_recurrent(gate_encoded, gate_hidden)
         gate_logits = self.gate_head(gate_hidden)
-        # History is impossible where no candidate is valid.
-        gate_logits = gate_logits.clone()
-        gate_logits[:, 1:2] = torch.where(
-            any_history_valid > 0.5,
-            gate_logits[:, 1:2],
-            torch.full_like(gate_logits[:, 1:2], -1.0e4),
+        gate_logits = torch.cat(
+            (
+                gate_logits[:, :1],
+                torch.where(
+                    any_history_valid > 0.5,
+                    gate_logits[:, 1:2],
+                    torch.full_like(gate_logits[:, 1:2], -1.0e4),
+                ),
+            ),
+            dim=1,
         )
 
         ages = [
@@ -172,18 +178,24 @@ class HierarchicalMultiHypothesisErrorSelector(nn.Module):
         )
         history_encoded = self.history_pre(history_evidence)
         history_hidden = self.history_recurrent(history_encoded, history_hidden)
-        history_logits = self.history_head(history_hidden)
-        history_logits = history_logits.clone()
+        raw_history_logits = self.history_head(history_hidden)
+        history_channels = []
         for index, validity in enumerate(history_validities_low):
-            history_logits[:, index : index + 1] = torch.where(
-                validity > 0.5,
-                history_logits[:, index : index + 1],
-                torch.full_like(history_logits[:, index : index + 1], -1.0e4),
+            history_channels.append(
+                torch.where(
+                    validity > 0.5,
+                    raw_history_logits[:, index : index + 1],
+                    torch.full_like(
+                        raw_history_logits[:, index : index + 1],
+                        -1.0e4,
+                    ),
+                )
             )
+        history_logits = torch.cat(history_channels, dim=1)
 
-        # Normalize only the relative history-age score.  The best valid history
-        # receives zero offset; therefore Current-vs-History is controlled only
-        # by gate_logits, while Stage 2 decides which history wins after that.
+        # Normalize only the relative history-age score. The best valid history
+        # receives zero offset; Stage 1 controls whether History beats Current,
+        # while Stage 2 controls which valid age wins inside History.
         best_history_logit = history_logits.max(dim=1, keepdim=True).values
         history_relative = history_logits - best_history_logit
         history_relative = torch.where(
