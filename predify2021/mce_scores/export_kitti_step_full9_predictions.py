@@ -11,7 +11,8 @@ Important constraints / 约束：
 - first two frames preserve the existing Full9 evaluator behaviour and fall
   back to Host while temporal state is initialized;
 - exported prediction PNGs are uint8 HxW class-index masks with ids 0..18;
-- GT is read only after prediction for export sanity checks (mIoU/mVC8/mVC16).
+- GT is not read during model inference. After all PNGs are written, the saved
+  files are read back and mIoU/mVC8/mVC16 are recomputed as a sanity test.
 """
 
 import argparse
@@ -46,7 +47,6 @@ from predify2021.mce_scores.train_kitti_step_task_space_prior_c_v5_multiframe_ca
     compute_iou,
     update_confusion_matrix,
     _host_observation,
-    _initialize_motion,
     _observe_motion,
     _frozen_e1_step,
     _frozen_cv3_step,
@@ -74,6 +74,7 @@ from predify2021.model_factory.deeplabv3plus_resnet50.task_space_semantic_hyster
 
 NUM_CLASSES = 19
 EXPECTED_FULL9_FRAMES = 2981
+NAMES = ("host", "current_model")
 DEFAULT_OUTPUT_ROOT = "/home/lin/predify/predictions/kitti_step_full9"
 DEFAULT_MODEL_CHECKPOINT = (
     "/home/lin/predify/experiments/"
@@ -117,6 +118,21 @@ def _build_dynamics(payload):
     )
 
 
+def _preflight_output(output_root, overwrite):
+    output_root = Path(output_root)
+    if overwrite:
+        return
+    for name in NAMES:
+        root = output_root / name
+        if root.exists():
+            first = next(root.rglob("*.png"), None)
+            if first is not None:
+                raise FileExistsError(
+                    "prediction PNGs already exist under output-root; pass --overwrite "
+                    f"to replace expected frame files. Example: {first}"
+                )
+
+
 def _save_mask(path, prediction, expected_hw, overwrite):
     prediction = torch.as_tensor(prediction).detach().cpu().long()
     if prediction.ndim == 3 and prediction.shape[0] == 1:
@@ -125,8 +141,8 @@ def _save_mask(path, prediction, expected_hw, overwrite):
         raise ValueError(f"prediction must be HxW, got {tuple(prediction.shape)}")
     if tuple(prediction.shape) != tuple(expected_hw):
         raise ValueError(
-            f"prediction/GT size mismatch: pred={tuple(prediction.shape)} "
-            f"gt={tuple(expected_hw)}"
+            f"prediction size mismatch: pred={tuple(prediction.shape)} "
+            f"expected={tuple(expected_hw)}"
         )
     invalid = (prediction < 0) | (prediction >= NUM_CLASSES)
     if bool(invalid.any()):
@@ -141,6 +157,27 @@ def _save_mask(path, prediction, expected_hw, overwrite):
     path.parent.mkdir(parents=True, exist_ok=True)
     array = prediction.numpy().astype(np.uint8, copy=False)
     Image.fromarray(array, mode="L").save(path)
+
+
+def _load_saved_mask(path, expected_hw):
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"exported prediction missing: {path}")
+    with Image.open(path) as image:
+        array = np.array(image, copy=True)
+    if array.ndim != 2:
+        raise ValueError(f"exported PNG must be single-channel HxW: {path}")
+    prediction = torch.from_numpy(array.astype(np.int64, copy=False))
+    if tuple(prediction.shape) != tuple(expected_hw):
+        raise ValueError(
+            f"exported PNG/GT size mismatch: pred={tuple(prediction.shape)} "
+            f"gt={tuple(expected_hw)} path={path}"
+        )
+    invalid = (prediction < 0) | (prediction >= NUM_CLASSES)
+    if bool(invalid.any()):
+        values = torch.unique(prediction[invalid])[:16].tolist()
+        raise ValueError(f"exported PNG has invalid class ids {values}: {path}")
+    return prediction
 
 
 def _metric_row(confusion, vc_sum, vc_count, name):
@@ -180,7 +217,7 @@ def _compare_reference(export_metrics, reference, tolerance):
         }
     diff = {}
     passed = True
-    for name in ("host", "current_model"):
+    for name in NAMES:
         diff[name] = {}
         for key in METRIC_KEYS:
             if key not in reference[name]:
@@ -211,16 +248,8 @@ def _export_full9(
     output_root,
     overwrite,
 ):
-    names = ("host", "current_model")
-    confusion = {
-        name: torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64)
-        for name in names
-    }
-    vc_sum = {name: {8: 0.0, 16: 0.0} for name in names}
-    vc_count = {name: {8: 0, 16: 0} for name in names}
-    counts = {name: 0 for name in names}
+    counts = {name: 0 for name in NAMES}
     per_sequence = {}
-
     output_root = Path(output_root)
 
     for sequence in FULL9:
@@ -235,8 +264,7 @@ def _export_full9(
         dynamics_state = None
         raw_history = []
         motion_history = []
-        seq_vc = {name: VideoConsistency() for name in names}
-        seq_counts = {name: 0 for name in names}
+        seq_counts = {name: 0 for name in NAMES}
 
         for sample in samples:
             image, host_logits, host_low, current_c1, output_size = _host_observation(
@@ -246,17 +274,13 @@ def _export_full9(
             host_pred = host_logits.argmax(1)
 
             if previous is None:
-                # Existing formal Full9 behaviour: first frame has no temporal
-                # state, so the current model falls back exactly to Host.
                 model_pred = host_pred
                 semantic_state_low = torch.zeros_like(host_low)
                 raw_history = [host_logits.detach()]
                 previous = (image, host_low.detach(), current_c1.detach())
 
             elif pending_motion is None:
-                # Second frame is used to initialize the learned motion state.
-                # It also falls back exactly to Host in the existing evaluator.
-                previous_image, previous_low, previous_c1 = previous
+                _, previous_low, previous_c1 = previous
                 observed = _observe_motion(
                     observer,
                     previous_low,
@@ -275,7 +299,7 @@ def _export_full9(
                 previous = (image, host_low.detach(), current_c1.detach())
 
             else:
-                previous_image, previous_low, previous_c1 = previous
+                _, previous_low, previous_c1 = previous
                 prior_low, _ = warp_low_logits(previous_low, pending_motion)
                 e1 = _frozen_e1_step(
                     correction,
@@ -358,31 +382,26 @@ def _export_full9(
                 pending_motion = next_motion.detach()
                 motion_hidden = next_motion_hidden.detach()
 
-            # GT is deliberately outside the model-decision path and is read
-            # only to verify that exported masks reproduce normal metrics.
-            gt_cpu = semantic_mask_from_panoptic_png(sample["mask_path"])
             predictions = {
                 "host": host_pred.squeeze(0).detach().cpu(),
                 "current_model": model_pred.squeeze(0).detach().cpu(),
             }
+            frame_hw = tuple(predictions["host"].shape)
+            if tuple(predictions["current_model"].shape) != frame_hw:
+                raise RuntimeError(
+                    "Host/current-model output shape mismatch: "
+                    f"host={frame_hw} model={tuple(predictions['current_model'].shape)}"
+                )
 
             for name, prediction in predictions.items():
                 _save_mask(
                     output_root / name / str(sequence) / f"{sample['frame_id']}.png",
                     prediction,
-                    gt_cpu.shape,
+                    frame_hw,
                     overwrite,
                 )
                 counts[name] += 1
                 seq_counts[name] += 1
-                update_confusion_matrix(confusion[name], prediction, gt_cpu)
-                seq_vc[name].update(gt_cpu, prediction)
-
-        for name in names:
-            stats = seq_vc[name].stats()
-            for length in (8, 16):
-                vc_sum[name][length] += stats[length]["sum"]
-                vc_count[name][length] += stats[length]["count"]
 
         per_sequence[str(sequence)] = {
             "frames": len(samples),
@@ -399,11 +418,60 @@ def _export_full9(
             flush=True,
         )
 
+    return counts, per_sequence
+
+
+def _verify_saved_masks(groups, output_root):
+    """Read saved PNGs back, validate them, then recompute mIoU/mVC8/mVC16."""
+    output_root = Path(output_root)
+    confusion = {
+        name: torch.zeros((NUM_CLASSES, NUM_CLASSES), dtype=torch.int64)
+        for name in NAMES
+    }
+    vc_sum = {name: {8: 0.0, 16: 0.0} for name in NAMES}
+    vc_count = {name: {8: 0, 16: 0} for name in NAMES}
+    read_counts = {name: 0 for name in NAMES}
+
+    for sequence in FULL9:
+        seq_vc = {name: VideoConsistency() for name in NAMES}
+        for sample in groups[sequence]:
+            gt = semantic_mask_from_panoptic_png(sample["mask_path"])
+            for name in NAMES:
+                prediction = _load_saved_mask(
+                    output_root / name / str(sequence) / f"{sample['frame_id']}.png",
+                    gt.shape,
+                )
+                update_confusion_matrix(confusion[name], prediction, gt)
+                seq_vc[name].update(gt, prediction)
+                read_counts[name] += 1
+
+        for name in NAMES:
+            stats = seq_vc[name].stats()
+            for length in (8, 16):
+                vc_sum[name][length] += stats[length]["sum"]
+                vc_count[name][length] += stats[length]["count"]
+
+    disk_counts = {
+        name: sum(1 for _ in (output_root / name).rglob("*.png"))
+        for name in NAMES
+    }
+    for name in NAMES:
+        if read_counts[name] != EXPECTED_FULL9_FRAMES:
+            raise RuntimeError(
+                f"saved PNG read-count mismatch for {name}: "
+                f"expected={EXPECTED_FULL9_FRAMES} actual={read_counts[name]}"
+            )
+        if disk_counts[name] != EXPECTED_FULL9_FRAMES:
+            raise RuntimeError(
+                f"saved PNG directory count mismatch for {name}: "
+                f"expected exactly {EXPECTED_FULL9_FRAMES}, actual={disk_counts[name]}"
+            )
+
     metrics = {
         name: _metric_row(confusion, vc_sum, vc_count, name)
-        for name in names
+        for name in NAMES
     }
-    return metrics, counts, per_sequence
+    return metrics, read_counts, disk_counts
 
 
 def main(argv=None):
@@ -423,6 +491,7 @@ def main(argv=None):
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required")
     device = torch.device("cuda")
+    _preflight_output(args.output_root, args.overwrite)
 
     _validate_bounded_motion_checkpoint(args.residual_checkpoint)
     model = load_fast_b_model(args.fast_b_checkpoint).to(device).eval()
@@ -451,7 +520,7 @@ def main(argv=None):
             f"expected={EXPECTED_FULL9_FRAMES} actual={total_frames}"
         )
 
-    metrics, counts, per_sequence = _export_full9(
+    counts, per_sequence = _export_full9(
         model,
         observer,
         residual,
@@ -464,13 +533,20 @@ def main(argv=None):
         args.output_root,
         args.overwrite,
     )
-
     for name, count in counts.items():
         if count != EXPECTED_FULL9_FRAMES:
             raise RuntimeError(
                 f"export count mismatch for {name}: "
                 f"expected={EXPECTED_FULL9_FRAMES} actual={count}"
             )
+
+    # Verification is deliberately a second pass over the persisted PNG files.
+    # PC/VEC will consume these exact files, so this validates the artifact
+    # rather than only the in-memory model outputs.
+    metrics, read_counts, disk_counts = _verify_saved_masks(
+        groups,
+        args.output_root,
+    )
 
     reference = _reference_metrics(selector_payload)
     reference_check = _compare_reference(
@@ -484,10 +560,12 @@ def main(argv=None):
         "full9": list(FULL9),
         "expected_frames_per_model": EXPECTED_FULL9_FRAMES,
         "exported_frames": counts,
+        "saved_png_read_counts": read_counts,
+        "saved_png_disk_counts": disk_counts,
         "output_root": str(Path(args.output_root)),
         "host_prediction_root": str(Path(args.output_root) / "host"),
         "model_prediction_root": str(Path(args.output_root) / "current_model"),
-        "metrics_recomputed_from_export_run": metrics,
+        "metrics_recomputed_from_saved_pngs": metrics,
         "reference_metrics_from_model_checkpoint": reference,
         "reference_metric_check": reference_check,
         "checkpoints": {
@@ -504,7 +582,8 @@ def main(argv=None):
             "raft": False,
             "oracle": False,
             "gt_used_for_model_decision": False,
-            "gt_used_only_for_export_sanity_metrics": True,
+            "gt_read_during_inference_export": False,
+            "gt_used_only_in_post_export_sanity_pass": True,
             "first_frame_output": "Host fallback",
             "second_frame_output": "Host fallback while motion state initializes",
             "third_frame_onward": (
@@ -525,9 +604,8 @@ def main(argv=None):
     print(json.dumps(result, indent=2), flush=True)
     if reference_check["available"] and not reference_check["passed"]:
         raise RuntimeError(
-            "exported inference metrics do not match the metrics stored in the "
-            f"model checkpoint within tolerance={args.metric_tolerance}; "
-            f"see {manifest}"
+            "saved PNG metrics do not match the metrics stored in the model "
+            f"checkpoint within tolerance={args.metric_tolerance}; see {manifest}"
         )
     print(f"wrote export manifest: {manifest}", flush=True)
     return result
