@@ -1,0 +1,98 @@
+{
+  "epoch": 3,
+  "train": {
+    "frames": 5003,
+    "supervised_frames": 4991,
+    "optimizer_steps": 628,
+    "attention_supervised_pixels": 251634015,
+    "rescue_pixels": 36806181,
+    "protection_pixels": 78705186,
+    "gate_supervised_pixels": 115511367,
+    "persistence_pixels": 6955015,
+    "seg_loss": 0.12317453304492647,
+    "attention_loss": 0.9826504554150937,
+    "gate_loss": 0.06971624473334136,
+    "persistence_loss": 0.009924278539879554,
+    "total_loss": 1.1854655105666154,
+    "lambda_mean": 0.42904452999568227,
+    "prediction_error_abs": 0.007497986032122023,
+    "dynamics_error_abs": 0.003013362155128994,
+    "lambda_on_rescue": 0.6655865605854123,
+    "lambda_on_protection": 0.22646095840089833,
+    "lambda_rescue_frames": 4991,
+    "lambda_protection_frames": 4991,
+    "attention_mass_by_age": [
+      0.29886872143574406,
+      0.25395421390493705,
+      0.23205156110111608,
+      0.21898435327768567
+    ]
+  },
+  "metrics": {
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC8": 0.9379464611218211,
+      "mVC16": 0.9289708560902963
+    },
+    "e1_base": {
+      "mIoU": 0.6553801657738326,
+      "mTC": 0.7097946210497371,
+      "mVC8": 0.9463059199319539,
+      "mVC16": 0.9403391719228389
+    },
+    "c_v3_base": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC8": 0.94442277549366,
+      "mVC16": 0.9364251481219616
+    },
+    "c_v6": {
+      "mIoU": 0.6543466681764629,
+      "mTC": 0.7561326531667724,
+      "mVC8": 0.9588074260936889,
+      "mVC16": 0.953925424715769
+    }
+  },
+  "diagnostics": {
+    "decision_frames": 2954,
+    "c_v6_vs_c_v3_disagreement_pixels": 31660159,
+    "lambda_mean": 0.3922594479848262,
+    "lambda_on_rescue": 0.6279091625981986,
+    "lambda_on_protection": 0.23999770755325328,
+    "attention_supervised_pixels": 159276096,
+    "rescue_pixels": 31530875,
+    "protection_pixels": 48521629,
+    "attention_mass_by_age": [
+      0.2905004842808381,
+      0.2533431358976963,
+      0.23568779274273147,
+      0.22551053531816642
+    ],
+    "history_length": 4,
+    "history_source": "detached raw frozen C-V3 logits only",
+    "history_transport": "softmax(raw C-V3 logits) -> one final probability warp -> renormalize",
+    "controller_output_feedback": false,
+    "semantic_state_recursive": false,
+    "prediction_error_reference": "t-1 frozen C-V3 only",
+    "dynamics_error_reference": "t-1 prediction error only",
+    "raft_inference": false
+  },
+  "delta_vs_c_v3_base": {
+    "mIoU": -0.008360166617216058,
+    "mTC": 0.04444829019639185,
+    "mVC8": 0.014384650600028803,
+    "mVC16": 0.017500276593807373
+  },
+  "delta_vs_host": {
+    "mIoU": 0.00022926163966840996,
+    "mTC": 0.048348547164461464,
+    "mVC8": 0.020860964971867735,
+    "mVC16": 0.02495456862547274
+  },
+  "selection_key": [
+    0,
+    0.6543466681764629,
+    0.7561326531667724
+  ]
+}
