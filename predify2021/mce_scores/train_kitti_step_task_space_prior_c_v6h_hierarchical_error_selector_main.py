@@ -8,9 +8,9 @@ Reviewed safeguards applied here before delegating to the implementation:
    recurrent states, so -1e4 validity masking cannot bleed through bilinear
    interpolation at motion boundaries;
 3. Stage-1 uses ordinary Current-vs-History CE, preserving the real target
-   prior.  The hierarchy itself removes the old five-way competition; we do
+   prior. The hierarchy itself removes the old five-way competition; we do
    not force the roughly 89:11 binary target distribution to 50:50;
-4. final result metadata records the actual two-stage evidence roles.
+4. summary/checkpoint metadata records the actual reviewed two-stage design.
 """
 
 import json
@@ -55,11 +55,10 @@ def _unweighted_gate_mean(
 ):
     """Ordinary binary CE mean over supervised pixels.
 
-    C-V6 failed because a single Current class competed directly with four
-    separate History ages. C-V6H already removes that structural competition.
-    Rebalancing the remaining binary task to 50:50 would change the decision
-    prior and make History artificially cheap, which conflicts with the mIoU
-    preservation objective.
+    C-V6 failed because one Current class competed directly with four separate
+    History ages. C-V6H already removes that structural competition. Rebalancing
+    the remaining binary task to 50:50 would change the decision prior and make
+    History artificially cheap, which conflicts with mIoU preservation.
     """
     total_count = int(current_count) + int(history_count)
     if total_count <= 0:
@@ -68,7 +67,7 @@ def _unweighted_gate_mean(
 
 
 def _train_epoch_preserve_prior(*args, **kwargs):
-    """Run the reviewed epoch and remove stale balanced-loss diagnostics."""
+    """Run the reviewed epoch and replace stale balanced-loss diagnostics."""
     result = _ORIGINAL_TRAIN_EPOCH(*args, **kwargs)
     current_count = int(result.get("gate_current_target_pixels", 0))
     history_count = int(result.get("gate_history_target_pixels", 0))
@@ -89,12 +88,11 @@ def _train_epoch_preserve_prior(*args, **kwargs):
 def _selector_evidence_no_mask_bleed(*args, **kwargs):
     """Build full-res hierarchy from raw heads, then apply full-res validity.
 
-    The selector itself masks invalid history cells with -1e4 at controller
-    resolution. Interpolating those masked logits would leak the large negative
-    sentinel into neighbouring valid pixels. We therefore reuse the validated
-    error/dynamics construction only to obtain recurrent hidden states, run the
-    two heads on those raw states, upsample raw logits, and mask once at the
-    final resolution.
+    The selector masks invalid history cells with -1e4 at controller resolution.
+    Interpolating those masked logits would leak the large negative sentinel into
+    neighbouring valid pixels. Reuse the validated error/dynamics construction
+    only to obtain recurrent hidden states, run the two heads on raw states,
+    upsample raw logits, and mask once at final resolution.
     """
     evidence = impl._ORIGINAL_SELECTOR_EVIDENCE(*args, **kwargs)
     selector = args[0] if args else kwargs["selector"]
@@ -199,41 +197,56 @@ def _architecture_metadata():
     }
 
 
-def _finalize_metadata(argv):
-    result_dir = Path(_arg_value(argv, "--result-output", impl.RESULT_DEFAULT))
-    summary_path = result_dir / "summary.json"
-    if not summary_path.exists():
-        return
-    with summary_path.open() as handle:
-        summary = json.load(handle)
-
-    summary["experiment"] = (
-        "C-V6H Hierarchical Error-Centric Multi-Hypothesis Temporal Coding"
-    )
-    summary["architecture"].update(_architecture_metadata())
-    summary["selection_rule"] = {
+def _selection_metadata():
+    return {
         "hard_constraint": (
             f"C-V6H mIoU >= fixed C-V4 E2 floor {MIOU_HARD_FLOOR:.16f}"
         ),
         "objective_after_constraint": "maximize C-V6H mTC, then mIoU",
         "fallback_if_all_fail_floor": "highest mIoU, then mTC",
     }
-    candidate = summary.get("best", {}).get("metrics", {}).get("c_v6", {})
-    if "mIoU" in candidate:
-        summary.setdefault("target", {})["hard_mIoU_floor"] = MIOU_HARD_FLOOR
-        summary["target"]["mIoU_floor_passed"] = (
-            candidate["mIoU"] >= MIOU_HARD_FLOOR
+
+
+def _finalize_metadata(argv):
+    result_dir = Path(_arg_value(argv, "--result-output", impl.RESULT_DEFAULT))
+    summary_path = result_dir / "summary.json"
+    if summary_path.exists():
+        with summary_path.open() as handle:
+            summary = json.load(handle)
+        summary["experiment"] = (
+            "C-V6H Hierarchical Error-Centric Multi-Hypothesis Temporal Coding"
         )
-    summary["diagnostic_intent"] = {
-        "gate_history_recall_precision": (
-            "tests whether error/dynamics evidence can separate History from Current"
-        ),
-        "history_age_distribution": (
-            "tests whether multi-hypothesis Prediction Error can resolve t-1..t-K"
-        ),
-    }
-    with summary_path.open("w") as handle:
-        json.dump(summary, handle, indent=2)
+        summary["architecture"].update(_architecture_metadata())
+        summary["selection_rule"] = _selection_metadata()
+        candidate = summary.get("best", {}).get("metrics", {}).get("c_v6", {})
+        if "mIoU" in candidate:
+            summary.setdefault("target", {})["hard_mIoU_floor"] = MIOU_HARD_FLOOR
+            summary["target"]["mIoU_floor_passed"] = (
+                candidate["mIoU"] >= MIOU_HARD_FLOOR
+            )
+        summary["diagnostic_intent"] = {
+            "gate_history_recall_precision": (
+                "tests whether error/dynamics evidence can separate History from Current"
+            ),
+            "history_age_distribution": (
+                "tests whether multi-hypothesis Prediction Error can resolve t-1..t-K"
+            ),
+        }
+        with summary_path.open("w") as handle:
+            json.dump(summary, handle, indent=2)
+
+    checkpoint_dir = Path(_arg_value(argv, "--output", impl.OUTPUT_DEFAULT))
+    checkpoint_path = checkpoint_dir / "best.pt"
+    if checkpoint_path.exists():
+        payload = torch.load(checkpoint_path, map_location="cpu")
+        payload["experiment"] = impl.EXPERIMENT
+        payload.setdefault("architecture", {}).update(_architecture_metadata())
+        payload["selection_rule"] = _selection_metadata()
+        payload["hard_mIoU_floor"] = MIOU_HARD_FLOOR
+        candidate = payload.get("metrics", {}).get("c_v6", {})
+        if "mIoU" in candidate:
+            payload["mIoU_floor_passed"] = candidate["mIoU"] >= MIOU_HARD_FLOOR
+        torch.save(payload, checkpoint_path)
 
 
 def main(argv=None):
