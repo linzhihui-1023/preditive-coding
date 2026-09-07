@@ -1,0 +1,32 @@
+{
+  "sequences": [
+    "0002",
+    "0010",
+    "0018"
+  ],
+  "c_v6s_vs_c_v6r_disagreement_pixels": 0,
+  "passed": true,
+  "c_v6r_teacher": {
+    "mIoU": 0.58630635816095,
+    "mTC": 0.7614580285035492,
+    "mVC8": 0.9585346907572436,
+    "mVC16": 0.9531003355973136
+  },
+  "c_v6s": {
+    "mIoU": 0.58630635816095,
+    "mTC": 0.7614580285035492,
+    "mVC8": 0.9585346907572436,
+    "mVC16": 0.9531003355973136
+  },
+  "identity_definition": "Delta_sem=0 and attenuation=0 => P_hist_sem=P_hist_temp and lambda_final=lambda_temp",
+  "probability_identity": {
+    "history_probability_max_abs_diff": 2.980232238769531e-07,
+    "lambda_max_abs_diff": 0.0,
+    "output_probability_max_abs_diff": 2.384185791015625e-07,
+    "delta_semantic_max_abs": 0.0,
+    "attenuation_max_abs": 0.0,
+    "passed_probability_identity": true,
+    "probability_tolerance": 1e-06,
+    "lambda_tolerance": 1e-07
+  }
+}

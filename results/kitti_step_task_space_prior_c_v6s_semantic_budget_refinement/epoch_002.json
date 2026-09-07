@@ -1,0 +1,96 @@
+{
+  "epoch": 2,
+  "train": {
+    "frames": 5003,
+    "supervised_frames": 4991,
+    "optimizer_steps": 628,
+    "out_pixels": 2231347101,
+    "semantic_pixels": 2229481330,
+    "persistence_pixels": 3892370,
+    "rescue_frames": 4991,
+    "protection_frames": 4991,
+    "out_loss": 0.11461446076807696,
+    "semantic_loss": 0.17850887413565655,
+    "persistence_loss": 0.005700460530909316,
+    "total_loss": 0.2988237954662716,
+    "lambda_temp": 0.4479104164480996,
+    "lambda_final": 0.39013140360343146,
+    "attenuation": 0.1482525585027812,
+    "lambda_temp_rescue": 0.559597507026625,
+    "lambda_final_rescue": 0.350533334358831,
+    "lambda_temp_protection": 0.22851727323009863,
+    "lambda_final_protection": 0.08846943930240785
+  },
+  "metrics": {
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC8": 0.9379464611218211,
+      "mVC16": 0.9289708560902963
+    },
+    "e1_base": {
+      "mIoU": 0.6553801657738326,
+      "mTC": 0.7097946210497371,
+      "mVC8": 0.9463059199319539,
+      "mVC16": 0.9403391719228389
+    },
+    "c_v3_base": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC8": 0.94442277549366,
+      "mVC16": 0.9364251481219616
+    },
+    "c_v6r_teacher": {
+      "mIoU": 0.6590482705578387,
+      "mTC": 0.7585676063705213,
+      "mVC8": 0.9576369140830054,
+      "mVC16": 0.9519485211459568
+    },
+    "c_v6s": {
+      "mIoU": 0.663116805036314,
+      "mTC": 0.7322891862230776,
+      "mVC8": 0.9498782169667397,
+      "mVC16": 0.9431970997262545
+    }
+  },
+  "diagnostics": {
+    "decision_frames": 2954,
+    "c_v6s_vs_c_v6r_disagreement_pixels": 22688820,
+    "c_v6s_vs_c_v3_disagreement_pixels": 14358771,
+    "lambda_temp": 0.4473731083140917,
+    "lambda_final": 0.38397968007843075,
+    "attenuation": 0.15849011909461297,
+    "lambda_temp_rescue": 0.5740979131192635,
+    "lambda_final_rescue": 0.4065904831696622,
+    "lambda_temp_protection": 0.24229250021642054,
+    "lambda_final_protection": 0.13108091247025258,
+    "temporal_branch_frozen": true,
+    "dynamics_error_role": "frozen temporal correction-budget evidence only",
+    "semantic_refiner_uses_dynamics_error": false,
+    "validity_is_hard_semantic_mask": true,
+    "controller_output_feedback": false
+  },
+  "delta_vs_c_v6r_e1": {
+    "mIoU": 0.0040685344784753275,
+    "mTC": -0.02627842014744375,
+    "mVC8": -0.007758697116265756,
+    "mVC16": -0.00875142141970231
+  },
+  "delta_vs_c_v3": {
+    "mIoU": 0.0004099702426350049,
+    "mTC": 0.02060482325269708,
+    "mVC8": 0.005455441473079636,
+    "mVC16": 0.006771951604292892
+  },
+  "delta_vs_host": {
+    "mIoU": 0.008999398499519473,
+    "mTC": 0.024505080220766695,
+    "mVC8": 0.011931755844918568,
+    "mVC16": 0.014226243635958258
+  },
+  "selection_key": [
+    0,
+    0.7322891862230776,
+    0.663116805036314
+  ]
+}
