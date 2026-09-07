@@ -7,6 +7,7 @@ Core constraint / 核心约束：
 - 每个历史候选先与当前语义形成 prediction error（预测误差），并由对应 validity（有效性）显式门控。
 - Candidate Bank（候选库）只在控制器输出 selector logits 后执行最终选择，不向控制器泄露完整历史语义。
 - Dynamics Error（动力学误差）继续作为显式误差动态证据。
+- Error evidence（误差证据）在模块边界显式 detach（停止梯度），避免未来误解冻上游后产生跨候选梯度串扰。
 
 This makes cross-frame semantic information enter the decision core only through
 prediction-error representations and reliability scalars.
@@ -36,15 +37,19 @@ def build_multihypothesis_error_evidence(
         e_k = V_k * (P_current - P_history_k)
 
     Missing/invalid history therefore contributes exactly zero semantic error.
-    The function also returns scalar confidence margins; raw semantic
-    probabilities are not returned to the controller.
+    The evidence boundary is detached deliberately: C-V6 trains the controller
+    only and does not alter the frozen C-V3 / motion / history generators.
+    Raw semantic probabilities are never returned to the controller.
     """
     if len(history_probabilities) != len(history_validities):
         raise ValueError("history probabilities and validities must have equal length")
 
+    current_probability = current_probability.detach()
     errors = []
     history_margins = []
     for probability, validity in zip(history_probabilities, history_validities):
+        probability = probability.detach()
+        validity = validity.detach()
         if probability.shape != current_probability.shape:
             raise ValueError("all history probabilities must match current probability shape")
         if validity.shape[0] != current_probability.shape[0] or validity.shape[1] != 1:
