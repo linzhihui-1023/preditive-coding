@@ -3,18 +3,27 @@
 中文：C-V8 多假设预测误差直接语义修正。
 
 Historical semantics are used only to form strict-validity-gated prediction
-errors. The network never predicts an arbitrary semantic residual. Instead it
-learns class-wise gains for each historical hypothesis and applies them only
-along the corresponding prediction-error direction:
+errors. Two error representations have distinct roles:
 
-    e_k = P_current - P_history_k
-    DeltaL_t = - sum_k G_k * e_k
+    probability error e^P_k = P_current - P_history_k
+      -> recurrent Error State / gain evidence
+
+    centered-logit error e^L_k = C(L_current) - C(L_history_k)
+      -> correction direction
+
+where C(L) subtracts the per-pixel class mean. The network never predicts an
+arbitrary semantic residual. It learns class-wise gains for each historical
+hypothesis and applies them only along the centered-logit prediction-error
+direction:
+
+    DeltaL_k = - G_k * e^L_k
+    DeltaL_t = sum_k DeltaL_k
     L_out = L_C-V3 + DeltaL_t
 
-Therefore Prediction Error is structurally necessary: if all e_k are zero,
-DeltaL_t is exactly zero even after training. Current semantics are available
-only as a compact state for interpreting error; raw historical probabilities
-never enter the correction module.
+Prediction Error is therefore structurally necessary: if all correction errors
+are zero, DeltaL_t is exactly zero even after training. Current semantics are
+available only as a compact state for interpreting error; raw historical
+probabilities/logits never enter the correction module.
 """
 
 import torch
@@ -52,8 +61,8 @@ class MultiHypothesisErrorDirectCorrection(nn.Module):
             nn.SiLU(),
         )
 
-        # Global recurrent Error State from all K signed errors, explicit
-        # Dynamics Error and compact CURRENT context.
+        # Global recurrent Error State from all K signed probability errors,
+        # explicit Dynamics Error and compact CURRENT context.
         signed_error_total = 2 * self.num_classes * (self.history_length + 1)
         global_scalar_context = 3 + self.history_length  # margin, T, Q, V1..VK
         self.error_input_channels = (
@@ -126,6 +135,7 @@ class MultiHypothesisErrorDirectCorrection(nn.Module):
     def forward(
         self,
         prediction_errors,
+        correction_errors,
         dynamics_error,
         current_probability,
         current_margin,
@@ -136,6 +146,8 @@ class MultiHypothesisErrorDirectCorrection(nn.Module):
     ):
         if len(prediction_errors) != self.history_length:
             raise ValueError("prediction_errors length must equal history_length")
+        if len(correction_errors) != self.history_length:
+            raise ValueError("correction_errors length must equal history_length")
         if len(history_validities_low) != self.history_length:
             raise ValueError("history_validities_low length must equal history_length")
         if current_probability.shape[1] != self.num_classes:
@@ -155,6 +167,9 @@ class MultiHypothesisErrorDirectCorrection(nn.Module):
         for error in prediction_errors:
             if error.shape[1] != self.num_classes or tuple(error.shape[-2:]) != spatial:
                 raise ValueError("prediction error shape mismatch")
+        for error in correction_errors:
+            if error.shape[1] != self.num_classes or tuple(error.shape[-2:]) != spatial:
+                raise ValueError("correction error shape mismatch")
         for validity in history_validities_low:
             if validity.shape[1] != 1 or tuple(validity.shape[-2:]) != spatial:
                 raise ValueError("history validity shape mismatch")
@@ -215,11 +230,12 @@ class MultiHypothesisErrorDirectCorrection(nn.Module):
             context = self.context_branch(shared)
             gain = self.gain_head(torch.cat((local, context), dim=1)) * validity
             gains.append(gain)
-            # e_k = Current - History. Negative e_k points from Current toward
-            # the historical prediction. Gain can be positive or negative.
-            correction_terms.append(-gain * prediction_errors[index])
+            # e^L_k = centered Current logits - centered History logits.
+            # Negative e^L_k points from Current toward the historical hypothesis.
+            correction_terms.append(-gain * correction_errors[index])
 
-        delta_logits = torch.stack(correction_terms, dim=0).sum(dim=0)
+        candidate_corrections_low = torch.stack(correction_terms, dim=1)
+        delta_logits = candidate_corrections_low.sum(dim=1)
         candidate_gains = torch.stack(gains, dim=1)
         any_history_valid = torch.stack(
             [validity.detach() for validity in history_validities_low],
@@ -228,6 +244,7 @@ class MultiHypothesisErrorDirectCorrection(nn.Module):
 
         return {
             "delta_logits": delta_logits,
+            "candidate_corrections_low": candidate_corrections_low,
             "candidate_gains": candidate_gains,
             "error_state": error_state,
             "current_state": current_state,
