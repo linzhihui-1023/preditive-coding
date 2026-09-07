@@ -2,14 +2,19 @@
 
 中文：C-V7 语义优先效用目标与快速协议运行层。
 
-This wrapper keeps the C-V7 architecture unchanged and corrects the training
-objective so utility is aligned with the final hard semantic decision:
+Semantic utility is aligned with the final hard segmentation decision:
 
     A_k = I[history_k predicts GT] - I[current predicts GT]
 
 Therefore A_k is exactly +1 (semantic rescue), 0 (no semantic net change), or
--1 (semantic damage).  RAFT temporal ranking is allowed only inside the same
+-1 (semantic damage). RAFT temporal ranking is allowed only inside the same
 semantic-utility level and can never override rescue/damage ordering.
+
+DEV3 is a train/validation protocol, not a three-sequence training subset:
+- train: all 12 official KITTI-STEP train sequences, capped at 96 contiguous
+  frames per sequence and rotated front/middle/back over epochs 1/2/3;
+- validation: complete official val sequences 0002/0010/0018;
+- no validation sequence is ever used for optimization.
 """
 
 import json
@@ -28,7 +33,23 @@ from predify2021.mce_scores import (
 )
 
 
-DEV3 = ("0002", "0010", "0018")
+DEV3_VAL = ("0002", "0010", "0018")
+DEV3_TRAIN = (
+    "0000",
+    "0001",
+    "0003",
+    "0004",
+    "0005",
+    "0009",
+    "0011",
+    "0012",
+    "0015",
+    "0017",
+    "0019",
+    "0020",
+)
+DEV3_FRAMES_PER_SEQUENCE = 96
+DEV3_EPOCH_SEGMENTS = ("front", "middle", "back")
 SEMANTIC_TIE_DELTA = 0.10
 UTILITY_TARGET_NAME = "I[history predicts GT] - I[current predicts GT]"
 
@@ -132,14 +153,117 @@ def _inject_isolated_dev3_outputs(argv):
     return argv
 
 
+def _sequence_subset(groups, required, split_name):
+    missing = [sequence for sequence in required if sequence not in groups]
+    if missing:
+        raise RuntimeError(
+            f"DEV3 {split_name} split is missing required sequences {missing}; "
+            f"available={sorted(groups.keys())}"
+        )
+    return {sequence: groups[sequence] for sequence in required}
+
+
+def _dev3_sequence_groups(dataset, original_sequence_groups):
+    """Apply official split-safe DEV3 grouping.
+
+    The dataset itself does not store a split attribute, but its annotation
+    mask_root ends in /train or /val. This makes split routing explicit and
+    independent of call order.
+    """
+    groups = original_sequence_groups(dataset)
+    split_name = Path(dataset.mask_root).name.lower()
+    if split_name == "train":
+        return _sequence_subset(groups, DEV3_TRAIN, "train")
+    if split_name == "val":
+        return _sequence_subset(groups, DEV3_VAL, "val")
+    raise RuntimeError(
+        "DEV3 expects a KITTI-STEP dataset whose mask_root ends in train or val; "
+        f"got mask_root={dataset.mask_root}"
+    )
+
+
+def _slice_contiguous_segment(samples, segment, limit=DEV3_FRAMES_PER_SEQUENCE):
+    """Return a deterministic contiguous front/middle/back sequence window."""
+    samples = list(samples)
+    count = len(samples)
+    if count <= limit:
+        return samples
+    if segment == "front":
+        start = 0
+    elif segment == "middle":
+        start = (count - limit) // 2
+    elif segment == "back":
+        start = count - limit
+    else:
+        raise ValueError(f"Unknown DEV3 segment: {segment}")
+    return samples[start : start + limit]
+
+
+def _dev3_epoch_groups(groups, epoch_index):
+    """Build epoch-specific train windows while preserving all 12 sequences."""
+    if epoch_index < 0:
+        raise ValueError("epoch_index must be non-negative")
+    segment = DEV3_EPOCH_SEGMENTS[epoch_index % len(DEV3_EPOCH_SEGMENTS)]
+    subset = {
+        sequence: _slice_contiguous_segment(samples, segment)
+        for sequence, samples in groups.items()
+    }
+    metadata = {
+        "epoch": epoch_index + 1,
+        "segment": segment,
+        "frames_per_sequence_cap": DEV3_FRAMES_PER_SEQUENCE,
+        "train_sequences": list(subset.keys()),
+        "sampled_frames_by_sequence": {
+            sequence: len(samples) for sequence, samples in subset.items()
+        },
+        "sampled_frames_total": sum(len(samples) for samples in subset.values()),
+    }
+    return subset, metadata
+
+
+def _protocol_definition(protocol):
+    if protocol == "dev3":
+        return {
+            "name": "dev3",
+            "train_split": "official KITTI-STEP train",
+            "train_sequences": list(DEV3_TRAIN),
+            "train_sampling": (
+                "96 contiguous frames per sequence; epoch 1 front, epoch 2 middle, "
+                "epoch 3 back"
+            ),
+            "frames_per_sequence_cap": DEV3_FRAMES_PER_SEQUENCE,
+            "epoch_segments": list(DEV3_EPOCH_SEGMENTS),
+            "validation_split": "official KITTI-STEP val",
+            "validation_sequences": list(DEV3_VAL),
+            "validation_sampling": "complete sequences",
+            "validation_used_for_optimization": False,
+        }
+    return {
+        "name": "full9",
+        "train_split": "official KITTI-STEP train",
+        "train_sampling": "complete train split",
+        "validation_split": "official KITTI-STEP val",
+        "validation_sequences": list(c_v5.FULL9),
+        "validation_sampling": "complete Full9 sequences",
+        "validation_used_for_optimization": False,
+    }
+
+
 def _rewrite_semantic_first_metadata(output_dir, result_dir, protocol):
     """Correct inherited C-V6/C-V7 metadata after a completed run."""
     result_dir = Path(result_dir)
-    for path in [*sorted(result_dir.glob("epoch_*.json")), result_dir / "summary.json"]:
+    definition = _protocol_definition(protocol)
+    paths = [
+        result_dir / "oracle_precheck.json",
+        *sorted(result_dir.glob("epoch_*.json")),
+        result_dir / "summary.json",
+    ]
+    for path in paths:
         if not path.is_file():
             continue
         payload = json.loads(path.read_text())
         payload["protocol"] = protocol
+        payload["protocol_definition"] = definition
         rows = []
         if path.name == "summary.json":
             if isinstance(payload.get("best"), dict):
@@ -149,7 +273,7 @@ def _rewrite_semantic_first_metadata(output_dir, result_dir, protocol):
             architecture["utility_target"] = UTILITY_TARGET_NAME
             architecture["utility_levels"] = [-1, 0, 1]
             architecture["semantic_tie_delta"] = SEMANTIC_TIE_DELTA
-        else:
+        elif path.name.startswith("epoch_"):
             rows.append(payload)
         for row in rows:
             train = row.get("train")
@@ -165,6 +289,7 @@ def _rewrite_semantic_first_metadata(output_dir, result_dir, protocol):
     if checkpoint_path.is_file():
         payload = torch.load(checkpoint_path, map_location="cpu")
         payload["protocol"] = protocol
+        payload["protocol_definition"] = definition
         architecture = payload.setdefault("architecture", {})
         architecture["utility_target"] = UTILITY_TARGET_NAME
         architecture["utility_levels"] = [-1, 0, 1]
@@ -184,36 +309,57 @@ def main(argv=None):
     original_tie_delta = c_v7.SEMANTIC_TIE_DELTA
     original_full9 = c_v5.FULL9
     original_sequence_groups = c_v6.sequence_groups
+    original_train_epoch = c_v7._train_epoch_utility
     original_rewrite = c_v7._rewrite_artifacts
+    dev3_epoch_counter = {"value": 0}
 
     def rewrite_with_correct_metadata(output, result):
         original_rewrite(output, result)
         _rewrite_semantic_first_metadata(output, result, protocol)
 
-    if protocol == "dev3":
-        def dev3_sequence_groups(dataset):
-            groups = original_sequence_groups(dataset)
-            missing = [sequence for sequence in DEV3 if sequence not in groups]
-            if missing:
-                available = sorted(groups.keys())
-                raise RuntimeError(
-                    "DEV3 requires KITTI-STEP sequences 0002/0010/0018 in this split; "
-                    f"missing={missing}, available={available}"
-                )
-            return {sequence: groups[sequence] for sequence in DEV3}
-    else:
-        dev3_sequence_groups = original_sequence_groups
+    def protocol_sequence_groups(dataset):
+        if protocol != "dev3":
+            return original_sequence_groups(dataset)
+        return _dev3_sequence_groups(dataset, original_sequence_groups)
+
+    def dev3_train_epoch(*args, **kwargs):
+        if protocol != "dev3":
+            return original_train_epoch(*args, **kwargs)
+        if kwargs.get("groups") is not None:
+            groups = kwargs["groups"]
+            sampled_groups, sampling = _dev3_epoch_groups(
+                groups,
+                dev3_epoch_counter["value"],
+            )
+            kwargs = dict(kwargs)
+            kwargs["groups"] = sampled_groups
+        else:
+            if len(args) <= 12:
+                raise RuntimeError("Unexpected C-V7 train-epoch call signature")
+            args = list(args)
+            sampled_groups, sampling = _dev3_epoch_groups(
+                args[12],
+                dev3_epoch_counter["value"],
+            )
+            args[12] = sampled_groups
+            args = tuple(args)
+        row = original_train_epoch(*args, **kwargs)
+        row["dev3_sampling"] = sampling
+        dev3_epoch_counter["value"] += 1
+        return row
 
     try:
         c_v7._build_utility_targets = build_semantic_correctness_utility_targets
         c_v7.SEMANTIC_TIE_DELTA = SEMANTIC_TIE_DELTA
+        c_v7._train_epoch_utility = dev3_train_epoch
         c_v7._rewrite_artifacts = rewrite_with_correct_metadata
-        c_v5.FULL9 = DEV3 if protocol == "dev3" else original_full9
-        c_v6.sequence_groups = dev3_sequence_groups
+        c_v5.FULL9 = DEV3_VAL if protocol == "dev3" else original_full9
+        c_v6.sequence_groups = protocol_sequence_groups
         c_v7.main(forwarded)
     finally:
         c_v7._build_utility_targets = original_target_builder
         c_v7.SEMANTIC_TIE_DELTA = original_tie_delta
+        c_v7._train_epoch_utility = original_train_epoch
         c_v7._rewrite_artifacts = original_rewrite
         c_v5.FULL9 = original_full9
         c_v6.sequence_groups = original_sequence_groups
