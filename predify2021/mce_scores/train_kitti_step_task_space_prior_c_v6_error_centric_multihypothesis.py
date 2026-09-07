@@ -75,7 +75,10 @@ OUTPUT_DEFAULT = (
 )
 RESULT_DEFAULT = "results/kitti_step_task_space_prior_c_v6_error_centric_multihypothesis"
 C_V5_TEACHER_CHECKPOINT_DEFAULT = str(Path(c_v5.OUTPUT_DEFAULT) / "best.pt")
-DISTILL_WEIGHT = 0.5
+# The first C-V6 experiment is a clean causal baseline: the selector is
+# trained only from the GT/RAFT task target.  A frozen C-V5 teacher is an
+# optional preservation aid, enabled only when a positive weight is supplied.
+DISTILL_WEIGHT = 0.0
 DISTILL_TEMPERATURE = 1.0
 
 
@@ -356,20 +359,22 @@ def _train_sequence_distilled(
         selector_hidden = evidence["row"]["hidden"]
         dynamics_state = evidence["dynamics_state"]
 
-        with torch.no_grad():
-            teacher_evidence = teacher_evidence_fn(
-                teacher_selector,
-                teacher_dynamics,
-                c_v3_logits,
-                candidate_rows,
-                pending_motion,
-                e1["transportability_low"],
-                memory_row["memory_reliability"],
-                teacher_hidden,
-                teacher_dynamics_state,
-            )
-            teacher_hidden = teacher_evidence["row"]["hidden"]
-            teacher_dynamics_state = teacher_evidence["dynamics_state"]
+        teacher_evidence = None
+        if teacher_selector is not None and distill_weight > 0.0:
+            with torch.no_grad():
+                teacher_evidence = teacher_evidence_fn(
+                    teacher_selector,
+                    teacher_dynamics,
+                    c_v3_logits,
+                    candidate_rows,
+                    pending_motion,
+                    e1["transportability_low"],
+                    memory_row["memory_reliability"],
+                    teacher_hidden,
+                    teacher_dynamics_state,
+                )
+                teacher_hidden = teacher_evidence["row"]["hidden"]
+                teacher_dynamics_state = teacher_evidence["dynamics_state"]
 
             teacher_full = raft.current_to_previous(current_image, previous_image)
             (
@@ -398,7 +403,7 @@ def _train_sequence_distilled(
             totals["supervised_pixels"] += count
             totals["selector_ce_per_pixel"] += float(task_loss_sum.detach().item())
 
-        if distill_weight > 0.0 and bool(decision.any()):
+        if teacher_evidence is not None and distill_weight > 0.0 and bool(decision.any()):
             student_logits = evidence["selector_logits_full"][0].permute(1, 2, 0)[decision]
             teacher_logits = teacher_evidence["selector_logits_full"][0].permute(1, 2, 0)[decision]
             distill_loss_sum = _distillation_kl_sum(
@@ -529,7 +534,8 @@ def _train_epoch_distilled(
     distill_temperature,
 ):
     selector.train()
-    teacher_selector.eval()
+    if teacher_selector is not None:
+        teacher_selector.eval()
     refiner.eval()
     correction.eval()
     mask_predictor.eval()
@@ -785,15 +791,20 @@ def main(argv=None):
         if args.oracle_only:
             return
 
-        # Load frozen C-V5 only after the oracle-only exit. Teacher is training-only.
-        teacher_selector, teacher_payload = _load_c_v5_teacher(
-            args.c_v5_teacher_checkpoint
-        )
-        teacher_dynamics = EulerDynamicsError(
-            tau_e=args.dynamics_tau_e,
-            k_e=args.dynamics_k_e,
-            dt=args.dynamics_dt,
-        )
+        # C-V5 is optional.  With the default zero weight, train directly from
+        # the GT/RAFT task target and do not require a teacher checkpoint.
+        teacher_selector = None
+        teacher_payload = None
+        teacher_dynamics = None
+        if args.distill_weight > 0.0:
+            teacher_selector, teacher_payload = _load_c_v5_teacher(
+                args.c_v5_teacher_checkpoint
+            )
+            teacher_dynamics = EulerDynamicsError(
+                tau_e=args.dynamics_tau_e,
+                k_e=args.dynamics_k_e,
+                dt=args.dynamics_dt,
+            )
 
         history = []
         best = None
@@ -862,8 +873,16 @@ def main(argv=None):
                         "train": train_stats,
                         "dynamics": dynamics.config(),
                         "distillation": {
-                            "teacher_checkpoint": args.c_v5_teacher_checkpoint,
-                            "teacher_epoch": teacher_payload.get("epoch"),
+                            "teacher_checkpoint": (
+                                args.c_v5_teacher_checkpoint
+                                if teacher_payload is not None
+                                else None
+                            ),
+                            "teacher_epoch": (
+                                teacher_payload.get("epoch")
+                                if teacher_payload is not None
+                                else None
+                            ),
                             "weight": args.distill_weight,
                             "temperature": args.distill_temperature,
                             "teacher_inference": False,
@@ -903,8 +922,16 @@ def main(argv=None):
             "zero_step": zero_step,
             "dynamics": dynamics.config(),
             "distillation": {
-                "teacher_checkpoint": args.c_v5_teacher_checkpoint,
-                "teacher_epoch": teacher_payload.get("epoch"),
+                "teacher_checkpoint": (
+                    args.c_v5_teacher_checkpoint
+                    if teacher_payload is not None
+                    else None
+                ),
+                "teacher_epoch": (
+                    teacher_payload.get("epoch")
+                    if teacher_payload is not None
+                    else None
+                ),
                 "weight": args.distill_weight,
                 "temperature": args.distill_temperature,
                 "mask": "GT-valid decision pixels where at least one candidate differs",
@@ -916,7 +943,11 @@ def main(argv=None):
                 "residual": args.residual_checkpoint,
                 "e1_base": args.base_checkpoint,
                 "c_v3_base": args.c_v3_checkpoint,
-                "c_v5_teacher": args.c_v5_teacher_checkpoint,
+                "c_v5_teacher": (
+                    args.c_v5_teacher_checkpoint
+                    if teacher_payload is not None
+                    else None
+                ),
                 "c_v3_checkpoint_epoch": cv3_payload.get("epoch"),
                 "residual_experiment": residual_payload.get("experiment"),
                 "e1_experiment": base_payload.get("experiment"),
@@ -937,7 +968,11 @@ def main(argv=None):
                 "upstream_error_boundary_detached": True,
                 "history_logits_resampling": "one final warp per candidate",
                 "controller_output_feedback": False,
-                "training_loss": "task CE + frozen C-V5 selector decision KL distillation",
+                "training_loss": (
+                    "task CE + optional frozen C-V5 selector decision KL distillation"
+                    if args.distill_weight > 0.0
+                    else "GT/RAFT task CE only; no teacher distillation"
+                ),
                 "teacher_inference": False,
                 "raft_inference": False,
             },
