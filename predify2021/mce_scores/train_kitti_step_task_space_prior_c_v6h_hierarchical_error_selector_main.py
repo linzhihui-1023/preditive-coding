@@ -2,13 +2,15 @@
 
 中文：C-V6H 分层误差选择器正式入口。
 
-This entrypoint applies the reviewed C-V6H safeguards before delegating to the
-implementation module:
+Reviewed safeguards applied here before delegating to the implementation:
 1. model selection uses the fixed C-V4 E2 mIoU floor;
-2. full-resolution hierarchical logits are rebuilt from the unmasked low-res
+2. full-resolution hierarchical logits are rebuilt from unmasked low-res
    recurrent states, so -1e4 validity masking cannot bleed through bilinear
    interpolation at motion boundaries;
-3. final result metadata records the actual two-stage evidence roles.
+3. Stage-1 uses ordinary Current-vs-History CE, preserving the real target
+   prior.  The hierarchy itself removes the old five-way competition; we do
+   not force the roughly 89:11 binary target distribution to 50:50;
+4. final result metadata records the actual two-stage evidence roles.
 """
 
 import json
@@ -22,6 +24,7 @@ import predify2021.mce_scores.train_kitti_step_task_space_prior_c_v6h_hierarchic
 
 
 MIOU_HARD_FLOOR = 0.6637739071008685
+_ORIGINAL_TRAIN_EPOCH = impl._train_epoch_distilled
 
 
 def _arg_value(argv, name, default):
@@ -44,14 +47,53 @@ def _selection_key(metrics):
     return (0, candidate["mIoU"], candidate["mTC"])
 
 
+def _unweighted_gate_mean(
+    current_sum,
+    current_count,
+    history_sum,
+    history_count,
+):
+    """Ordinary binary CE mean over supervised pixels.
+
+    C-V6 failed because a single Current class competed directly with four
+    separate History ages. C-V6H already removes that structural competition.
+    Rebalancing the remaining binary task to 50:50 would change the decision
+    prior and make History artificially cheap, which conflicts with the mIoU
+    preservation objective.
+    """
+    total_count = int(current_count) + int(history_count)
+    if total_count <= 0:
+        return current_sum * 0.0
+    return (current_sum + history_sum) / float(total_count)
+
+
+def _train_epoch_preserve_prior(*args, **kwargs):
+    """Run the reviewed epoch and remove stale balanced-loss diagnostics."""
+    result = _ORIGINAL_TRAIN_EPOCH(*args, **kwargs)
+    current_count = int(result.get("gate_current_target_pixels", 0))
+    history_count = int(result.get("gate_history_target_pixels", 0))
+    supervised = max(current_count + history_count, 1)
+    result.pop("gate_balanced_ce", None)
+    result.pop("selector_ce_per_pixel", None)
+    result["gate_loss_mode"] = (
+        "ordinary Current-vs-History CE; natural target prior preserved"
+    )
+    result["gate_target_current_fraction"] = current_count / supervised
+    result["gate_target_history_fraction"] = history_count / supervised
+    result["history_stage_loss_mode"] = (
+        "history-age CE only on History-target pixels"
+    )
+    return result
+
+
 def _selector_evidence_no_mask_bleed(*args, **kwargs):
     """Build full-res hierarchy from raw heads, then apply full-res validity.
 
     The selector itself masks invalid history cells with -1e4 at controller
     resolution. Interpolating those masked logits would leak the large negative
-    sentinel into neighbouring valid pixels.  We therefore reuse the validated
-    error/dynamics construction only to obtain the recurrent hidden states, run
-    the two heads on those raw states, upsample raw logits, and mask once at the
+    sentinel into neighbouring valid pixels. We therefore reuse the validated
+    error/dynamics construction only to obtain recurrent hidden states, run the
+    two heads on those raw states, upsample raw logits, and mask once at the
     final resolution.
     """
     evidence = impl._ORIGINAL_SELECTOR_EVIDENCE(*args, **kwargs)
@@ -128,6 +170,35 @@ def _selector_evidence_no_mask_bleed(*args, **kwargs):
     return evidence
 
 
+def _architecture_metadata():
+    return {
+        "decision_decomposition": "Stage1 Current-vs-History; Stage2 t-1..t-K",
+        "stage1_semantic_evidence": (
+            "strict validity-gated e1..eK + explicit Dynamics Error from e1"
+        ),
+        "stage1_dynamics_role": (
+            "t-1 error persistence evidence only; not history-age selection"
+        ),
+        "stage1_loss": (
+            "ordinary Current-vs-History CE; natural target prior preserved"
+        ),
+        "stage2_semantic_evidence": (
+            "strict validity-gated e1..eK; no Dynamics Error"
+        ),
+        "stage2_loss": (
+            "history-age CE only on pixels whose task target is History"
+        ),
+        "training_loss": (
+            "natural-prior gate CE + conditional history CE; no distillation"
+        ),
+        "five_way_unweighted_ce": False,
+        "binary_gate_class_rebalancing": False,
+        "full_resolution_validity_masking": (
+            "upsample raw gate/history logits first; apply -1e4 mask only at full resolution"
+        ),
+    }
+
+
 def _finalize_metadata(argv):
     result_dir = Path(_arg_value(argv, "--result-output", impl.RESULT_DEFAULT))
     summary_path = result_dir / "summary.json"
@@ -139,33 +210,7 @@ def _finalize_metadata(argv):
     summary["experiment"] = (
         "C-V6H Hierarchical Error-Centric Multi-Hypothesis Temporal Coding"
     )
-    summary["architecture"].update(
-        {
-            "decision_decomposition": (
-                "Stage1 Current-vs-History; Stage2 t-1..t-K"
-            ),
-            "stage1_semantic_evidence": (
-                "strict validity-gated e1..eK + explicit Dynamics Error from e1"
-            ),
-            "stage1_dynamics_role": (
-                "t-1 error persistence evidence only; not history-age selection"
-            ),
-            "stage1_loss": "balanced Current/History CE (0.5 / 0.5)",
-            "stage2_semantic_evidence": (
-                "strict validity-gated e1..eK; no Dynamics Error"
-            ),
-            "stage2_loss": (
-                "history-age CE only on pixels whose task target is History"
-            ),
-            "training_loss": (
-                "balanced gate CE + conditional history CE; no distillation"
-            ),
-            "five_way_unweighted_ce": False,
-            "full_resolution_validity_masking": (
-                "upsample raw gate/history logits first; apply -1e4 mask only at full resolution"
-            ),
-        }
-    )
+    summary["architecture"].update(_architecture_metadata())
     summary["selection_rule"] = {
         "hard_constraint": (
             f"C-V6H mIoU >= fixed C-V4 E2 floor {MIOU_HARD_FLOOR:.16f}"
@@ -193,16 +238,25 @@ def _finalize_metadata(argv):
 
 def main(argv=None):
     original_impl_evidence = impl._selector_evidence
+    original_base_evidence = impl.base._selector_evidence
     original_base_selection_key = impl.base._selection_key
+    original_gate_mean = impl._balanced_gate_mean
+    original_train_epoch = impl._train_epoch_distilled
+
     impl._selector_evidence = _selector_evidence_no_mask_bleed
     impl.base._selection_key = _selection_key
+    impl._balanced_gate_mean = _unweighted_gate_mean
+    impl._train_epoch_distilled = _train_epoch_preserve_prior
     try:
         result = impl.main(argv)
         _finalize_metadata(argv)
         return result
     finally:
         impl._selector_evidence = original_impl_evidence
+        impl.base._selector_evidence = original_base_evidence
         impl.base._selection_key = original_base_selection_key
+        impl._balanced_gate_mean = original_gate_mean
+        impl._train_epoch_distilled = original_train_epoch
 
 
 if __name__ == "__main__":
