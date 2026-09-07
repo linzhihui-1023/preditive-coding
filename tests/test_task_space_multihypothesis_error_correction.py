@@ -74,6 +74,24 @@ class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
         row = module(*inputs, previous_error_state=None)
         self.assertEqual(float(row["delta_logits"].abs().max()), 0.0)
 
+    def test_unit_gain_reduces_exactly_to_negative_sum_of_errors(self):
+        module = MultiHypothesisErrorDirectCorrection(
+            num_classes=3,
+            history_length=2,
+            hidden_channels=8,
+            current_state_channels=8,
+            branch_channels=8,
+        )
+        inputs = self._inputs(module, height=5, width=7, valid_value=1.0)
+        errors = inputs[0]
+        with torch.no_grad():
+            module.gain_head.weight.zero_()
+            module.gain_head.bias.fill_(1.0)
+        row = module(*inputs, previous_error_state=None)
+        expected = -(errors[0] + errors[1])
+        self.assertTrue(torch.allclose(row["delta_logits"], expected, atol=1e-6, rtol=0.0))
+        self.assertTrue(torch.allclose(row["candidate_gains"], torch.ones_like(row["candidate_gains"])))
+
     def test_forward_has_no_raw_history_probability_argument(self):
         parameters = inspect.signature(
             MultiHypothesisErrorDirectCorrection.forward
