@@ -1,4 +1,5 @@
 import inspect
+import unittest
 
 import torch
 
@@ -13,70 +14,84 @@ def _probability(batch=1, classes=19, height=6, width=8):
     return torch.softmax(logits, dim=1)
 
 
-def test_controller_signature_excludes_raw_semantic_probabilities():
-    parameters = inspect.signature(MultiHypothesisErrorSelector.forward).parameters
-    assert "current_probability" not in parameters
-    assert "history_probabilities" not in parameters
-    assert "prediction_errors" in parameters
+class MultiHypothesisErrorSelectorTest(unittest.TestCase):
+    def test_controller_signature_excludes_raw_semantic_probabilities(self):
+        parameters = inspect.signature(MultiHypothesisErrorSelector.forward).parameters
+        self.assertNotIn("current_probability", parameters)
+        self.assertNotIn("history_probabilities", parameters)
+        self.assertIn("prediction_errors", parameters)
+
+    def test_k4_input_channel_count_is_error_only_205(self):
+        selector = MultiHypothesisErrorSelector(
+            num_classes=19,
+            history_length=4,
+            hidden_channels=32,
+        )
+        self.assertEqual(selector.input_channels, 205)
+
+    def test_multihypothesis_errors_are_validity_gated_and_detached(self):
+        current = _probability().requires_grad_(True)
+        histories = [_probability().requires_grad_(True) for _ in range(4)]
+        validities = [torch.ones(1, 1, 6, 8) for _ in range(4)]
+        validities[2][:, :, :, 4:] = 0.0
+
+        evidence = build_multihypothesis_error_evidence(
+            current,
+            histories,
+            validities,
+        )
+
+        expected = (current.detach() - histories[2].detach()) * validities[2]
+        torch.testing.assert_close(evidence["prediction_errors"][2], expected)
+        self.assertEqual(
+            int(torch.count_nonzero(evidence["prediction_errors"][2][..., 4:])),
+            0,
+        )
+        self.assertEqual(
+            int(torch.count_nonzero(evidence["history_margins"][2][..., 4:])),
+            0,
+        )
+        self.assertTrue(
+            all(not error.requires_grad for error in evidence["prediction_errors"])
+        )
+        self.assertFalse(evidence["current_margin"].requires_grad)
+        self.assertTrue(
+            all(not margin.requires_grad for margin in evidence["history_margins"])
+        )
+
+    def test_zero_initialized_selector_falls_back_to_current(self):
+        selector = MultiHypothesisErrorSelector(
+            num_classes=19,
+            history_length=4,
+            hidden_channels=32,
+        )
+        errors = [torch.randn(1, 19, 6, 8) for _ in range(4)]
+        dynamics = torch.randn(1, 19, 6, 8)
+        current_margin = torch.rand(1, 1, 6, 8)
+        history_margins = [torch.rand(1, 1, 6, 8) for _ in range(4)]
+        transportability = torch.rand(1, 1, 6, 8)
+        reliability = torch.rand(1, 1, 6, 8)
+        validities = [torch.ones(1, 1, 6, 8) for _ in range(4)]
+
+        row = selector(
+            errors,
+            dynamics,
+            current_margin,
+            history_margins,
+            transportability,
+            reliability,
+            validities,
+        )
+
+        self.assertEqual(tuple(row["selector_logits"].shape), (1, 5, 6, 8))
+        self.assertEqual(int(torch.count_nonzero(row["selector_logits"])), 0)
+        self.assertTrue(
+            torch.equal(
+                row["selector_logits"].argmax(dim=1),
+                torch.zeros((1, 6, 8), dtype=torch.long),
+            )
+        )
 
 
-def test_k4_input_channel_count_is_error_only_205():
-    selector = MultiHypothesisErrorSelector(
-        num_classes=19,
-        history_length=4,
-        hidden_channels=32,
-    )
-    assert selector.input_channels == 205
-
-
-def test_multihypothesis_errors_are_validity_gated_and_detached():
-    current = _probability().requires_grad_(True)
-    histories = [_probability().requires_grad_(True) for _ in range(4)]
-    validities = [torch.ones(1, 1, 6, 8) for _ in range(4)]
-    validities[2][:, :, :, 4:] = 0.0
-
-    evidence = build_multihypothesis_error_evidence(
-        current,
-        histories,
-        validities,
-    )
-
-    expected = (current.detach() - histories[2].detach()) * validities[2]
-    torch.testing.assert_close(evidence["prediction_errors"][2], expected)
-    assert torch.count_nonzero(evidence["prediction_errors"][2][..., 4:]) == 0
-    assert torch.count_nonzero(evidence["history_margins"][2][..., 4:]) == 0
-    assert all(not error.requires_grad for error in evidence["prediction_errors"])
-    assert not evidence["current_margin"].requires_grad
-    assert all(not margin.requires_grad for margin in evidence["history_margins"])
-
-
-def test_zero_initialized_selector_falls_back_to_current():
-    selector = MultiHypothesisErrorSelector(
-        num_classes=19,
-        history_length=4,
-        hidden_channels=32,
-    )
-    errors = [torch.randn(1, 19, 6, 8) for _ in range(4)]
-    dynamics = torch.randn(1, 19, 6, 8)
-    current_margin = torch.rand(1, 1, 6, 8)
-    history_margins = [torch.rand(1, 1, 6, 8) for _ in range(4)]
-    transportability = torch.rand(1, 1, 6, 8)
-    reliability = torch.rand(1, 1, 6, 8)
-    validities = [torch.ones(1, 1, 6, 8) for _ in range(4)]
-
-    row = selector(
-        errors,
-        dynamics,
-        current_margin,
-        history_margins,
-        transportability,
-        reliability,
-        validities,
-    )
-
-    assert row["selector_logits"].shape == (1, 5, 6, 8)
-    assert torch.count_nonzero(row["selector_logits"]) == 0
-    assert torch.equal(
-        row["selector_logits"].argmax(dim=1),
-        torch.zeros((1, 6, 8), dtype=torch.long),
-    )
+if __name__ == "__main__":
+    unittest.main()
