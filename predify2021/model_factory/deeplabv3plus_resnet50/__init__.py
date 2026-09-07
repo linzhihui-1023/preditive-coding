@@ -61,6 +61,9 @@ from .task_space_multihypothesis_error_utility import (
     balanced_utility_regression_loss,
     semantic_first_temporal_tiebreak_loss,
 )
+from .task_space_multihypothesis_error_correction import (
+    MultiHypothesisErrorDirectCorrection,
+)
 from .semantic_temporal_error_correction import (
     DecoupledLocalFeatureCorrelation,
     DecoupledSemanticTemporalErrorCorrection,
@@ -111,6 +114,7 @@ __all__ = [
     "MultiHypothesisErrorUtilityEstimator",
     "balanced_utility_regression_loss",
     "semantic_first_temporal_tiebreak_loss",
+    "MultiHypothesisErrorDirectCorrection",
     "RoleSeparatedRecurrentPredictor",
     "SemanticRecurrentPredictor",
     "SemanticPredictionErrorEncoder",
