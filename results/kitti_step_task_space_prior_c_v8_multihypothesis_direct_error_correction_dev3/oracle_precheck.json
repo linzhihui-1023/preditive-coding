@@ -1,0 +1,147 @@
+{
+  "metrics": {
+    "host": {
+      "mIoU": 0.5802101104390269,
+      "mTC": 0.7009239766436142,
+      "mVC8": 0.9345485965278791,
+      "mVC16": 0.9273142366723673
+    },
+    "e1_base": {
+      "mIoU": 0.5821478182088465,
+      "mTC": 0.7042667482639519,
+      "mVC8": 0.9439640945960126,
+      "mVC16": 0.938527812314203
+    },
+    "c_v3_base": {
+      "mIoU": 0.591419269159285,
+      "mTC": 0.7065278336801233,
+      "mVC8": 0.9434064108477351,
+      "mVC16": 0.9359542980785811
+    },
+    "c_v8": {
+      "mIoU": 0.591419269159285,
+      "mTC": 0.7065278336801233,
+      "mVC8": 0.9434064108477351,
+      "mVC16": 0.9359542980785811
+    },
+    "multiframe_semantic_oracle": {
+      "mIoU": 0.6668047529061722,
+      "mTC": 0.716007399581758,
+      "mVC8": 0.9735068743464215,
+      "mVC16": 0.9717213396457278
+    },
+    "multiframe_semantic_temporal_oracle": {
+      "mIoU": 0.6670502566993024,
+      "mTC": 0.7221612758080388,
+      "mVC8": 0.9735121719341725,
+      "mVC16": 0.9717359814717628
+    }
+  },
+  "diagnostics": {
+    "target_distribution": {
+      "valid_pixels": 389091587,
+      "decision_pixels": 53946735,
+      "semantic_supervised_pixels": 50454702,
+      "temporal_supervised_pixels": 53609493,
+      "current_correct_decision_pixels": 41581225,
+      "semantic_rescue_pixels": 8873477,
+      "semantic_rescue_by_age": [
+        4430282,
+        2069503,
+        1366920,
+        1006772
+      ],
+      "temporal_current_pixels": 2461091,
+      "temporal_history_by_age": [
+        576139,
+        65374,
+        31187,
+        21000
+      ],
+      "unsupervised_decision_pixels": 337242,
+      "decision_fraction_of_valid": 0.13864790913610783,
+      "semantic_rescue_fraction_of_decisions": 0.16448589520755982,
+      "semantic_supervised_fraction_of_decisions": 0.9352688721569526,
+      "temporal_supervised_fraction_of_decisions": 0.9937486114775992
+    },
+    "history_length": 4,
+    "history_source": "detached frozen C-V3 logits used only to form prediction errors",
+    "raw_history_probability_in_correction": false,
+    "raw_history_logits_in_correction_module": false,
+    "hard_candidate_selection": false,
+    "utility_estimator": false,
+    "abstention_threshold": false,
+    "correction_type": "class-wise gain along centered-logit prediction-error direction",
+    "state_error_space": "probability",
+    "correction_error_space": "centered logits",
+    "full_resolution_validity": "candidate-specific mask after per-candidate upsampling, before summation",
+    "prediction_error_reference": "strict-validity-gated t-1..t-K frozen C-V3 hypotheses",
+    "error_state_motion_aligned": true,
+    "error_state_history_support": "T * Q_mem * any_history_valid",
+    "dynamics_error_reference": "motion-compensated strict-validity-gated t-1 probability error",
+    "correction_abs": 0.0,
+    "error_state_abs": 0.15680706462021485,
+    "prediction_error_abs": 0.009651073169769979,
+    "correction_error_abs": 0.33212065612247516,
+    "dynamics_error_abs": 0.002462426492968726,
+    "gain_abs_by_age": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "correction_abs_by_age": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "correction_contribution_by_age": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "raft_inference": false
+  },
+  "delta_multiframe_oracle_vs_c_v3": {
+    "mIoU": 0.0756309875400174,
+    "mTC": 0.01563344212791551,
+    "mVC8": 0.030105761086437366,
+    "mVC16": 0.03578168339318166
+  },
+  "protocol": "dev3",
+  "protocol_definition": {
+    "name": "dev3",
+    "train_split": "official KITTI-STEP train",
+    "train_sequences": [
+      "0000",
+      "0001",
+      "0003",
+      "0004",
+      "0005",
+      "0009",
+      "0011",
+      "0012",
+      "0015",
+      "0017",
+      "0019",
+      "0020"
+    ],
+    "train_sampling": "96 contiguous frames per sequence; epoch 1 front, epoch 2 middle, epoch 3 back",
+    "frames_per_sequence_cap": 96,
+    "epoch_segments": [
+      "front",
+      "middle",
+      "back"
+    ],
+    "validation_split": "official KITTI-STEP val",
+    "validation_sequences": [
+      "0002",
+      "0010",
+      "0018"
+    ],
+    "validation_sampling": "complete sequences",
+    "validation_used_for_optimization": false
+  }
+}

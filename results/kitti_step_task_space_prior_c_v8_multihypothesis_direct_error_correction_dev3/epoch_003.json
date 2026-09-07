@@ -1,0 +1,236 @@
+{
+  "epoch": 3,
+  "train": {
+    "frames": 1110,
+    "windows": 142,
+    "optimizer_steps": 142,
+    "total_loss": 0.16367061583089157,
+    "lambda_temporal": 45.891305608258016,
+    "segmentation_ce": 0.12222931585400491,
+    "temporal_l1": 0.0008954591766342747,
+    "prediction_error_abs": 0.009050284693099408,
+    "correction_error_abs": 0.3076646558436993,
+    "dynamics_error_abs": 0.002432868039017325,
+    "error_state_abs": 0.2472773703301812,
+    "delta_logits_abs": 0.05454700202387464,
+    "any_history_valid_mean": 0.9987666262162699,
+    "temporal_weight_mean": 0.8520101745386381,
+    "temporal_valid_fraction": 0.9343534344988912,
+    "previous_true_confidence_mean": 0.9529016020061734,
+    "gain_abs_by_age": [
+      0.06241830608195013,
+      0.06224046277872346,
+      0.06170652458729508,
+      0.06088291256277411
+    ],
+    "correction_abs_by_age": [
+      0.010718850153792012,
+      0.014258946290424278,
+      0.016854175910152293,
+      0.018908884790348444
+    ],
+    "correction_contribution_by_age": [
+      0.1764685362976359,
+      0.23475049514780283,
+      0.2774767545673036,
+      0.31130421398725777
+    ],
+    "dev3_sampling": {
+      "epoch": 3,
+      "segment": "back",
+      "frames_per_sequence_cap": 96,
+      "train_sequences": [
+        "0000",
+        "0001",
+        "0003",
+        "0004",
+        "0005",
+        "0009",
+        "0011",
+        "0012",
+        "0015",
+        "0017",
+        "0019",
+        "0020"
+      ],
+      "sampled_frames_by_sequence": {
+        "0000": 96,
+        "0001": 96,
+        "0003": 96,
+        "0004": 96,
+        "0005": 96,
+        "0009": 96,
+        "0011": 96,
+        "0012": 78,
+        "0015": 96,
+        "0017": 96,
+        "0019": 96,
+        "0020": 96
+      },
+      "sampled_frames_total": 1134
+    }
+  },
+  "metrics": {
+    "host": {
+      "mIoU": 0.5802101104390269,
+      "mTC": 0.7009239766436142,
+      "mVC8": 0.9345485965278791,
+      "mVC16": 0.9273142366723673
+    },
+    "e1_base": {
+      "mIoU": 0.5821478182088465,
+      "mTC": 0.7042667482639519,
+      "mVC8": 0.9439640945960126,
+      "mVC16": 0.938527812314203
+    },
+    "c_v3_base": {
+      "mIoU": 0.591419269159285,
+      "mTC": 0.7065278336801233,
+      "mVC8": 0.9434064108477351,
+      "mVC16": 0.9359542980785811
+    },
+    "c_v8": {
+      "mIoU": 0.5917488075802708,
+      "mTC": 0.7380023652759371,
+      "mVC8": 0.9566616001876544,
+      "mVC16": 0.9515013379040206
+    },
+    "multiframe_semantic_oracle": {
+      "mIoU": 0.6668047529061722,
+      "mTC": 0.716007399581758,
+      "mVC8": 0.9735068743464215,
+      "mVC16": 0.9717213396457278
+    },
+    "multiframe_semantic_temporal_oracle": {
+      "mIoU": 0.6670502566993024,
+      "mTC": 0.7221612758080388,
+      "mVC8": 0.9735121719341725,
+      "mVC16": 0.9717359814717628
+    }
+  },
+  "diagnostics": {
+    "target_distribution": {
+      "valid_pixels": 389091587,
+      "decision_pixels": 53946735,
+      "semantic_supervised_pixels": 50454702,
+      "temporal_supervised_pixels": 53609493,
+      "current_correct_decision_pixels": 41581225,
+      "semantic_rescue_pixels": 8873477,
+      "semantic_rescue_by_age": [
+        4430282,
+        2069503,
+        1366920,
+        1006772
+      ],
+      "temporal_current_pixels": 2461091,
+      "temporal_history_by_age": [
+        576139,
+        65374,
+        31187,
+        21000
+      ],
+      "unsupervised_decision_pixels": 337242,
+      "decision_fraction_of_valid": 0.13864790913610783,
+      "semantic_rescue_fraction_of_decisions": 0.16448589520755982,
+      "semantic_supervised_fraction_of_decisions": 0.9352688721569526,
+      "temporal_supervised_fraction_of_decisions": 0.9937486114775992
+    },
+    "history_length": 4,
+    "history_source": "detached frozen C-V3 logits used only to form prediction errors",
+    "raw_history_probability_in_correction": false,
+    "raw_history_logits_in_correction_module": false,
+    "hard_candidate_selection": false,
+    "utility_estimator": false,
+    "abstention_threshold": false,
+    "correction_type": "class-wise gain along centered-logit prediction-error direction",
+    "state_error_space": "probability",
+    "correction_error_space": "centered logits",
+    "full_resolution_validity": "candidate-specific mask after per-candidate upsampling, before summation",
+    "prediction_error_reference": "strict-validity-gated t-1..t-K frozen C-V3 hypotheses",
+    "error_state_motion_aligned": true,
+    "error_state_history_support": "T * Q_mem * any_history_valid",
+    "dynamics_error_reference": "motion-compensated strict-validity-gated t-1 probability error",
+    "correction_abs": 0.08743005034102257,
+    "error_state_abs": 0.27087332338614517,
+    "prediction_error_abs": 0.009651073169769979,
+    "correction_error_abs": 0.33212065612247516,
+    "dynamics_error_abs": 0.002462426492968726,
+    "gain_abs_by_age": [
+      0.09282777199391709,
+      0.09262158738145995,
+      0.09200986550124579,
+      0.09103828541241413
+    ],
+    "correction_abs_by_age": [
+      0.018728011361388273,
+      0.02393690523323278,
+      0.027408035804495908,
+      0.030089448229951223
+    ],
+    "correction_contribution_by_age": [
+      0.18697646266230966,
+      0.23898094577303927,
+      0.27363597150587665,
+      0.3004066200587743
+    ],
+    "raft_inference": false
+  },
+  "delta_vs_c_v3_base": {
+    "c_v8": {
+      "mIoU": 0.00032953842098581987,
+      "mTC": 0.031474531595813815,
+      "mVC8": 0.013255189339919315,
+      "mVC16": 0.01554703982543948
+    },
+    "multiframe_semantic_oracle": {
+      "mIoU": 0.07538548374688725,
+      "mTC": 0.009479565901634679,
+      "mVC8": 0.030100463498686336,
+      "mVC16": 0.03576704156714672
+    },
+    "multiframe_semantic_temporal_oracle": {
+      "mIoU": 0.0756309875400174,
+      "mTC": 0.01563344212791551,
+      "mVC8": 0.030105761086437366,
+      "mVC16": 0.03578168339318166
+    }
+  },
+  "selection_key": [
+    0.5917488075802708,
+    0.7380023652759371
+  ],
+  "protocol": "dev3",
+  "protocol_definition": {
+    "name": "dev3",
+    "train_split": "official KITTI-STEP train",
+    "train_sequences": [
+      "0000",
+      "0001",
+      "0003",
+      "0004",
+      "0005",
+      "0009",
+      "0011",
+      "0012",
+      "0015",
+      "0017",
+      "0019",
+      "0020"
+    ],
+    "train_sampling": "96 contiguous frames per sequence; epoch 1 front, epoch 2 middle, epoch 3 back",
+    "frames_per_sequence_cap": 96,
+    "epoch_segments": [
+      "front",
+      "middle",
+      "back"
+    ],
+    "validation_split": "official KITTI-STEP val",
+    "validation_sequences": [
+      "0002",
+      "0010",
+      "0018"
+    ],
+    "validation_sampling": "complete sequences",
+    "validation_used_for_optimization": false
+  }
+}
