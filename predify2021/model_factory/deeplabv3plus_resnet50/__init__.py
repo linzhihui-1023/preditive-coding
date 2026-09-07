@@ -54,6 +54,7 @@ from .task_space_multihypothesis_error_selector import (
     build_multihypothesis_error_evidence,
     confidence_margin,
     signed_error_channels,
+    strict_controller_validity,
 )
 from .semantic_temporal_error_correction import (
     DecoupledLocalFeatureCorrelation,
@@ -101,6 +102,7 @@ __all__ = [
     "build_multihypothesis_error_evidence",
     "confidence_margin",
     "signed_error_channels",
+    "strict_controller_validity",
     "RoleSeparatedRecurrentPredictor",
     "SemanticRecurrentPredictor",
     "SemanticPredictionErrorEncoder",
