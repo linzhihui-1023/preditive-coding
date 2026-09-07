@@ -2,7 +2,7 @@
 
 import sys
 
-from predify2021.mce_scores.train_kitti_step_task_space_prior_c_v7_semantic_first import (
+from predify2021.mce_scores.train_kitti_step_task_space_prior_c_v7_abstention import (
     main,
 )
 
