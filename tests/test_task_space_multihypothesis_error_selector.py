@@ -62,11 +62,11 @@ class MultiHypothesisErrorSelectorTest(unittest.TestCase):
 
     def test_strict_validity_requires_low_path_and_all_full_warp_pixels(self):
         low_path = torch.ones(1, 1, 2, 2, requires_grad=True)
-        full_warp = torch.ones(1, 4, 4, requires_grad=True)
-        full_warp = full_warp.clone()
+        full_warp = torch.ones(1, 4, 4)
         # One invalid full-res pixel in the top-right 2x2 block invalidates
         # the corresponding low-res controller cell conservatively.
         full_warp[:, 0, 2] = 0.0
+        full_warp.requires_grad_(True)
 
         valid = strict_controller_validity(low_path, full_warp, (2, 2))
         expected = torch.tensor([[[[1.0, 0.0], [1.0, 1.0]]]])
