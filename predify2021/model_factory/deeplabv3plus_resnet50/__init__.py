@@ -49,6 +49,12 @@ from .error_decomposition_correction import (
     ErrorInterpreter,
     ReliabilityGate,
 )
+from .task_space_multihypothesis_error_selector import (
+    MultiHypothesisErrorSelector,
+    build_multihypothesis_error_evidence,
+    confidence_margin,
+    signed_error_channels,
+)
 from .semantic_temporal_error_correction import (
     DecoupledLocalFeatureCorrelation,
     DecoupledSemanticTemporalErrorCorrection,
@@ -91,6 +97,10 @@ __all__ = [
     "ErrorDecompositionCorrection",
     "ErrorInterpreter",
     "ReliabilityGate",
+    "MultiHypothesisErrorSelector",
+    "build_multihypothesis_error_evidence",
+    "confidence_margin",
+    "signed_error_channels",
     "RoleSeparatedRecurrentPredictor",
     "SemanticRecurrentPredictor",
     "SemanticPredictionErrorEncoder",
