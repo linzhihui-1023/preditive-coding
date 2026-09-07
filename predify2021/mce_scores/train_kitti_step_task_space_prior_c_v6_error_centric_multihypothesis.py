@@ -376,7 +376,13 @@ def _train_sequence_distilled(
                 teacher_hidden = teacher_evidence["row"]["hidden"]
                 teacher_dynamics_state = teacher_evidence["dynamics_state"]
 
-            teacher_full = raft.current_to_previous(current_image, previous_image)
+        # The GT/RAFT task target is unconditional; only teacher decision
+        # distillation is optional.
+        with torch.no_grad():
+            teacher_full = raft.current_to_previous(
+                current_image,
+                previous_image,
+            )
             (
                 _,
                 temporal_target,
