@@ -5,7 +5,7 @@
 - VEC8 / VEC16: Video Effective Consistency（视频有效一致性）, ICCV 2025 Eq.17.
 
 This script deliberately imports no segmentation model/checkpoint loader and
-performs no Host/current-model inference.  RGB frames are read only because PC
+performs no Host/current-model inference. RGB frames are read only because PC
 requires ImageNet ResNet-18 perceptual features; GT is read only for VEC.
 """
 
@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 import torch
+from torch.nn import functional as F
 
 from predify2021.datasets.kitti_step import (
     KITTISTEPSegmentationDataset,
@@ -75,11 +76,12 @@ class PredictionStore:
             raise RuntimeError(
                 f"ambiguous prediction for {sequence_id}/{frame_id}: {exact}"
             )
+
         flat = self.by_frame.get(str(frame_id), [])
         if len(flat) == 1:
             return flat[0]
         if len(flat) > 1:
-            matches = [p for p in flat if str(sequence_id) in p.parts]
+            matches = [path for path in flat if str(sequence_id) in path.parts]
             if len(matches) == 1:
                 return matches[0]
         raise FileNotFoundError(
@@ -99,7 +101,7 @@ class PredictionStore:
                     "prediction checkpoint dict must contain prediction/pred/mask/labels/semantic"
                 )
         if isinstance(value, np.ndarray):
-            tensor = torch.from_numpy(value)
+            tensor = torch.from_numpy(np.array(value, copy=True))
         else:
             tensor = torch.as_tensor(value)
         tensor = tensor.detach().cpu()
@@ -118,9 +120,13 @@ class PredictionStore:
                     )
                 tensor = channels[..., 0]
             else:
-                raise ValueError(f"unsupported prediction tensor shape: {tuple(tensor.shape)}")
+                raise ValueError(
+                    f"unsupported prediction tensor shape: {tuple(tensor.shape)}"
+                )
         if tensor.ndim != 2:
-            raise ValueError(f"prediction must reduce to HxW, got {tuple(tensor.shape)}")
+            raise ValueError(
+                f"prediction must reduce to HxW, got {tuple(tensor.shape)}"
+            )
         return tensor.long()
 
     def load(self, sequence_id, frame_id, expected_hw):
@@ -128,25 +134,31 @@ class PredictionStore:
         suffix = path.suffix.lower()
         if suffix == ".png":
             with Image.open(path) as image:
-                array = np.asarray(image)
+                array = np.array(image, copy=True)
             tensor = self._tensor_from_loaded(array)
         elif suffix == ".npy":
             tensor = self._tensor_from_loaded(np.load(path, allow_pickle=False))
         elif suffix == ".npz":
-            payload = np.load(path, allow_pickle=False)
-            if len(payload.files) != 1:
-                raise ValueError(f"NPZ prediction must contain one array: {path}")
-            tensor = self._tensor_from_loaded(payload[payload.files[0]])
+            with np.load(path, allow_pickle=False) as payload:
+                if len(payload.files) != 1:
+                    raise ValueError(f"NPZ prediction must contain one array: {path}")
+                tensor = self._tensor_from_loaded(payload[payload.files[0]])
         else:
-            tensor = self._tensor_from_loaded(torch.load(path, map_location="cpu"))
+            tensor = self._tensor_from_loaded(
+                torch.load(path, map_location="cpu", weights_only=False)
+            )
 
         if tuple(tensor.shape) != tuple(expected_hw):
-            tensor = torch.nn.functional.interpolate(
+            tensor = F.interpolate(
                 tensor[None, None].float(),
                 size=tuple(expected_hw),
                 mode="nearest",
             )[0, 0].long()
-        invalid = ~(((tensor >= 0) & (tensor < NUM_CLASSES)) | (tensor == IGNORE_LABEL))
+
+        invalid = ~(
+            ((tensor >= 0) & (tensor < NUM_CLASSES))
+            | (tensor == IGNORE_LABEL)
+        )
         if bool(invalid.any()):
             values = torch.unique(tensor[invalid])[:16].tolist()
             raise ValueError(f"prediction has invalid class ids {values}: {path}")
@@ -154,17 +166,16 @@ class PredictionStore:
 
 
 def _mean(values):
-    finite = [float(v) for v in values if math.isfinite(float(v))]
+    finite = [float(value) for value in values if math.isfinite(float(value))]
     return sum(finite) / len(finite) if finite else float("nan")
 
 
-def _evaluate_sequence(
-    sequence_id,
-    samples,
-    stores,
-    pc_extractor,
-):
-    vec = VideoEffectiveConsistency(NAMES, num_classes=NUM_CLASSES, ignore_label=IGNORE_LABEL)
+def _evaluate_sequence(sequence_id, samples, stores, pc_extractor):
+    vec = VideoEffectiveConsistency(
+        NAMES,
+        num_classes=NUM_CLASSES,
+        ignore_label=IGNORE_LABEL,
+    )
     pc_values = {name: [] for name in NAMES}
     prediction_paths = {name: [] for name in NAMES}
 
@@ -176,17 +187,19 @@ def _evaluate_sequence(
         gt = semantic_mask_from_panoptic_png(sample["mask_path"])
         predictions = {}
         for name in NAMES:
-            pred, pred_path = stores[name].load(
+            prediction, prediction_path = stores[name].load(
                 sequence_id,
                 sample["frame_id"],
                 gt.shape,
             )
-            predictions[name] = pred
-            prediction_paths[name].append(str(pred_path))
+            predictions[name] = prediction
+            prediction_paths[name].append(str(prediction_path))
         vec.append(gt, predictions)
 
         feature = extract_perceptual_feature(pc_extractor, sample["image_path"])
         if previous_feature is not None:
+            # Image perceptual correlation is model-independent and is reused for
+            # Host and current-model segmentation scores.
             correlation = perceptual_correlation(previous_feature, feature)
             for name in NAMES:
                 labels_a = resize_semantic_to_feature(
@@ -199,17 +212,17 @@ def _evaluate_sequence(
                     feature.shape[-2:],
                     device=correlation.device,
                 )
-                row = perceptual_consistency_from_correlation(
+                pc_row = perceptual_consistency_from_correlation(
                     correlation,
                     labels_a,
                     labels_b,
                 )
-                if not math.isfinite(row["pc"]):
+                if not math.isfinite(pc_row["pc"]):
                     raise FloatingPointError(
                         f"non-finite PC for {name} {sequence_id}:"
                         f"{previous_frame_id}->{sample['frame_id']}"
                     )
-                pc_values[name].append(row["pc"])
+                pc_values[name].append(pc_row["pc"])
             del correlation
 
         previous_feature = feature
@@ -256,7 +269,10 @@ def main(argv=None):
     if str(args.device).startswith("cuda") and not torch.cuda.is_available():
         raise RuntimeError("PC evaluation requested CUDA but CUDA is unavailable")
 
-    dataset = KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "val")
+    dataset = KITTISTEPSegmentationDataset.from_kitti_step_root(
+        Path(args.root),
+        "val",
+    )
     groups = sequence_groups(dataset)
     missing = [sequence for sequence in FULL9 if sequence not in groups]
     if missing:
@@ -287,9 +303,6 @@ def main(argv=None):
             stores,
             pc_extractor,
         )
-        for name in NAMES:
-            global_pc[name].extend(row.pop("_pc_values")[name] if False else [])
-        # Pop internal arrays after copying them explicitly.
         pc_internal = row.pop("_pc_values")
         vec_internal = row.pop("_vec_values")
         vec_classes_internal = row.pop("_vec_class_counts")
@@ -336,17 +349,20 @@ def main(argv=None):
         "delta_current_model_vs_host": delta,
         "counts": {
             "pc_consecutive_pairs": {
-                name: len(global_pc[name]) for name in NAMES
+                name: len(global_pc[name])
+                for name in NAMES
             },
             "vec_windows": {
                 str(length): {
-                    name: len(global_vec[length][name]) for name in NAMES
+                    name: len(global_vec[length][name])
+                    for name in NAMES
                 }
                 for length in (8, 16)
             },
             "vec_mean_valid_classes_per_window": {
                 str(length): {
-                    name: _mean(global_vec_classes[length][name]) for name in NAMES
+                    name: _mean(global_vec_classes[length][name])
+                    for name in NAMES
                 }
                 for length in (8, 16)
             },
@@ -355,21 +371,35 @@ def main(argv=None):
             "PC": {
                 "paper": "Zhang et al., Perceptual Consistency in Video Segmentation, WACV 2022",
                 "reference_code": "yizhezhang2000/SPC/example.py",
-                "feature_extractor": "ImageNet pretrained ResNet-18 children()[:-4] (through layer2)",
+                "feature_extractor": (
+                    "ImageNet pretrained ResNet-18 children()[:-4] (through layer2)"
+                ),
                 "feature_stride": 8,
                 "segmentation_resize": "nearest to perceptual feature HxW",
                 "pair_definition": "consecutive frames",
                 "pair_score": "paper Eq.3, bidirectional minimum",
-                "video_aggregation": "paper Eq.4; Full9 primary score is frame-pair-weighted over all sequences",
+                "video_aggregation": (
+                    "paper Eq.4; Full9 primary score is frame-pair-weighted over all sequences"
+                ),
             },
             "VEC": {
                 "paper": "Xu et al., DTERN, ICCV 2025",
-                "definition": "paper Eq.17: class-wise IoU of GT-persistent and prediction-persistent C-frame regions",
+                "definition": (
+                    "paper Eq.17: class-wise IoU of GT-persistent and "
+                    "prediction-persistent C-frame regions"
+                ),
                 "lengths": [8, 16],
                 "window_stride": 1,
-                "window_alignment": "same sliding complete windows as existing mVC8/mVC16",
-                "class_aggregation": "macro over classes with non-empty persistent GT/pred union; empty-union 0/0 classes excluded",
-                "ignore_handling": "positions with GT ignore in any frame of the clip are excluded",
+                "window_alignment": (
+                    "same sliding complete windows as existing mVC8/mVC16"
+                ),
+                "class_aggregation": (
+                    "macro over classes with non-empty persistent GT/pred union; "
+                    "empty-union 0/0 classes excluded"
+                ),
+                "ignore_handling": (
+                    "positions with GT ignore in any frame of the clip are excluded"
+                ),
                 "full9_aggregation": "window-weighted over all Full9 sequences",
             },
         },
