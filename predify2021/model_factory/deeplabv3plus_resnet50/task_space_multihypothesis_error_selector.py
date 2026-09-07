@@ -26,6 +26,46 @@ def confidence_margin(probability: torch.Tensor) -> torch.Tensor:
     return top2[:, :1] - top2[:, 1:2]
 
 
+def strict_controller_validity(
+    low_path_validity: torch.Tensor,
+    full_warp_validity: torch.Tensor,
+    target_size,
+) -> torch.Tensor:
+    """Combine low-flow and full-resolution warp validity conservatively.
+
+    中文：控制器只在低分辨率累计运动路径有效、且该低分辨率单元对应的
+    全分辨率 warp 区域全部有效时，才把该历史假设视为有效。
+
+    This prevents zero-filled/out-of-bounds full-resolution warp pixels from
+    being reinterpreted as semantic prediction error after downsampling.
+    """
+    low_path_validity = low_path_validity.detach()
+    full_warp_validity = full_warp_validity.detach()
+
+    if low_path_validity.ndim == 3:
+        low_path_validity = low_path_validity.unsqueeze(1)
+    if full_warp_validity.ndim == 3:
+        full_warp_validity = full_warp_validity.unsqueeze(1)
+    if low_path_validity.ndim != 4 or low_path_validity.shape[1] != 1:
+        raise ValueError("low_path_validity must have shape [N,1,H,W] or [N,H,W]")
+    if full_warp_validity.ndim != 4 or full_warp_validity.shape[1] != 1:
+        raise ValueError("full_warp_validity must have shape [N,1,H,W] or [N,H,W]")
+
+    low_path = low_path_validity.float()
+    if low_path.shape[-2:] != tuple(target_size):
+        low_path = F.interpolate(low_path, size=target_size, mode="nearest")
+    low_path = low_path > 0.5
+
+    # Adaptive average pooling is used as a conservative all-valid reduction:
+    # a controller cell is valid only when every contributing full-res pixel is valid.
+    full_fraction = F.adaptive_avg_pool2d(
+        full_warp_validity.float(),
+        output_size=target_size,
+    )
+    full_all_valid = full_fraction >= (1.0 - 1e-6)
+    return (low_path & full_all_valid).float().detach()
+
+
 def build_multihypothesis_error_evidence(
     current_probability: torch.Tensor,
     history_probabilities,
@@ -105,16 +145,26 @@ class MultiHypothesisErrorSelector(nn.Module):
 
         # K prediction errors + one dynamics error, each split into positive and
         # negative class-wise channels. No raw semantic probability enters here.
-        signed_semantic_channels = (
-            2 * self.num_classes * (self.history_length + 1)
-        )
+        signed_semantic_channels = 2 * self.num_classes * (self.history_length + 1)
         # current margin + K history margins + T + Q + K valid + K ages
-        scalar_channels = 1 + self.history_length + 2 + self.history_length + self.history_length
+        scalar_channels = (
+            1
+            + self.history_length
+            + 2
+            + self.history_length
+            + self.history_length
+        )
         self.input_channels = signed_semantic_channels + scalar_channels
 
         groups = 8 if self.hidden_channels % 8 == 0 else 1
         self.pre = nn.Sequential(
-            nn.Conv2d(self.input_channels, self.hidden_channels, 3, padding=1, bias=False),
+            nn.Conv2d(
+                self.input_channels,
+                self.hidden_channels,
+                3,
+                padding=1,
+                bias=False,
+            ),
             nn.GroupNorm(groups, self.hidden_channels),
             nn.SiLU(),
         )
@@ -160,10 +210,7 @@ class MultiHypothesisErrorSelector(nn.Module):
             age = float(index + 1) / float(self.history_length)
             age_maps.append(torch.full_like(current_margin, age))
 
-        semantic_evidence = [
-            signed_error_channels(error)
-            for error in prediction_errors
-        ]
+        semantic_evidence = [signed_error_channels(error) for error in prediction_errors]
         semantic_evidence.append(signed_error_channels(dynamics_error))
 
         evidence = torch.cat(
