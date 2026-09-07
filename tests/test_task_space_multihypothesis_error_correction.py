@@ -11,7 +11,11 @@ from predify2021.model_factory.deeplabv3plus_resnet50.task_space_multihypothesis
 class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
     def _inputs(self, module, height=6, width=8, valid_value=1.0):
         n, c = 1, module.num_classes
-        errors = [
+        probability_errors = [
+            torch.randn(n, c, height, width)
+            for _ in range(module.history_length)
+        ]
+        correction_errors = [
             torch.randn(n, c, height, width)
             for _ in range(module.history_length)
         ]
@@ -25,7 +29,8 @@ class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
             for _ in range(module.history_length)
         ]
         return (
-            errors,
+            probability_errors,
+            correction_errors,
             dynamics,
             current_probability,
             current_margin,
@@ -44,6 +49,10 @@ class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
         self.assertEqual(float(row["delta_logits"].abs().max()), 0.0)
         self.assertEqual(tuple(row["error_state"].shape), (1, 32, 6, 8))
         self.assertEqual(tuple(row["candidate_gains"].shape), (1, 4, 19, 6, 8))
+        self.assertEqual(
+            tuple(row["candidate_corrections_low"].shape),
+            (1, 4, 19, 6, 8),
+        )
 
     def test_all_invalid_history_structurally_forces_zero_correction(self):
         module = MultiHypothesisErrorDirectCorrection(
@@ -59,7 +68,7 @@ class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
         self.assertEqual(float(row["delta_logits"].abs().max()), 0.0)
         self.assertEqual(float(row["any_history_valid"].abs().max()), 0.0)
 
-    def test_zero_prediction_error_forces_zero_correction_even_with_active_gain(self):
+    def test_zero_correction_error_forces_zero_correction_even_with_active_gain(self):
         module = MultiHypothesisErrorDirectCorrection(
             num_classes=3,
             history_length=2,
@@ -68,13 +77,13 @@ class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
             branch_channels=8,
         )
         inputs = list(self._inputs(module, height=5, width=7))
-        inputs[0] = [torch.zeros_like(error) for error in inputs[0]]
+        inputs[1] = [torch.zeros_like(error) for error in inputs[1]]
         with torch.no_grad():
             module.gain_head.bias.fill_(3.0)
         row = module(*inputs, previous_error_state=None)
         self.assertEqual(float(row["delta_logits"].abs().max()), 0.0)
 
-    def test_unit_gain_reduces_exactly_to_negative_sum_of_errors(self):
+    def test_unit_gain_reduces_exactly_to_negative_sum_of_correction_errors(self):
         module = MultiHypothesisErrorDirectCorrection(
             num_classes=3,
             history_length=2,
@@ -83,20 +92,33 @@ class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
             branch_channels=8,
         )
         inputs = self._inputs(module, height=5, width=7, valid_value=1.0)
-        errors = inputs[0]
+        correction_errors = inputs[1]
         with torch.no_grad():
             module.gain_head.weight.zero_()
             module.gain_head.bias.fill_(1.0)
         row = module(*inputs, previous_error_state=None)
-        expected = -(errors[0] + errors[1])
+        expected_terms = torch.stack(
+            [-correction_errors[0], -correction_errors[1]],
+            dim=1,
+        )
+        expected = expected_terms.sum(dim=1)
+        self.assertTrue(
+            torch.allclose(row["candidate_corrections_low"], expected_terms, atol=1e-6, rtol=0.0)
+        )
         self.assertTrue(torch.allclose(row["delta_logits"], expected, atol=1e-6, rtol=0.0))
-        self.assertTrue(torch.allclose(row["candidate_gains"], torch.ones_like(row["candidate_gains"])))
+        self.assertTrue(
+            torch.allclose(
+                row["candidate_gains"],
+                torch.ones_like(row["candidate_gains"]),
+            )
+        )
 
-    def test_forward_has_no_raw_history_probability_argument(self):
+    def test_forward_has_no_raw_history_semantic_argument(self):
         parameters = inspect.signature(
             MultiHypothesisErrorDirectCorrection.forward
         ).parameters
         self.assertIn("prediction_errors", parameters)
+        self.assertIn("correction_errors", parameters)
         self.assertIn("current_probability", parameters)
         forbidden = {
             "history_probability",
@@ -104,6 +126,7 @@ class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
             "candidate_probability",
             "candidate_probabilities",
             "history_logits",
+            "candidate_logits",
         }
         self.assertTrue(forbidden.isdisjoint(parameters.keys()))
 
