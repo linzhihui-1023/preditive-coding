@@ -6,6 +6,7 @@ import torch
 from predify2021.model_factory.deeplabv3plus_resnet50.task_space_multihypothesis_error_selector import (
     MultiHypothesisErrorSelector,
     build_multihypothesis_error_evidence,
+    strict_controller_validity,
 )
 
 
@@ -58,6 +59,24 @@ class MultiHypothesisErrorSelectorTest(unittest.TestCase):
         self.assertTrue(
             all(not margin.requires_grad for margin in evidence["history_margins"])
         )
+
+    def test_strict_validity_requires_low_path_and_all_full_warp_pixels(self):
+        low_path = torch.ones(1, 1, 2, 2, requires_grad=True)
+        full_warp = torch.ones(1, 4, 4, requires_grad=True)
+        full_warp = full_warp.clone()
+        # One invalid full-res pixel in the top-right 2x2 block invalidates
+        # the corresponding low-res controller cell conservatively.
+        full_warp[:, 0, 2] = 0.0
+
+        valid = strict_controller_validity(low_path, full_warp, (2, 2))
+        expected = torch.tensor([[[[1.0, 0.0], [1.0, 1.0]]]])
+        torch.testing.assert_close(valid, expected)
+        self.assertFalse(valid.requires_grad)
+
+        low_path_zero = torch.ones(1, 1, 2, 2)
+        low_path_zero[:, :, 1, 0] = 0.0
+        valid = strict_controller_validity(low_path_zero, torch.ones(1, 4, 4), (2, 2))
+        self.assertEqual(float(valid[0, 0, 1, 0]), 0.0)
 
     def test_zero_initialized_selector_falls_back_to_current(self):
         selector = MultiHypothesisErrorSelector(
