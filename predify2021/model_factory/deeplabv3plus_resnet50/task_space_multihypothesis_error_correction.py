@@ -2,16 +2,19 @@
 
 中文：C-V8 多假设预测误差直接语义修正。
 
-The module removes Current/history hard selection. Historical semantics are used
-only to form strict-validity-gated prediction errors. Those errors, the
-motion-aligned recurrent Error State, explicit Dynamics Error and compact
-CURRENT semantic state directly produce a 19-D logit residual:
+Historical semantics are used only to form strict-validity-gated prediction
+errors. The network never predicts an arbitrary semantic residual. Instead it
+learns class-wise gains for each historical hypothesis and applies them only
+along the corresponding prediction-error direction:
 
-    e_1..e_K -> H_error -> DeltaL_t
+    e_k = P_current - P_history_k
+    DeltaL_t = - sum_k G_k * e_k
     L_out = L_C-V3 + DeltaL_t
 
-Raw historical semantic probabilities never enter this module. The final
-correction head is zero-initialized, so step zero is exactly frozen C-V3.
+Therefore Prediction Error is structurally necessary: if all e_k are zero,
+DeltaL_t is exactly zero even after training. Current semantics are available
+only as a compact state for interpreting error; raw historical probabilities
+never enter the correction module.
 """
 
 import torch
@@ -22,7 +25,7 @@ from .task_space_multihypothesis_error_selector import signed_error_channels
 
 
 class MultiHypothesisErrorDirectCorrection(nn.Module):
-    """Prediction-error-driven 19-class residual correction（直接误差修正）."""
+    """Class-wise multi-history prediction-error correction（逐类直接误差修正）."""
 
     def __init__(
         self,
@@ -43,20 +46,20 @@ class MultiHypothesisErrorDirectCorrection(nn.Module):
         hidden_groups = 8 if self.hidden_channels % 8 == 0 else 1
         branch_groups = 8 if self.branch_channels % 8 == 0 else 1
 
-        # CURRENT semantics are permitted only as a compact state used to
-        # interpret prediction error. Historical probabilities are forbidden.
         self.current_state_encoder = nn.Sequential(
             nn.Conv2d(self.num_classes, self.current_state_channels, 1, bias=False),
             nn.GroupNorm(current_groups, self.current_state_channels),
             nn.SiLU(),
         )
 
-        # K signed hypothesis errors + signed explicit Dynamics Error + compact
-        # current state + current margin + T + Q + K strict-validity maps.
+        # Global recurrent Error State from all K signed errors, explicit
+        # Dynamics Error and compact CURRENT context.
         signed_error_total = 2 * self.num_classes * (self.history_length + 1)
-        scalar_context = 3 + self.history_length
+        global_scalar_context = 3 + self.history_length  # margin, T, Q, V1..VK
         self.error_input_channels = (
-            signed_error_total + self.current_state_channels + scalar_context
+            signed_error_total
+            + self.current_state_channels
+            + global_scalar_context
         )
         self.error_pre = nn.Sequential(
             nn.Conv2d(
@@ -71,17 +74,18 @@ class MultiHypothesisErrorDirectCorrection(nn.Module):
         )
         self.error_recurrent = ConvGRUCell(self.hidden_channels, self.hidden_channels)
 
-        # Readout sees the recurrent Error State and the complete signed error
-        # evidence. It outputs a 19-D correction, not a candidate score.
-        self.readout_input_channels = (
-            self.hidden_channels
-            + signed_error_total
+        # One shared candidate-conditioned gain readout is reused for t-1..t-K.
+        # It predicts 19 class-wise gains, not one scalar utility and not a free
+        # 19-D semantic residual.
+        self.candidate_input_channels = (
+            2 * self.num_classes
+            + self.hidden_channels
             + self.current_state_channels
-            + scalar_context
+            + 6  # current margin, T, Q, validity, normalized age, dynamics magnitude
         )
-        self.readout_pre = nn.Sequential(
+        self.candidate_pre = nn.Sequential(
             nn.Conv2d(
-                self.readout_input_channels,
+                self.candidate_input_channels,
                 self.branch_channels,
                 1,
                 bias=False,
@@ -110,14 +114,14 @@ class MultiHypothesisErrorDirectCorrection(nn.Module):
             ),
             nn.SiLU(),
         )
-        self.delta_head = nn.Conv2d(
+        self.gain_head = nn.Conv2d(
             2 * self.branch_channels,
             self.num_classes,
             1,
             bias=True,
         )
-        nn.init.zeros_(self.delta_head.weight)
-        nn.init.zeros_(self.delta_head.bias)
+        nn.init.zeros_(self.gain_head.weight)
+        nn.init.zeros_(self.gain_head.bias)
 
     def forward(
         self,
@@ -160,7 +164,7 @@ class MultiHypothesisErrorDirectCorrection(nn.Module):
         signed_errors = [signed_error_channels(error) for error in prediction_errors]
         signed_dynamics = signed_error_channels(dynamics_error)
 
-        shared_evidence = torch.cat(
+        global_evidence = torch.cat(
             [
                 *signed_errors,
                 signed_dynamics,
@@ -172,36 +176,59 @@ class MultiHypothesisErrorDirectCorrection(nn.Module):
             ],
             dim=1,
         )
-        if shared_evidence.shape[1] != self.error_input_channels:
+        if global_evidence.shape[1] != self.error_input_channels:
             raise RuntimeError(
-                f"error evidence channels mismatch: {shared_evidence.shape[1]} "
+                f"error evidence channels mismatch: {global_evidence.shape[1]} "
                 f"!= {self.error_input_channels}"
             )
-
-        encoded = self.error_pre(shared_evidence)
+        encoded = self.error_pre(global_evidence)
         error_state = self.error_recurrent(encoded, previous_error_state)
 
-        readout_evidence = torch.cat((error_state, shared_evidence), dim=1)
-        if readout_evidence.shape[1] != self.readout_input_channels:
-            raise RuntimeError(
-                f"readout channels mismatch: {readout_evidence.shape[1]} "
-                f"!= {self.readout_input_channels}"
+        dynamics_magnitude = dynamics_error.abs().mean(dim=1, keepdim=True)
+        correction_terms = []
+        gains = []
+        for index in range(self.history_length):
+            validity = history_validities_low[index].detach().clamp(0.0, 1.0)
+            age = float(index + 1) / float(self.history_length)
+            age_map = torch.full_like(current_margin, age)
+            candidate = torch.cat(
+                [
+                    signed_errors[index],
+                    error_state,
+                    current_state,
+                    current_margin,
+                    transportability_low,
+                    memory_reliability_low,
+                    validity,
+                    age_map,
+                    dynamics_magnitude,
+                ],
+                dim=1,
             )
-        shared = self.readout_pre(readout_evidence)
-        local = self.local_branch(shared)
-        context = self.context_branch(shared)
-        delta_logits = self.delta_head(torch.cat((local, context), dim=1))
+            if candidate.shape[1] != self.candidate_input_channels:
+                raise RuntimeError(
+                    f"candidate channels mismatch: {candidate.shape[1]} "
+                    f"!= {self.candidate_input_channels}"
+                )
+            shared = self.candidate_pre(candidate)
+            local = self.local_branch(shared)
+            context = self.context_branch(shared)
+            gain = self.gain_head(torch.cat((local, context), dim=1)) * validity
+            gains.append(gain)
+            # e_k = Current - History. Negative e_k points from Current toward
+            # the historical prediction. Gain can be positive or negative.
+            correction_terms.append(-gain * prediction_errors[index])
 
-        # No valid historical hypothesis means no predictive-coding correction.
-        # This is a structural mask, not a learned gate.
+        delta_logits = torch.stack(correction_terms, dim=0).sum(dim=0)
+        candidate_gains = torch.stack(gains, dim=1)
         any_history_valid = torch.stack(
             [validity.detach() for validity in history_validities_low],
             dim=0,
         ).amax(dim=0).clamp(0.0, 1.0)
-        delta_logits = delta_logits * any_history_valid
 
         return {
             "delta_logits": delta_logits,
+            "candidate_gains": candidate_gains,
             "error_state": error_state,
             "current_state": current_state,
             "any_history_valid": any_history_valid,
