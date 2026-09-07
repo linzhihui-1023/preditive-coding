@@ -6,16 +6,19 @@ Frozen foundation:
   Host -> Motion -> E1 -> C-V3 -> K=4 one-warp historical hypotheses.
 
 C-V8 removes candidate utility classification, abstention thresholds and hard
-Current/history selection. The K strict-validity-gated prediction errors drive a
-motion-aligned recurrent Error State and a zero-initialized 19-D direct logit
-correction:
+Current/history selection. Probability-space prediction errors drive a
+motion-aligned recurrent Error State. Centered-logit prediction errors provide
+the actual correction directions:
 
-    e_1..e_4 -> H_error -> DeltaL_t
-    L_C-V8 = L_C-V3 + DeltaL_t
+    e^P_k = P_current - P_history_k
+    e^L_k = C(L_current) - C(L_history_k)
+    DeltaL_k = -G_k * e^L_k
+    L_C-V8 = L_C-V3 + sum_k DeltaL_k
 
-Training optimizes the final segmentation CE plus the already validated C-V3
-strict RAFT temporal loss. RAFT is training/evaluation metric support only and
-is absent at inference.
+Each candidate correction is upsampled independently, multiplied by that
+candidate's full-resolution validity mask, and only then summed. Training
+optimizes final segmentation CE plus the validated C-V3 strict RAFT temporal
+loss. RAFT is absent at inference.
 """
 
 import argparse
@@ -73,7 +76,7 @@ OUTPUT_DEFAULT = (
     "kitti_step_task_space_prior_c_v8_multihypothesis_direct_error_correction"
 )
 RESULT_DEFAULT = "results/kitti_step_task_space_prior_c_v8_multihypothesis_direct_error_correction"
-DEV_MIOU_GAIN_TARGET = 0.005  # +0.5 percentage point development gate.
+DEV_MIOU_GAIN_TARGET = 0.005
 CANDIDATES = (
     "host",
     "e1_base",
@@ -92,25 +95,47 @@ def _delta_metrics(candidate, reference):
 
 
 def _selection_key(metrics):
-    """Select checkpoints by final C-V8 mIoU, then mTC."""
     candidate = metrics["c_v8"]
     return (candidate["mIoU"], candidate["mTC"])
+
+
+def _center_logits(logits):
+    """Remove the per-pixel additive logit gauge（逐像素类别均值中心化）."""
+    return logits - logits.mean(dim=1, keepdim=True)
+
+
+def _age_contribution(values):
+    total = float(sum(values))
+    if total <= 0.0:
+        return [0.0 for _ in values]
+    return [float(value / total) for value in values]
 
 
 def _zero_step_check(module):
     """Verify zero-init direct correction exactly preserves C-V3."""
     device = next(module.parameters()).device
     n, c, h, w = 1, module.num_classes, 5, 7
-    errors = [torch.randn(n, c, h, w, device=device) for _ in range(module.history_length)]
+    probability_errors = [
+        torch.randn(n, c, h, w, device=device)
+        for _ in range(module.history_length)
+    ]
+    correction_errors = [
+        torch.randn(n, c, h, w, device=device)
+        for _ in range(module.history_length)
+    ]
     dynamics = torch.randn(n, c, h, w, device=device)
     current_probability = F.softmax(torch.randn(n, c, h, w, device=device), dim=1)
     current_margin = torch.rand(n, 1, h, w, device=device)
     transportability = torch.rand(n, 1, h, w, device=device)
     reliability = torch.rand(n, 1, h, w, device=device)
-    validities = [torch.ones(n, 1, h, w, device=device) for _ in range(module.history_length)]
+    validities = [
+        torch.ones(n, 1, h, w, device=device)
+        for _ in range(module.history_length)
+    ]
     with torch.no_grad():
         row = module(
-            errors,
+            probability_errors,
+            correction_errors,
             dynamics,
             current_probability,
             current_margin,
@@ -125,6 +150,59 @@ def _zero_step_check(module):
     return {"delta_logits_abs_max": delta_max, "c_v8_equals_c_v3": True}
 
 
+def _centered_logit_errors(
+    current_low_logits,
+    candidate_rows,
+    history_validities,
+    history_length,
+):
+    """Build strict-validity-gated centered-logit correction directions."""
+    low_size = tuple(current_low_logits.shape[-2:])
+    current_centered = _center_logits(current_low_logits.detach())
+    errors = []
+    for index in range(history_length):
+        validity = history_validities[index].detach().to(current_low_logits.dtype)
+        if index < len(candidate_rows):
+            history_low_logits = F.interpolate(
+                candidate_rows[index]["logits"].detach(),
+                size=low_size,
+                mode="bilinear",
+                align_corners=False,
+            )
+            history_centered = _center_logits(history_low_logits)
+            errors.append((current_centered - history_centered) * validity)
+        else:
+            errors.append(torch.zeros_like(current_centered))
+    return errors
+
+
+def _full_resolution_candidate_corrections(
+    candidate_corrections_low,
+    candidate_rows,
+    history_length,
+    output_size,
+):
+    """Upsample -> candidate-specific full validity -> sum（逐候选严格有效）."""
+    full_terms = []
+    for index in range(history_length):
+        term = F.interpolate(
+            candidate_corrections_low[:, index],
+            size=tuple(output_size),
+            mode="bilinear",
+            align_corners=False,
+        )
+        if index < len(candidate_rows):
+            valid_full = candidate_rows[index]["valid_full"].detach()
+            if valid_full.ndim == 3:
+                valid_full = valid_full.unsqueeze(1)
+            term = term * valid_full.to(term.dtype)
+        else:
+            term = torch.zeros_like(term)
+        full_terms.append(term)
+    stacked = torch.stack(full_terms, dim=1)
+    return stacked, stacked.sum(dim=1)
+
+
 def _correction_evidence(
     module,
     dynamics,
@@ -136,15 +214,14 @@ def _correction_evidence(
     error_state,
     dynamics_state,
 ):
-    """Build C-V8 error evidence and produce low/full direct correction."""
     low_size = tuple(transportability_low.shape[-2:])
-    current_low = F.interpolate(
+    current_low_logits = F.interpolate(
         c_v3_logits.detach(),
         size=low_size,
         mode="bilinear",
         align_corners=False,
     )
-    current_probability = F.softmax(current_low, dim=1)
+    current_probability = F.softmax(current_low_logits, dim=1)
     history_probabilities, low_path_validities = c_v5._pad_history_for_controller(
         current_probability,
         candidate_rows,
@@ -162,6 +239,12 @@ def _correction_evidence(
         history_validities,
     )
     prediction_errors = multi["prediction_errors"]
+    correction_errors = _centered_logit_errors(
+        current_low_logits,
+        candidate_rows,
+        history_validities,
+        module.history_length,
+    )
     primary_error = prediction_errors[0]
     history1_valid = history_validities[0].detach()
 
@@ -195,6 +278,7 @@ def _correction_evidence(
 
     row = module(
         prediction_errors,
+        correction_errors,
         dynamics_state,
         current_probability,
         multi["current_margin"],
@@ -203,20 +287,52 @@ def _correction_evidence(
         [validity.detach() for validity in history_validities],
         previous_error_state,
     )
-    delta_full = F.interpolate(
-        row["delta_logits"],
-        size=tuple(c_v3_logits.shape[-2:]),
-        mode="bilinear",
-        align_corners=False,
+    candidate_corrections_full, delta_full = _full_resolution_candidate_corrections(
+        row["candidate_corrections_low"],
+        candidate_rows,
+        module.history_length,
+        c_v3_logits.shape[-2:],
     )
     return {
         "row": row,
         "delta_logits_low": row["delta_logits"],
         "delta_logits_full": delta_full,
+        "candidate_corrections_full": candidate_corrections_full,
         "prediction_errors": prediction_errors,
+        "correction_errors": correction_errors,
         "prediction_error": primary_error,
         "dynamics_state": dynamics_state,
         "history_validities": history_validities,
+    }
+
+
+def _new_age_totals(history_length):
+    return {
+        "gain_abs_by_age": [0.0] * history_length,
+        "correction_abs_by_age": [0.0] * history_length,
+    }
+
+
+def _add_age_frame(totals, evidence):
+    gains = evidence["row"]["candidate_gains"]
+    corrections = evidence["candidate_corrections_full"]
+    for index in range(gains.shape[1]):
+        totals["gain_abs_by_age"][index] += float(
+            gains[:, index].abs().mean().detach().item()
+        )
+        totals["correction_abs_by_age"][index] += float(
+            corrections[:, index].abs().mean().detach().item()
+        )
+
+
+def _finalize_age_totals(totals, frames):
+    frames = max(int(frames), 1)
+    gain = [value / frames for value in totals["gain_abs_by_age"]]
+    correction = [value / frames for value in totals["correction_abs_by_age"]]
+    return {
+        "gain_abs_by_age": gain,
+        "correction_abs_by_age": correction,
+        "correction_contribution_by_age": _age_contribution(correction),
     }
 
 
@@ -269,6 +385,7 @@ def _train_sequence(
         "temporal_l1": 0.0,
         "total_loss": 0.0,
         "prediction_error_abs": 0.0,
+        "correction_error_abs": 0.0,
         "dynamics_error_abs": 0.0,
         "error_state_abs": 0.0,
         "delta_logits_abs": 0.0,
@@ -277,6 +394,7 @@ def _train_sequence(
         "temporal_valid_fraction": 0.0,
         "previous_true_confidence_mean": 0.0,
     }
+    totals.update(_new_age_totals(module.history_length))
     trainable = [parameter for parameter in module.parameters() if parameter.requires_grad]
 
     for frame_index in range(2, len(samples)):
@@ -379,16 +497,20 @@ def _train_sequence(
         totals["segmentation_ce"] += float(segmentation_ce.detach().item())
         totals["temporal_l1"] += float(temporal_l1.detach().item())
         totals["prediction_error_abs"] += float(
-            evidence["prediction_error"].abs().mean().detach().item()
+            torch.stack([error.abs().mean() for error in evidence["prediction_errors"]]).mean().detach().item()
+        )
+        totals["correction_error_abs"] += float(
+            torch.stack([error.abs().mean() for error in evidence["correction_errors"]]).mean().detach().item()
         )
         totals["dynamics_error_abs"] += float(dynamics_state.abs().mean().item())
         totals["error_state_abs"] += float(error_state.abs().mean().detach().item())
         totals["delta_logits_abs"] += float(
-            evidence["delta_logits_low"].abs().mean().detach().item()
+            evidence["delta_logits_full"].abs().mean().detach().item()
         )
         totals["any_history_valid_mean"] += float(
             evidence["row"]["any_history_valid"].mean().item()
         )
+        _add_age_frame(totals, evidence)
         for key in (
             "temporal_weight_mean",
             "temporal_valid_fraction",
@@ -407,9 +529,7 @@ def _train_sequence(
                     temporal_scale_state["value"] = g_seg / g_temp
                     temporal_scale_state["seg_grad_norm"] = g_seg
                     temporal_scale_state["temp_grad_norm"] = g_temp
-            lambda_temporal = temporal_scale_state["value"]
-            if lambda_temporal is None:
-                lambda_temporal = 0.0
+            lambda_temporal = temporal_scale_state["value"] or 0.0
             window_loss = window_seg + float(lambda_temporal) * window_temp
             optimizer.zero_grad(set_to_none=True)
             window_loss.backward()
@@ -446,6 +566,7 @@ def _train_sequence(
         "segmentation_ce",
         "temporal_l1",
         "prediction_error_abs",
+        "correction_error_abs",
         "dynamics_error_abs",
         "error_state_abs",
         "delta_logits_abs",
@@ -455,6 +576,8 @@ def _train_sequence(
         "previous_true_confidence_mean",
     ):
         totals[key] /= frames
+    age_stats = _finalize_age_totals(totals, frames)
+    totals.update(age_stats)
     totals["total_loss"] /= windows
     totals["lambda_temporal"] = temporal_scale_state["value"]
     return totals
@@ -507,6 +630,7 @@ def _train_epoch(
         "segmentation_ce",
         "temporal_l1",
         "prediction_error_abs",
+        "correction_error_abs",
         "dynamics_error_abs",
         "error_state_abs",
         "delta_logits_abs",
@@ -524,6 +648,14 @@ def _train_epoch(
     }
     for key in frame_keys:
         result[key] = sum(row[key] * row["frames"] for row in rows) / frame_total
+    for key in ("gain_abs_by_age", "correction_abs_by_age"):
+        result[key] = [
+            sum(row[key][index] * row["frames"] for row in rows) / frame_total
+            for index in range(module.history_length)
+        ]
+    result["correction_contribution_by_age"] = _age_contribution(
+        result["correction_abs_by_age"]
+    )
     return result
 
 
@@ -555,7 +687,12 @@ def _evaluate(
     vc_count = {name: {8: 0, 16: 0} for name in CANDIDATES}
     target_totals = c_v5._new_target_totals(module.history_length)
     diagnostic_frames = 0
-    correction_abs = error_state_abs = prediction_error_abs = dynamics_error_abs = 0.0
+    correction_abs = 0.0
+    error_state_abs = 0.0
+    prediction_error_abs = 0.0
+    correction_error_abs = 0.0
+    dynamics_error_abs = 0.0
+    age_totals = _new_age_totals(module.history_length)
 
     for sequence, samples in groups.items():
         previous = None
@@ -696,10 +833,16 @@ def _evaluate(
                 )
 
                 diagnostic_frames += 1
-                correction_abs += float(evidence["delta_logits_low"].abs().mean().item())
+                correction_abs += float(evidence["delta_logits_full"].abs().mean().item())
                 error_state_abs += float(error_state.abs().mean().item())
-                prediction_error_abs += float(evidence["prediction_error"].abs().mean().item())
+                prediction_error_abs += float(
+                    torch.stack([error.abs().mean() for error in evidence["prediction_errors"]]).mean().item()
+                )
+                correction_error_abs += float(
+                    torch.stack([error.abs().mean() for error in evidence["correction_errors"]]).mean().item()
+                )
                 dynamics_error_abs += float(dynamics_state.abs().mean().item())
+                _add_age_frame(age_totals, evidence)
 
                 observed = c_v5._observe_motion(
                     observer,
@@ -767,23 +910,32 @@ def _evaluate(
         for name in CANDIDATES
     }
     denom = max(diagnostic_frames, 1)
+    age_stats = _finalize_age_totals(age_totals, denom)
     diagnostics = {
         "target_distribution": c_v5._target_rates(target_totals),
         "history_length": module.history_length,
         "history_source": "detached frozen C-V3 logits used only to form prediction errors",
         "raw_history_probability_in_correction": False,
+        "raw_history_logits_in_correction_module": False,
         "hard_candidate_selection": False,
         "utility_estimator": False,
         "abstention_threshold": False,
-        "correction_type": "19-D direct semantic logit residual",
+        "correction_type": "class-wise gain along centered-logit prediction-error direction",
+        "state_error_space": "probability",
+        "correction_error_space": "centered logits",
+        "full_resolution_validity": "candidate-specific mask after per-candidate upsampling, before summation",
         "prediction_error_reference": "strict-validity-gated t-1..t-K frozen C-V3 hypotheses",
         "error_state_motion_aligned": True,
         "error_state_history_support": "T * Q_mem * any_history_valid",
-        "dynamics_error_reference": "motion-compensated strict-validity-gated t-1 error",
+        "dynamics_error_reference": "motion-compensated strict-validity-gated t-1 probability error",
         "correction_abs": correction_abs / denom,
         "error_state_abs": error_state_abs / denom,
         "prediction_error_abs": prediction_error_abs / denom,
+        "correction_error_abs": correction_error_abs / denom,
         "dynamics_error_abs": dynamics_error_abs / denom,
+        "gain_abs_by_age": age_stats["gain_abs_by_age"],
+        "correction_abs_by_age": age_stats["correction_abs_by_age"],
+        "correction_contribution_by_age": age_stats["correction_contribution_by_age"],
         "raft_inference": False,
     }
     return metrics, diagnostics
@@ -890,7 +1042,6 @@ def main(argv=None):
         val_groups,
         raft,
     )
-    # Zero-init must make the actual pipeline identical to frozen C-V3.
     if oracle_metrics["c_v8"]["mIoU"] != oracle_metrics["c_v3_base"]["mIoU"]:
         raise RuntimeError("C-V8 pipeline zero-step mIoU is not exactly C-V3")
     oracle_precheck = {
@@ -992,15 +1143,18 @@ def main(argv=None):
                     "architecture": {
                         "history_length": module.history_length,
                         "history_source": "detached frozen C-V3 logits",
-                        "history_semantic_interface": "strict-validity-gated prediction errors e1..eK",
+                        "history_semantic_interface": "prediction errors only",
+                        "state_error_space": "probability",
+                        "correction_error_space": "centered logits",
+                        "correction_formula": "DeltaL_k = -G_k * centered_logit_error_k",
+                        "full_resolution_validity": "per-candidate after upsampling, before summation",
                         "hard_candidate_selection": False,
                         "utility_estimator": False,
                         "abstention_threshold": False,
                         "error_state": "motion-aligned recurrent multi-hypothesis Error State",
                         "error_state_history_support": "T * Q_mem * any_history_valid",
-                        "dynamics_error": "explicit Euler state from t-1 prediction error",
-                        "output": "19-D additive correction to frozen C-V3 logits",
-                        "zero_initialized_delta_head": True,
+                        "dynamics_error": "explicit Euler state from t-1 probability error",
+                        "zero_initialized_gain_head": True,
                         "training_loss": "final segmentation CE + gradient-balanced strict temporal L1",
                         "raft_inference": False,
                     },
@@ -1039,7 +1193,10 @@ def main(argv=None):
             "history_source": "detached frozen C-V3 logits used only to form prediction errors",
             "history_logits_resampling": "one final warp per candidate",
             "controller_output_feedback": False,
-            "prediction_error_reference": "t-1..t-K frozen C-V3 hypotheses",
+            "state_prediction_error": "strict-validity-gated probability error",
+            "correction_prediction_error": "strict-validity-gated centered-logit error",
+            "correction_formula": "DeltaL_k = -G_k * e_logit_k; DeltaL=sum_k DeltaL_k",
+            "full_resolution_validity": "candidate-specific mask after per-candidate upsampling",
             "error_state_motion_aligned": True,
             "error_state_history_support": "T * Q_mem * any_history_valid",
             "direct_correction_channels": c_v5.NUM_CLASSES,
