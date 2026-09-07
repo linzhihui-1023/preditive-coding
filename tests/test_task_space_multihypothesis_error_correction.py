@@ -89,11 +89,16 @@ class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
         loss = row["delta_logits"].square().mean()
         loss.backward()
         error_grad = module.error_pre[0].weight.grad
-        recurrent_grad = module.error_recurrent.conv.weight.grad
+        gate_grad = module.error_recurrent.gates.weight.grad
+        candidate_grad = module.error_recurrent.candidate.weight.grad
         self.assertIsNotNone(error_grad)
-        self.assertIsNotNone(recurrent_grad)
+        self.assertIsNotNone(gate_grad)
+        self.assertIsNotNone(candidate_grad)
         self.assertGreater(float(error_grad.abs().sum()), 0.0)
-        self.assertGreater(float(recurrent_grad.abs().sum()), 0.0)
+        self.assertGreater(
+            float(gate_grad.abs().sum() + candidate_grad.abs().sum()),
+            0.0,
+        )
 
     def test_previous_error_state_shape_is_preserved(self):
         module = MultiHypothesisErrorDirectCorrection(
