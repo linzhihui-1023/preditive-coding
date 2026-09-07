@@ -178,7 +178,6 @@ def _semantic_refinement_output(
     )
 
     temporal_history = temporal_full["history_probability"].detach().float()
-    # Equivalent to softmax(log(P_hist_temp)+Delta), but avoids explicit log(0).
     refined_unnormalized = temporal_history * torch.exp(
         delta_full.clamp(min=-12.0, max=12.0)
     )
@@ -401,7 +400,7 @@ def _train_sequence(
         valid_mask = targets["valid_gt"]
         history_mask = (
             targets["valid_gt"]
-            & refined["history_available"][0, 0].detach().cpu()
+            & refined["history_available"][0, 0].detach()
         )
         out_loss, out_pixels = _masked_nll(
             refined["output_probability"],
