@@ -279,8 +279,11 @@ def semantic_first_temporal_tiebreak_loss(
         raise ValueError("candidate utilities and semantic gains must match")
     if valid_mask.shape != candidate_utilities.shape:
         raise ValueError("valid_mask must match candidate utilities")
-    if temporal_matches.shape != candidate_utilities.shape:
-        raise ValueError("temporal_matches must match candidate utilities")
+    expected_temporal_channels = candidate_utilities.shape[1] + 1
+    if temporal_matches.ndim != 4 or temporal_matches.shape[1] != expected_temporal_channels:
+        raise ValueError("temporal_matches must contain Current plus all histories")
+    if temporal_matches.shape[0] != candidate_utilities.shape[0] or temporal_matches.shape[-2:] != candidate_utilities.shape[-2:]:
+        raise ValueError("temporal_matches batch/spatial size mismatch")
     if temporal_valid.ndim == 2:
         temporal_valid = temporal_valid.unsqueeze(0)
     if temporal_valid.ndim == 3:
@@ -290,9 +293,6 @@ def semantic_first_temporal_tiebreak_loss(
 
     current_utility = torch.zeros_like(candidate_utilities[:, :1])
     current_gain = torch.zeros_like(semantic_gains[:, :1])
-    # temporal_matches channel 0 is expected to encode Current match.
-    if temporal_matches.shape[1] < 2:
-        raise ValueError("temporal_matches must contain Current plus histories")
     current_match = temporal_matches[:, :1]
     history_match = temporal_matches[:, 1:]
     if history_match.shape != candidate_utilities.shape:
@@ -312,14 +312,16 @@ def semantic_first_temporal_tiebreak_loss(
             tied = (gains[:, left] - gains[:, right]).abs() <= float(
                 semantic_tie_delta
             )
-            if left == 0:
-                left_match = current_match[:, 0]
-            else:
-                left_match = history_match[:, left - 1]
-            if right == 0:
-                right_match = current_match[:, 0]
-            else:
-                right_match = history_match[:, right - 1]
+            left_match = (
+                current_match[:, 0]
+                if left == 0
+                else history_match[:, left - 1]
+            )
+            right_match = (
+                current_match[:, 0]
+                if right == 0
+                else history_match[:, right - 1]
+            )
             preference = left_match.to(torch.int8) - right_match.to(torch.int8)
             informative = pair_valid & tied & (preference != 0)
             count = int(informative.sum().item())
