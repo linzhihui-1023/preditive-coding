@@ -43,22 +43,36 @@ class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
         self.assertEqual(tuple(row["delta_logits"].shape), (1, 19, 6, 8))
         self.assertEqual(float(row["delta_logits"].abs().max()), 0.0)
         self.assertEqual(tuple(row["error_state"].shape), (1, 32, 6, 8))
+        self.assertEqual(tuple(row["candidate_gains"].shape), (1, 4, 19, 6, 8))
 
     def test_all_invalid_history_structurally_forces_zero_correction(self):
         module = MultiHypothesisErrorDirectCorrection(
             num_classes=19,
             history_length=4,
         )
-        # Make the readout intentionally nonzero. The structural validity mask
-        # must still force DeltaL=0 everywhere.
         with torch.no_grad():
-            module.delta_head.bias.fill_(2.0)
+            module.gain_head.bias.fill_(2.0)
         row = module(
             *self._inputs(module, valid_value=0.0),
             previous_error_state=None,
         )
         self.assertEqual(float(row["delta_logits"].abs().max()), 0.0)
         self.assertEqual(float(row["any_history_valid"].abs().max()), 0.0)
+
+    def test_zero_prediction_error_forces_zero_correction_even_with_active_gain(self):
+        module = MultiHypothesisErrorDirectCorrection(
+            num_classes=3,
+            history_length=2,
+            hidden_channels=8,
+            current_state_channels=8,
+            branch_channels=8,
+        )
+        inputs = list(self._inputs(module, height=5, width=7))
+        inputs[0] = [torch.zeros_like(error) for error in inputs[0]]
+        with torch.no_grad():
+            module.gain_head.bias.fill_(3.0)
+        row = module(*inputs, previous_error_state=None)
+        self.assertEqual(float(row["delta_logits"].abs().max()), 0.0)
 
     def test_forward_has_no_raw_history_probability_argument(self):
         parameters = inspect.signature(
@@ -75,7 +89,7 @@ class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
         }
         self.assertTrue(forbidden.isdisjoint(parameters.keys()))
 
-    def test_gradient_reaches_error_encoder_when_readout_is_active(self):
+    def test_gradient_reaches_error_encoder_when_gain_readout_is_active(self):
         module = MultiHypothesisErrorDirectCorrection(
             num_classes=3,
             history_length=2,
@@ -84,7 +98,7 @@ class MultiHypothesisErrorDirectCorrectionTest(unittest.TestCase):
             branch_channels=8,
         )
         with torch.no_grad():
-            module.delta_head.weight.fill_(0.01)
+            module.gain_head.weight.fill_(0.01)
         row = module(*self._inputs(module, height=5, width=7), previous_error_state=None)
         loss = row["delta_logits"].square().mean()
         loss.backward()
