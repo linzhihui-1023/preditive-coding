@@ -1,6 +1,8 @@
 import inspect
 import unittest
 
+import torch
+
 from predify2021.mce_scores import (
     train_kitti_step_task_space_prior_c_v8_direct_error_correction as c_v8,
 )
@@ -40,6 +42,50 @@ class C_V8DirectCorrectionTrainingContractTest(unittest.TestCase):
             self.assertNotIn(token, source)
         self.assertIn("segmentation_ce", source)
         self.assertIn("_strict_temporal_l1", source)
+
+    def test_correction_evidence_separates_state_and_logit_error_spaces(self):
+        source = inspect.getsource(c_v8._correction_evidence)
+        self.assertIn("build_multihypothesis_error_evidence", source)
+        self.assertIn("_centered_logit_errors", source)
+        self.assertIn("_full_resolution_candidate_corrections", source)
+
+    def test_center_logits_is_invariant_to_common_class_shift(self):
+        logits = torch.randn(1, 3, 4, 5)
+        shift = torch.randn(1, 1, 4, 5)
+        self.assertTrue(
+            torch.allclose(
+                c_v8._center_logits(logits),
+                c_v8._center_logits(logits + shift),
+                atol=1e-6,
+                rtol=0.0,
+            )
+        )
+
+    def test_full_resolution_validity_masks_each_candidate_after_upsampling(self):
+        low = torch.ones(1, 2, 3, 2, 2)
+        valid1 = torch.ones(1, 4, 4, dtype=torch.bool)
+        valid1[:, 0, 0] = False
+        valid2 = torch.ones(1, 4, 4, dtype=torch.bool)
+        rows = [
+            {"valid_full": valid1},
+            {"valid_full": valid2},
+        ]
+        stacked, total = c_v8._full_resolution_candidate_corrections(
+            low,
+            rows,
+            history_length=2,
+            output_size=(4, 4),
+        )
+        self.assertEqual(tuple(stacked.shape), (1, 2, 3, 4, 4))
+        self.assertEqual(float(stacked[:, 0, :, 0, 0].abs().max()), 0.0)
+        self.assertTrue(torch.all(stacked[:, 1, :, 0, 0] == 1.0))
+        self.assertTrue(torch.all(total[:, :, 0, 0] == 1.0))
+
+    def test_age_contribution_is_normalized(self):
+        values = [1.0, 2.0, 1.0, 0.0]
+        contribution = c_v8._age_contribution(values)
+        self.assertAlmostEqual(sum(contribution), 1.0)
+        self.assertEqual(contribution, [0.25, 0.5, 0.25, 0.0])
 
     def test_metrics_contract_contains_direct_c_v8_output(self):
         self.assertIn("c_v8", c_v8.CANDIDATES)
