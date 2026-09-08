@@ -288,6 +288,11 @@ def _frozen_sequence_frames(
                 "gt_cpu": current_gt,
                 "c_v3_logits": c_v3_logits.detach(),
                 "c_v7_logits": evidence["final_logits_full"].detach(),
+                # Preserve the two pre/post bounded-correction tensors for
+                # frozen decomposition diagnostics.  They are detached and
+                # do not alter the existing probe or evaluation path.
+                "delta_z_raw_low": evidence["row"]["delta_z_raw"].detach(),
+                "gate_low": evidence["row"]["gate"].detach(),
                 "any_valid_full": evidence["any_valid_full"].detach(),
                 "masks": {key: value.detach() for key, value in masks.items()},
                 "features": features,

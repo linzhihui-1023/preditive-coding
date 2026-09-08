@@ -1,0 +1,63 @@
+{
+  "correction_path_frames": 2963,
+  "metrics": {
+    "z_cur": {
+      "mIoU": 0.662706834793679,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.0,
+      "rescue_margin_gain": 0.0,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.0
+    },
+    "z_raw": {
+      "mIoU": 0.6400900051998155,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.25721951531589454,
+      "rescue_margin_gain": 0.6328340889276591,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.012697378517264627
+    },
+    "z_tanh": {
+      "mIoU": 0.6576266178089963,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.18387312880547632,
+      "rescue_margin_gain": 0.28847233807683687,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.006400055382836727
+    },
+    "z_final": {
+      "mIoU": 0.6628020923238017,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.012492380161803582,
+      "rescue_margin_gain": 0.023333957681177558,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.00029687837825673115
+    }
+  },
+  "checkpoint": {
+    "path": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v7_error_residual_correction/best.pt",
+    "epoch": 1,
+    "experiment": "c_v7_error_residual_correction",
+    "g_max": 0.25
+  },
+  "hidden_32_linear_probe": {
+    "available": true,
+    "path": "results/kitti_step_c_v7_semantic_decodability_probes_formal/summary.json",
+    "source": "existing formal frozen hidden_32 linear probe",
+    "metrics": {
+      "mIoU": 0.5775081338924603,
+      "rescue_recovery_rate": 0.48432173369781134,
+      "rescue_margin_gain": 1.6280818932900483,
+      "current_correct_damage_rate": 0.049501799071988754
+    }
+  },
+  "definition": {
+    "z_cur": "frozen C-V3 current logits",
+    "z_raw": "z_cur + upsample(DeltaZ_raw)",
+    "z_tanh": "z_cur + upsample(tanh(DeltaZ_raw))",
+    "z_final": "z_cur + upsample(gate) * upsample(tanh(DeltaZ_raw))",
+    "validity": "same full-resolution any-history-valid mask as deployed C-V7",
+    "training": false,
+    "weights_modified": false
+  }
+}
