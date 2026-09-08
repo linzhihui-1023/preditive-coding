@@ -9,7 +9,11 @@ It verifies the new trainable module itself before any expensive experiment.
 import inspect
 
 import torch
+from torch.nn import functional as F
 
+from predify2021.model_factory.deeplabv3plus_resnet50.task_space_motion_transport import (
+    low_flow_grid,
+)
 from predify2021.model_factory.deeplabv3plus_resnet50.task_space_multihypothesis_error_residual_corrector import (
     MultiHypothesisErrorResidualCorrector,
 )
@@ -78,7 +82,47 @@ def main():
     if float(row0["gate"].detach().max().item()) > model.g_max + 1e-7:
         raise RuntimeError("Gate exceeded g_max")
 
-    # A second step exercises motion-aligned recurrent history.
+    # Gate validity must not be applied at low resolution. The integration
+    # path upsamples the raw bounded gate first and masks at full resolution.
+    zero_validities = [torch.zeros_like(validities[0]) for _ in range(history_length)]
+    row_invalid = model(
+        prediction_errors,
+        dynamics_error,
+        current_margin,
+        history_margins,
+        transportability,
+        memory_reliability,
+        zero_validities,
+        backward_motion,
+        None,
+    )
+    if float(row_invalid["any_history_valid"].abs().max().item()) != 0.0:
+        raise RuntimeError("All-invalid history must produce zero any-history-valid evidence")
+    if float(row_invalid["error_reliability"].abs().max().item()) != 0.0:
+        raise RuntimeError("All-invalid history must suppress recurrent Error Memory carry")
+    if float(row_invalid["gate"].detach().max().item()) <= 0.0:
+        raise RuntimeError(
+            "Gate was masked at controller resolution; full-resolution masking must happen later"
+        )
+
+    # Exercise motion-aligned recurrent history with a non-zero motion field and
+    # compare against an independently computed grid_sample result.
+    known_hidden = torch.arange(
+        32 * height * width,
+        dtype=torch.float32,
+    ).reshape(1, 32, height, width)
+    shifted_motion = torch.zeros(1, 2, height, width)
+    shifted_motion[:, 0] = 1.0
+    grid, valid = low_flow_grid(shifted_motion)
+    expected_warped = F.grid_sample(
+        known_hidden,
+        grid,
+        mode="bilinear",
+        padding_mode="zeros",
+        align_corners=True,
+    )
+    expected_warped = expected_warped * valid.unsqueeze(1).to(expected_warped.dtype)
+
     row1 = model(
         prediction_errors,
         dynamics_error,
@@ -87,11 +131,15 @@ def main():
         transportability,
         memory_reliability,
         validities,
-        backward_motion,
-        row0["hidden"],
+        shifted_motion,
+        known_hidden,
     )
-    if row1["warped_hidden"].shape != row0["hidden"].shape:
+    if row1["warped_hidden"].shape != known_hidden.shape:
         raise RuntimeError("Motion-aligned Error Memory shape mismatch")
+    if not torch.allclose(row1["warped_hidden"], expected_warped, atol=1e-6, rtol=0.0):
+        raise RuntimeError("Error Memory did not follow the expected motion warp")
+    if torch.allclose(row1["warped_hidden"], known_hidden, atol=1e-6, rtol=0.0):
+        raise RuntimeError("Non-zero motion failed to move the recurrent Error Memory")
     if not bool(torch.isfinite(row1["error_reliability"]).all()):
         raise RuntimeError("Non-finite Error Memory reliability")
 
@@ -116,9 +164,14 @@ def main():
             "delta_z_e0_abs_max": float(row0["delta_z"].detach().abs().max().item()),
             "gate_max": float(row0["gate"].detach().max().item()),
             "g_max": model.g_max,
+            "low_resolution_gate_masking": False,
+            "all_invalid_error_reliability_abs_max": float(
+                row_invalid["error_reliability"].detach().abs().max().item()
+            ),
             "z_cur_gradient": None,
             "correction_head_gradient_abs_sum": float(correction_grad.abs().sum().item()),
             "motion_aligned_recurrent_state": True,
+            "motion_warp_matches_reference": True,
         }
     )
 
