@@ -15,7 +15,6 @@ from predify2021.mce_scores.diagnose_c_v7_semantic_decodability_probes import (
     _build_diagnostic_masks,
 )
 
-
 NUM_CLASSES = 19
 
 
@@ -28,19 +27,20 @@ def _logits_from_labels(labels, high=5.0, low=-5.0):
 
 def _check_zero_init_and_unbounded_linear_path():
     probe = LinearResidualProbe(3, NUM_CLASSES)
+    if probe.head.bias is not None:
+        raise RuntimeError("diagnostic probe must be bias-free")
+
     feature = torch.ones((1, 3, 2, 2), requires_grad=True)
     valid = torch.ones((1, 1, 4, 4), dtype=torch.bool)
-
     delta0 = probe(feature, (4, 4), valid)
     if float(delta0.abs().max().item()) != 0.0:
         raise RuntimeError("zero-initialized probe must produce exact zero DeltaZ")
 
     with torch.no_grad():
         probe.head.weight.fill_(2.0)
-        probe.head.bias.fill_(1.0)
     delta = probe(feature, (4, 4), valid)
-    # 3 input channels * weight 2 + bias 1 = 7.  A tanh/gate path would not preserve 7.
-    if not torch.allclose(delta, torch.full_like(delta, 7.0)):
+    # 3 input channels * weight 2 = 6. A tanh/gate path would not preserve 6.
+    if not torch.allclose(delta, torch.full_like(delta, 6.0)):
         raise RuntimeError("probe output is unexpectedly gated, bounded, or transformed")
 
     loss = delta.square().mean()
@@ -50,8 +50,8 @@ def _check_zero_init_and_unbounded_linear_path():
     if feature.grad is None or float(feature.grad.abs().sum().item()) <= 0.0:
         raise RuntimeError("synthetic feature did not receive gradient in raw probe test")
 
-    # Real diagnostic features are detached before probe use.  Verify that contract explicitly.
-    detached_feature = feature.detach().clone().requires_grad_(False)
+    # Real diagnostic features are detached before probe use.
+    detached_feature = feature.detach().clone()
     probe.zero_grad(set_to_none=True)
     detached_delta = probe(detached_feature, (4, 4), valid)
     detached_delta.mean().backward()
@@ -71,7 +71,6 @@ def _check_rescue_masks_and_no_history_gradient():
     history1_labels = torch.tensor([[0, 6, 7, 8]], dtype=torch.long)
     history1_logits = _logits_from_labels(history1_labels).requires_grad_(True)
     history1_valid = torch.tensor([[[True, True, True, False]]])
-
     history2_labels = torch.tensor([[9, 1, 10, 11]], dtype=torch.long)
     history2_logits = _logits_from_labels(history2_labels).requires_grad_(True)
     history2_valid = torch.tensor([[[True, True, True, False]]])
@@ -81,15 +80,12 @@ def _check_rescue_masks_and_no_history_gradient():
         {"logits": history2_logits, "valid_full": history2_valid},
     ]
     masks = _build_diagnostic_masks(current_logits, rows, gt)
-
     expected_rescue = torch.tensor([[True, False, False, False]])
     expected_protect = torch.tensor([[False, True, False, False]])
     if not torch.equal(masks["rescue"].cpu(), expected_rescue):
         raise RuntimeError(f"unexpected Rescue mask: {masks['rescue'].cpu()}")
     if not torch.equal(masks["protection"].cpu(), expected_protect):
         raise RuntimeError(f"unexpected Protection mask: {masks['protection'].cpu()}")
-
-    # Mask construction is under no_grad and historical logits are argmax-detached.
     if history1_logits.grad is not None or history2_logits.grad is not None:
         raise RuntimeError("mask construction leaked gradient into historical logits")
 
@@ -110,16 +106,14 @@ def _check_declared_probe_shapes():
         PROBE_EVIDENCE_211: 211,
         PROBE_HIDDEN_32: 32,
     }
-    probes = {
-        name: LinearResidualProbe(channels, NUM_CLASSES)
-        for name, channels in expected.items()
-    }
     for name, channels in expected.items():
-        probe = probes[name]
+        probe = LinearResidualProbe(channels, NUM_CLASSES)
         if probe.in_channels != channels:
             raise RuntimeError(f"{name} channels mismatch: {probe.in_channels} != {channels}")
-        params = sum(parameter.numel() for parameter in probe.parameters())
-        expected_params = NUM_CLASSES * channels + NUM_CLASSES
+        if probe.head.bias is not None:
+            raise RuntimeError(f"{name} unexpectedly has bias")
+        params = sum(parameter.numel() for parameter in probe.parameters() if parameter.requires_grad)
+        expected_params = NUM_CLASSES * channels
         if params != expected_params:
             raise RuntimeError(f"{name} parameter count mismatch: {params} != {expected_params}")
 
@@ -136,6 +130,7 @@ def main():
                 PROBE_EVIDENCE_211: 211,
                 PROBE_HIDDEN_32: 32,
             },
+            "probe_bias": False,
             "zero_step_equals_c_v3": True,
             "probe_gate": False,
             "probe_tanh_bound": False,
