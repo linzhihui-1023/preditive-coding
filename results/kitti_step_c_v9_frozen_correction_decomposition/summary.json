@@ -1,0 +1,128 @@
+{
+  "correction_path_frames": 2963,
+  "final_reconstruction_max_abs_diff": 0.0,
+  "metrics": {
+    "z_cur": {
+      "mIoU": 0.662706834793679,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.0,
+      "rescue_margin_gain": 0.0,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.0
+    },
+    "z_raw": {
+      "mIoU": 0.6599930436994259,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.2217307122722243,
+      "rescue_margin_gain": 0.5168629799949506,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.0072845681211336135
+    },
+    "z_tanh": {
+      "mIoU": 0.6607472219598748,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.2058681797610463,
+      "rescue_margin_gain": 0.4718883128240705,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.0064275515754622535
+    },
+    "z_final": {
+      "mIoU": 0.6627857861729985,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.03982424810619673,
+      "rescue_margin_gain": 0.08671226835461723,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.0009673810123082234
+    }
+  },
+  "checkpoint": {
+    "path": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v9_proposal_supervision/best.pt",
+    "epoch": 3,
+    "experiment": "c_v9_proposal_supervision",
+    "g_max": 0.25
+  },
+  "checkpoint_metric_contract": {
+    "available": true,
+    "checkpoint_mIoU": 0.6627857861729985,
+    "measured_z_final_mIoU": 0.6627857861729985,
+    "difference": 0.0,
+    "atol": 1e-08
+  },
+  "definition": {
+    "z_cur": "frozen C-V3 current logits",
+    "z_raw": "z_cur + upsample(DeltaZ_proposal_raw)",
+    "z_tanh": "z_cur + upsample(tanh(DeltaZ_proposal_raw))",
+    "z_final": "z_cur + upsample(gate) * upsample(tanh(DeltaZ_proposal_raw))",
+    "validity": "same full-resolution any-history-valid mask as deployed C-V9",
+    "rescue_mask": "same formal C-V7 mask",
+    "training": false,
+    "weights_modified": false
+  },
+  "c_v7_reference": {
+    "available": true,
+    "path": "results/kitti_step_c_v7_frozen_correction_decomposition/summary.json",
+    "metrics": {
+      "z_cur": {
+        "mIoU": 0.662706834793679,
+        "rescue_pixels": 31652575,
+        "rescue_recovery_rate": 0.0,
+        "rescue_margin_gain": 0.0,
+        "current_correct_pixels": 1227297192,
+        "current_correct_damage_rate": 0.0
+      },
+      "z_raw": {
+        "mIoU": 0.6400900051998155,
+        "rescue_pixels": 31652575,
+        "rescue_recovery_rate": 0.25721951531589454,
+        "rescue_margin_gain": 0.6328340889276591,
+        "current_correct_pixels": 1227297192,
+        "current_correct_damage_rate": 0.012697378517264627
+      },
+      "z_tanh": {
+        "mIoU": 0.6576266178089963,
+        "rescue_pixels": 31652575,
+        "rescue_recovery_rate": 0.18387312880547632,
+        "rescue_margin_gain": 0.28847233807683687,
+        "current_correct_pixels": 1227297192,
+        "current_correct_damage_rate": 0.006400055382836727
+      },
+      "z_final": {
+        "mIoU": 0.6628020923238017,
+        "rescue_pixels": 31652575,
+        "rescue_recovery_rate": 0.012492380161803582,
+        "rescue_margin_gain": 0.023333957681177558,
+        "current_correct_pixels": 1227297192,
+        "current_correct_damage_rate": 0.00029687837825673115
+      }
+    }
+  },
+  "delta_vs_c_v7_decomposition": {
+    "available": true,
+    "paths": {
+      "z_cur": {
+        "delta_rescue_recovery": 0.0,
+        "delta_rescue_margin_gain": 0.0,
+        "delta_current_correct_damage": 0.0,
+        "delta_mIoU": 0.0
+      },
+      "z_raw": {
+        "delta_rescue_recovery": -0.03548880304367025,
+        "delta_rescue_margin_gain": -0.11597110893270857,
+        "delta_current_correct_damage": -0.005412810396131014,
+        "delta_mIoU": 0.019903038499610393
+      },
+      "z_tanh": {
+        "delta_rescue_recovery": 0.021995050955569972,
+        "delta_rescue_margin_gain": 0.18341597474723365,
+        "delta_current_correct_damage": 2.7496192625526758e-05,
+        "delta_mIoU": 0.0031206041508784477
+      },
+      "z_final": {
+        "delta_rescue_recovery": 0.02733186794439315,
+        "delta_rescue_margin_gain": 0.06337831067343967,
+        "delta_current_correct_damage": 0.0006705026340514922,
+        "delta_mIoU": -1.6306150803169217e-05
+      }
+    }
+  }
+}
