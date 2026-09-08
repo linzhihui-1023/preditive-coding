@@ -175,8 +175,6 @@ def main(argv=None):
     parser.add_argument("--tbptt-steps", type=int, default=c_v5.TBPTT_STEPS)
     parser.add_argument("--lr", type=float, default=c_v5.LEARNING_RATE)
     parser.add_argument("--weight-decay", type=float, default=c_v5.WEIGHT_DECAY)
-    parser.add_argument("--g-max", type=float, default=G_MAX)
-    parser.add_argument("--gate-bias", type=float, default=GATE_BIAS)
     parser.add_argument("--dynamics-tau-e", type=float, default=c_v5.DYNAMICS_TAU_E)
     parser.add_argument("--dynamics-k-e", type=float, default=c_v5.DYNAMICS_K_E)
     parser.add_argument("--dynamics-dt", type=float, default=c_v5.DYNAMICS_DT)
@@ -204,12 +202,14 @@ def main(argv=None):
     )
     refiner, cv3_payload = c_v5._load_frozen_cv3_refiner(args.c_v3_checkpoint)
 
+    # Gate operating point is fixed to C-V7 values for this architecture test.
+    # Do not turn the first C-V8 run into a g_max / gate-bias sweep.
     corrector = DirectErrorProposalCorrector(
         num_classes=c_v5.NUM_CLASSES,
         history_length=c_v5.HISTORY_LENGTH,
         hidden_channels=c_v5.CONTROLLER_HIDDEN_CHANNELS,
-        g_max=args.g_max,
-        gate_bias=args.gate_bias,
+        g_max=G_MAX,
+        gate_bias=GATE_BIAS,
     ).cuda()
     dynamics = EulerDynamicsError(
         tau_e=args.dynamics_tau_e,
@@ -293,6 +293,7 @@ def main(argv=None):
                 "proposal_gate_input_detached": True,
                 "proposal_gate_input_channels": c_v5.NUM_CLASSES,
                 "tanh_bound_retained": True,
+                "fixed_gate_operating_point": True,
             }
         )
 
@@ -345,6 +346,7 @@ def main(argv=None):
                         "gate_channels": 1,
                         "g_max": corrector.g_max,
                         "gate_bias_init": corrector.gate_bias,
+                        "fixed_gate_operating_point": True,
                         "z_cur_detached": True,
                         "output": "Z_final = Z_cur + g * tanh(DeltaZ_proposal)",
                         "validity_order": "upsample first, full-resolution mask second",
@@ -386,6 +388,7 @@ def main(argv=None):
             "tanh_bound": True,
             "g_max": corrector.g_max,
             "gate_bias_init": corrector.gate_bias,
+            "fixed_gate_operating_point": True,
             "training_loss": "final segmentation CE only",
             "temporal_loss": False,
             "raft_training": False,
