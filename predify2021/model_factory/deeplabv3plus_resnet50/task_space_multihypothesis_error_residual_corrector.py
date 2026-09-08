@@ -280,8 +280,10 @@ class MultiHypothesisErrorResidualCorrector(nn.Module):
         )
         gate_hidden = self.gate_pre(gate_evidence)
         gate_logit = self.gate_head(gate_hidden)
+        # Do not apply low-resolution validity here. The caller upsamples this
+        # raw bounded gate first and applies the full-resolution validity mask
+        # exactly once, matching the reviewed C-V6H no-mask-bleed rule.
         gate = self.g_max * torch.sigmoid(gate_logit)
-        gate = gate * aggregate["any_history_valid"]
 
         return {
             "hidden": hidden,
