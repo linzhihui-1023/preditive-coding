@@ -1,0 +1,431 @@
+{
+  "experiment": "C-V9 Rescue-Supervised Direct Prediction-Error Proposal",
+  "base_architecture": "unchanged C-V8",
+  "best": {
+    "epoch": 3,
+    "train": {
+      "frames": 5003,
+      "frames_with_rescue": 5003,
+      "rescue_pixels": 36918154,
+      "optimizer_steps": 630,
+      "proposal_loss_weight": 1.0,
+      "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
+      "segmentation_ce": 0.11691991544630011,
+      "prediction_error_abs": 0.007492968794574591,
+      "dynamics_error_abs": 0.0030111543343091757,
+      "delta_z_abs": 0.01484253962729748,
+      "gate_mean": 0.06895796456747465,
+      "applied_correction_abs": 0.0018390242855200857,
+      "error_reliability_mean": 0.8847070297264658,
+      "sign_agreement_mean": 0.6943756113904441,
+      "valid_fraction_mean": 0.9938577228120964,
+      "total_loss": 1.4812801555981712,
+      "window_final_ce": 0.11768667510459348,
+      "window_proposal_rescue_ce": 1.3635934795652116,
+      "proposal_rescue_ce": 1.3947887752022579,
+      "proposal_raw_rescue_recovery_rate": 0.21331353674942685,
+      "proposal_raw_current_correct_pixels": 2144254922,
+      "proposal_raw_current_correct_damage_rate": 0.004623526287981163
+    },
+    "metrics": {
+      "host": {
+        "mIoU": 0.6541174065367945,
+        "mTC": 0.7077841060023109,
+        "mVC8": 0.9379464611218211,
+        "mVC16": 0.9289708560902963
+      },
+      "c_v3_base": {
+        "mIoU": 0.662706834793679,
+        "mTC": 0.7116843629703805,
+        "mVC8": 0.94442277549366,
+        "mVC16": 0.9364251481219616
+      },
+      "c_v9": {
+        "mIoU": 0.6627857861729985,
+        "mTC": 0.714422331365652,
+        "mVC8": 0.9466771311977291,
+        "mVC16": 0.9392392051608105
+      }
+    },
+    "diagnostics": {
+      "frames_with_correction_path": 2963,
+      "delta_z_abs": 0.01877908115116474,
+      "gate_mean": 0.09295173833247901,
+      "applied_correction_abs": 0.0027644653649936415,
+      "error_reliability_mean": 0.8770110683589218,
+      "sign_agreement_mean": 0.6922224660479777,
+      "history_length": 4,
+      "history_source": "raw detached frozen C-V3 logits",
+      "error_hidden_motion_aligned": true,
+      "error_hidden_reliability_gated": true,
+      "z_cur_detached": true,
+      "bounded_logit_residual": true,
+      "g_max": 0.25,
+      "raft_training": false,
+      "raft_inference_decision": false,
+      "raft_metric_only": true,
+      "semantic_proposal_source": "concat validity-gated e1..e4",
+      "proposal_head": "unchanged C-V8 bias-free zero-init 1x1 Conv 76D->19D",
+      "proposal_supervision": true,
+      "proposal_supervision_scope": "formal Rescue pixels only",
+      "proposal_supervision_path": "Z_raw = Z_cur + upsample(DeltaZ_proposal_raw)",
+      "proposal_loss_weight": 1.0,
+      "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
+      "proposal_loss_gate_bypass": true,
+      "proposal_loss_tanh_bypass": true,
+      "proposal_loss_gt_model_input": false,
+      "proposal_aware_gate": true,
+      "proposal_gate_input_detached": false,
+      "joint_final_ce_gradient": true,
+      "tanh_bound_retained": true,
+      "fixed_gate_operating_point": true
+    },
+    "delta_vs_host": {
+      "mIoU": 0.008668379636204038,
+      "mTC": 0.0066382253633411326,
+      "mVC8": 0.008730670075907998,
+      "mVC16": 0.010268349070514216
+    },
+    "delta_vs_c_v3": {
+      "mIoU": 7.895137931956953e-05,
+      "mTC": 0.0027379683952715173,
+      "mVC8": 0.0022543557040690665,
+      "mVC16": 0.0028140570388488495
+    },
+    "selection_key": [
+      0,
+      0.6627857861729985,
+      0.714422331365652
+    ]
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train": {
+        "frames": 5003,
+        "frames_with_rescue": 5003,
+        "rescue_pixels": 36918154,
+        "optimizer_steps": 630,
+        "proposal_loss_weight": 1.0,
+        "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
+        "segmentation_ce": 0.11746998714491973,
+        "prediction_error_abs": 0.007492968794574591,
+        "dynamics_error_abs": 0.0030111543343091757,
+        "delta_z_abs": 0.0034143708129066017,
+        "gate_mean": 0.0399974682704344,
+        "applied_correction_abs": 0.00026364933834995306,
+        "error_reliability_mean": 0.8847070297264658,
+        "sign_agreement_mean": 0.6943756113904441,
+        "valid_fraction_mean": 0.9938577228120964,
+        "total_loss": 1.7357622950796097,
+        "window_final_ce": 0.11823905219752637,
+        "window_proposal_rescue_ce": 1.6175232448275128,
+        "proposal_rescue_ce": 1.6496612596992541,
+        "proposal_raw_rescue_recovery_rate": 0.04363723061559362,
+        "proposal_raw_current_correct_pixels": 2144254922,
+        "proposal_raw_current_correct_damage_rate": 0.0007391910279593146
+      },
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC8": 0.9379464611218211,
+          "mVC16": 0.9289708560902963
+        },
+        "c_v3_base": {
+          "mIoU": 0.662706834793679,
+          "mTC": 0.7116843629703805,
+          "mVC8": 0.94442277549366,
+          "mVC16": 0.9364251481219616
+        },
+        "c_v9": {
+          "mIoU": 0.6627000118614144,
+          "mTC": 0.7122954865056432,
+          "mVC8": 0.9450607711798193,
+          "mVC16": 0.9372503838662912
+        }
+      },
+      "diagnostics": {
+        "frames_with_correction_path": 2963,
+        "delta_z_abs": 0.007313638061847333,
+        "gate_mean": 0.055323818624975145,
+        "applied_correction_abs": 0.0008129766329543935,
+        "error_reliability_mean": 0.8770110683589218,
+        "sign_agreement_mean": 0.6922224660479777,
+        "history_length": 4,
+        "history_source": "raw detached frozen C-V3 logits",
+        "error_hidden_motion_aligned": true,
+        "error_hidden_reliability_gated": true,
+        "z_cur_detached": true,
+        "bounded_logit_residual": true,
+        "g_max": 0.25,
+        "raft_training": false,
+        "raft_inference_decision": false,
+        "raft_metric_only": true,
+        "semantic_proposal_source": "concat validity-gated e1..e4",
+        "proposal_head": "unchanged C-V8 bias-free zero-init 1x1 Conv 76D->19D",
+        "proposal_supervision": true,
+        "proposal_supervision_scope": "formal Rescue pixels only",
+        "proposal_supervision_path": "Z_raw = Z_cur + upsample(DeltaZ_proposal_raw)",
+        "proposal_loss_weight": 1.0,
+        "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
+        "proposal_loss_gate_bypass": true,
+        "proposal_loss_tanh_bypass": true,
+        "proposal_loss_gt_model_input": false,
+        "proposal_aware_gate": true,
+        "proposal_gate_input_detached": false,
+        "joint_final_ce_gradient": true,
+        "tanh_bound_retained": true,
+        "fixed_gate_operating_point": true
+      },
+      "delta_vs_host": {
+        "mIoU": 0.008582605324619852,
+        "mTC": 0.0045113805033323295,
+        "mVC8": 0.00711431005799823,
+        "mVC16": 0.008279527775994944
+      },
+      "delta_vs_c_v3": {
+        "mIoU": -6.822932264616277e-06,
+        "mTC": 0.0006111235352627142,
+        "mVC8": 0.0006379956861592984,
+        "mVC16": 0.0008252357443295777
+      },
+      "selection_key": [
+        0,
+        0.6627000118614144,
+        0.7122954865056432
+      ]
+    },
+    {
+      "epoch": 2,
+      "train": {
+        "frames": 5003,
+        "frames_with_rescue": 5003,
+        "rescue_pixels": 36918154,
+        "optimizer_steps": 630,
+        "proposal_loss_weight": 1.0,
+        "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
+        "segmentation_ce": 0.1171848136959953,
+        "prediction_error_abs": 0.007492968794574591,
+        "dynamics_error_abs": 0.0030111543343091757,
+        "delta_z_abs": 0.009435963602009899,
+        "gate_mean": 0.05938534133952367,
+        "applied_correction_abs": 0.0010519510008125995,
+        "error_reliability_mean": 0.8847070297264658,
+        "sign_agreement_mean": 0.6943756113904441,
+        "valid_fraction_mean": 0.9938577228120964,
+        "total_loss": 1.6023542457156712,
+        "window_final_ce": 0.11795250768108027,
+        "window_proposal_rescue_ce": 1.4844017367514353,
+        "proposal_rescue_ce": 1.5161847515282616,
+        "proposal_raw_rescue_recovery_rate": 0.12967189529573986,
+        "proposal_raw_current_correct_pixels": 2144254922,
+        "proposal_raw_current_correct_damage_rate": 0.0024922181337541545
+      },
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC8": 0.9379464611218211,
+          "mVC16": 0.9289708560902963
+        },
+        "c_v3_base": {
+          "mIoU": 0.662706834793679,
+          "mTC": 0.7116843629703805,
+          "mVC8": 0.94442277549366,
+          "mVC16": 0.9364251481219616
+        },
+        "c_v9": {
+          "mIoU": 0.6627717708490304,
+          "mTC": 0.7137696848590751,
+          "mVC8": 0.9460241504871396,
+          "mVC16": 0.9384178484608013
+        }
+      },
+      "diagnostics": {
+        "frames_with_correction_path": 2963,
+        "delta_z_abs": 0.013301995450354499,
+        "gate_mean": 0.07845035581332463,
+        "applied_correction_abs": 0.0020201014765313776,
+        "error_reliability_mean": 0.8770110683589218,
+        "sign_agreement_mean": 0.6922224660479777,
+        "history_length": 4,
+        "history_source": "raw detached frozen C-V3 logits",
+        "error_hidden_motion_aligned": true,
+        "error_hidden_reliability_gated": true,
+        "z_cur_detached": true,
+        "bounded_logit_residual": true,
+        "g_max": 0.25,
+        "raft_training": false,
+        "raft_inference_decision": false,
+        "raft_metric_only": true,
+        "semantic_proposal_source": "concat validity-gated e1..e4",
+        "proposal_head": "unchanged C-V8 bias-free zero-init 1x1 Conv 76D->19D",
+        "proposal_supervision": true,
+        "proposal_supervision_scope": "formal Rescue pixels only",
+        "proposal_supervision_path": "Z_raw = Z_cur + upsample(DeltaZ_proposal_raw)",
+        "proposal_loss_weight": 1.0,
+        "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
+        "proposal_loss_gate_bypass": true,
+        "proposal_loss_tanh_bypass": true,
+        "proposal_loss_gt_model_input": false,
+        "proposal_aware_gate": true,
+        "proposal_gate_input_detached": false,
+        "joint_final_ce_gradient": true,
+        "tanh_bound_retained": true,
+        "fixed_gate_operating_point": true
+      },
+      "delta_vs_host": {
+        "mIoU": 0.008654364312235874,
+        "mTC": 0.0059855788567642065,
+        "mVC8": 0.008077689365318497,
+        "mVC16": 0.009446992370505058
+      },
+      "delta_vs_c_v3": {
+        "mIoU": 6.493605535140556e-05,
+        "mTC": 0.0020853218886945912,
+        "mVC8": 0.0016013749934795651,
+        "mVC16": 0.0019927003388396924
+      },
+      "selection_key": [
+        0,
+        0.6627717708490304,
+        0.7137696848590751
+      ]
+    },
+    {
+      "epoch": 3,
+      "train": {
+        "frames": 5003,
+        "frames_with_rescue": 5003,
+        "rescue_pixels": 36918154,
+        "optimizer_steps": 630,
+        "proposal_loss_weight": 1.0,
+        "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
+        "segmentation_ce": 0.11691991544630011,
+        "prediction_error_abs": 0.007492968794574591,
+        "dynamics_error_abs": 0.0030111543343091757,
+        "delta_z_abs": 0.01484253962729748,
+        "gate_mean": 0.06895796456747465,
+        "applied_correction_abs": 0.0018390242855200857,
+        "error_reliability_mean": 0.8847070297264658,
+        "sign_agreement_mean": 0.6943756113904441,
+        "valid_fraction_mean": 0.9938577228120964,
+        "total_loss": 1.4812801555981712,
+        "window_final_ce": 0.11768667510459348,
+        "window_proposal_rescue_ce": 1.3635934795652116,
+        "proposal_rescue_ce": 1.3947887752022579,
+        "proposal_raw_rescue_recovery_rate": 0.21331353674942685,
+        "proposal_raw_current_correct_pixels": 2144254922,
+        "proposal_raw_current_correct_damage_rate": 0.004623526287981163
+      },
+      "metrics": {
+        "host": {
+          "mIoU": 0.6541174065367945,
+          "mTC": 0.7077841060023109,
+          "mVC8": 0.9379464611218211,
+          "mVC16": 0.9289708560902963
+        },
+        "c_v3_base": {
+          "mIoU": 0.662706834793679,
+          "mTC": 0.7116843629703805,
+          "mVC8": 0.94442277549366,
+          "mVC16": 0.9364251481219616
+        },
+        "c_v9": {
+          "mIoU": 0.6627857861729985,
+          "mTC": 0.714422331365652,
+          "mVC8": 0.9466771311977291,
+          "mVC16": 0.9392392051608105
+        }
+      },
+      "diagnostics": {
+        "frames_with_correction_path": 2963,
+        "delta_z_abs": 0.01877908115116474,
+        "gate_mean": 0.09295173833247901,
+        "applied_correction_abs": 0.0027644653649936415,
+        "error_reliability_mean": 0.8770110683589218,
+        "sign_agreement_mean": 0.6922224660479777,
+        "history_length": 4,
+        "history_source": "raw detached frozen C-V3 logits",
+        "error_hidden_motion_aligned": true,
+        "error_hidden_reliability_gated": true,
+        "z_cur_detached": true,
+        "bounded_logit_residual": true,
+        "g_max": 0.25,
+        "raft_training": false,
+        "raft_inference_decision": false,
+        "raft_metric_only": true,
+        "semantic_proposal_source": "concat validity-gated e1..e4",
+        "proposal_head": "unchanged C-V8 bias-free zero-init 1x1 Conv 76D->19D",
+        "proposal_supervision": true,
+        "proposal_supervision_scope": "formal Rescue pixels only",
+        "proposal_supervision_path": "Z_raw = Z_cur + upsample(DeltaZ_proposal_raw)",
+        "proposal_loss_weight": 1.0,
+        "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
+        "proposal_loss_gate_bypass": true,
+        "proposal_loss_tanh_bypass": true,
+        "proposal_loss_gt_model_input": false,
+        "proposal_aware_gate": true,
+        "proposal_gate_input_detached": false,
+        "joint_final_ce_gradient": true,
+        "tanh_bound_retained": true,
+        "fixed_gate_operating_point": true
+      },
+      "delta_vs_host": {
+        "mIoU": 0.008668379636204038,
+        "mTC": 0.0066382253633411326,
+        "mVC8": 0.008730670075907998,
+        "mVC16": 0.010268349070514216
+      },
+      "delta_vs_c_v3": {
+        "mIoU": 7.895137931956953e-05,
+        "mTC": 0.0027379683952715173,
+        "mVC8": 0.0022543557040690665,
+        "mVC16": 0.0028140570388488495
+      },
+      "selection_key": [
+        0,
+        0.6627857861729985,
+        0.714422331365652
+      ]
+    }
+  ],
+  "zero_step": {
+    "proposal_head_weight_abs_max": 0.0,
+    "proposal_head_bias": false,
+    "delta_z_raw_abs_max": 0.0,
+    "c_v8_vs_c_v3_logit_abs_max": 0.0,
+    "gate_bias": -2.0,
+    "g_max": 0.25
+  },
+  "selection_rule": {
+    "hard_constraint": "C-V9 mIoU >= fixed C-V4 E2 floor 0.6637739071008685",
+    "objective_after_constraint": "maximize C-V9 mTC, then mIoU",
+    "fallback_if_all_fail_floor": "highest mIoU, then mTC"
+  },
+  "training_supervision": {
+    "total_loss": "mean_all_frames(L_final_CE) + mean_rescue_frames(L_proposal_rescue_CE)",
+    "proposal_loss_weight": 1.0,
+    "proposal_loss_weight_sweep": false,
+    "proposal_loss_scope": "formal Rescue pixels on Rescue-bearing frames only",
+    "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
+    "rescue_frame_dilution": false,
+    "proposal_loss_bypasses_gate": true,
+    "proposal_loss_bypasses_tanh": true,
+    "gate_supervision_changed": false,
+    "temporal_loss": false
+  },
+  "frozen_checkpoints": {
+    "fast_b": "/home/lin/predify/experiments/kitti_step_semantic_v3_joint_c4_fast_ab_5754714/fast_b_joint_c4_weak_z4/best.pt",
+    "observer": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_observer/best.pt",
+    "residual": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_task_alignment_r2/best.pt",
+    "e1_base": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v2_stage1b_spatial_mask_semantic_state_r2/epoch_001.pt",
+    "c_v3_base": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v3_memory_supervision_stage_a/best.pt",
+    "c_v3_checkpoint_epoch": 1,
+    "residual_experiment": "c_v2_stage1b2_residual_motion",
+    "e1_experiment": "c_v2_stage1b_spatial_mask_semantic_state_r2"
+  },
+  "tbptt_steps": 8,
+  "epochs": 3
+}
