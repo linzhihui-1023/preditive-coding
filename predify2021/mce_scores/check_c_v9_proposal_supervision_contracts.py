@@ -23,10 +23,8 @@ HISTORY_LENGTH = 4
 
 def _synthetic_case():
     current = torch.zeros(1, NUM_CLASSES, 2, 2)
-    # Make class 0 the current winner everywhere without extreme logits.
     current[:, 0] = 0.5
     raw_low = torch.zeros(1, NUM_CLASSES, 2, 2, requires_grad=True)
-    # At the single Rescue pixel, favor GT class 1.
     raw_low.data[:, 1, 0, 0] = 1.0
     valid = torch.ones(1, 1, 2, 2)
     gt = torch.tensor([[1, 2], [3, 4]], dtype=torch.long)
@@ -57,7 +55,6 @@ def _check_raw_ungated_unbounded_path():
     expected = current + raw_low
     if not torch.equal(z_raw, expected):
         raise RuntimeError("Proposal supervision is not using raw unbounded DeltaZ")
-    # If tanh had been inserted, value 1.0 would become tanh(1.0).
     if float(z_raw[0, 1, 0, 0].item()) != 1.0:
         raise RuntimeError("Proposal supervision appears bounded before the loss")
     if not bool(torch.isfinite(loss).item()):
@@ -73,7 +70,6 @@ def _check_rescue_only_scope():
         gt,
         rescue,
     )
-    # Change every non-Rescue target. The Proposal loss must remain identical.
     gt_b = gt.clone()
     gt_b[0, 1] = 5
     gt_b[1, 0] = 6
@@ -122,7 +118,6 @@ def _check_proposal_gradient_and_no_gate_dependency():
         g_max=0.25,
         gate_bias=-2.0,
     )
-    # Give the zero-initialized head a synthetic differentiable 76D input.
     proposal_input = torch.randn(1, NUM_CLASSES * HISTORY_LENGTH, 2, 2)
     delta_raw = model.proposal_head(proposal_input)
     current = torch.zeros(1, NUM_CLASSES, 2, 2)
@@ -152,10 +147,43 @@ def _check_proposal_gradient_and_no_gate_dependency():
             )
 
 
+def _check_tbptt_rescue_frame_dilution():
+    # Eight final-loss frames but only one Rescue-bearing Proposal-loss frame.
+    # The Proposal term must retain weight 1.0, not be divided by eight.
+    final_losses = [torch.tensor(float(index + 1)) for index in range(8)]
+    proposal_losses = [torch.tensor(10.0)]
+    total, final_mean, proposal_mean = c_v9._compose_window_loss(
+        final_losses,
+        proposal_losses,
+    )
+    expected_final = torch.tensor(4.5)
+    expected_proposal = torch.tensor(10.0)
+    expected_total = expected_final + c_v9.PROPOSAL_LOSS_WEIGHT * expected_proposal
+    if not torch.allclose(final_mean, expected_final, atol=0.0, rtol=0.0):
+        raise RuntimeError("TBPTT final CE mean changed")
+    if not torch.allclose(proposal_mean, expected_proposal, atol=0.0, rtol=0.0):
+        raise RuntimeError("Proposal loss was diluted by non-Rescue frames")
+    if not torch.allclose(total, expected_total, atol=0.0, rtol=0.0):
+        raise RuntimeError("C-V9 TBPTT objective does not preserve Proposal weight 1.0")
+
+    total_empty, final_empty, proposal_empty = c_v9._compose_window_loss(
+        final_losses,
+        [],
+    )
+    if not torch.allclose(final_empty, expected_final, atol=0.0, rtol=0.0):
+        raise RuntimeError("final CE changed when a window has no Rescue frame")
+    if float(proposal_empty.item()) != 0.0:
+        raise RuntimeError("no-Rescue TBPTT window must have zero Proposal loss")
+    if not torch.allclose(total_empty, expected_final, atol=0.0, rtol=0.0):
+        raise RuntimeError("no-Rescue TBPTT window objective must equal final CE")
+
+
 def _check_total_loss_contract_text():
     source = inspect.getsource(c_v9._train_sequence)
     required = (
-        "segmentation_ce + PROPOSAL_LOSS_WEIGHT * proposal_rescue_ce",
+        "buffered_final_losses.append(segmentation_ce)",
+        "buffered_proposal_losses.append(proposal_rescue_ce)",
+        "_compose_window_loss",
         "diagnostic._build_diagnostic_masks",
         'masks["rescue"]',
         'evidence["row"]["delta_z_raw"]',
@@ -172,14 +200,16 @@ def main():
     _check_rescue_only_scope()
     _check_validity_order()
     _check_proposal_gradient_and_no_gate_dependency()
+    _check_tbptt_rescue_frame_dilution()
     _check_total_loss_contract_text()
     print(
         {
             "passed": True,
             "base_architecture": "unchanged C-V8",
-            "total_loss": "final segmentation CE + Rescue-only raw Proposal CE",
+            "total_loss": "mean_all_frames(final CE) + mean_rescue_frames(raw Proposal CE)",
             "proposal_loss_weight": c_v9.PROPOSAL_LOSS_WEIGHT,
             "proposal_loss_weight_sweep": False,
+            "proposal_loss_rescue_frame_dilution": False,
             "proposal_path": "Z_cur + full-valid * upsample(DeltaZ_proposal_raw)",
             "proposal_loss_gate_bypass": True,
             "proposal_loss_tanh_bypass": True,
