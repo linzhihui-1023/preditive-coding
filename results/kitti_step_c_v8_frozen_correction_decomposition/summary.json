@@ -1,0 +1,128 @@
+{
+  "correction_path_frames": 2963,
+  "final_reconstruction_max_abs_diff": 0.0,
+  "metrics": {
+    "z_cur": {
+      "mIoU": 0.662706834793679,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.0,
+      "rescue_margin_gain": 0.0,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.0
+    },
+    "z_raw": {
+      "mIoU": 0.6623337822046262,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.0899059871116331,
+      "rescue_margin_gain": 0.2005627496714258,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.0028545555410999426
+    },
+    "z_tanh": {
+      "mIoU": 0.6625265535819608,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.08620183350011808,
+      "rescue_margin_gain": 0.18774769881052927,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.002701144451082554
+    },
+    "z_final": {
+      "mIoU": 0.6628906887891883,
+      "rescue_pixels": 31652575,
+      "rescue_recovery_rate": 0.017559835179286363,
+      "rescue_margin_gain": 0.041387260867392674,
+      "current_correct_pixels": 1227297192,
+      "current_correct_damage_rate": 0.00044728367634039204
+    }
+  },
+  "checkpoint": {
+    "path": "/home/lin/predify/experiments/kitti_step_task_space_prior_c_v8_direct_error_proposal_gate/best.pt",
+    "epoch": 3,
+    "experiment": "c_v8_direct_error_proposal_gate",
+    "g_max": 0.25
+  },
+  "checkpoint_metric_contract": {
+    "available": true,
+    "checkpoint_mIoU": 0.6628906887891883,
+    "measured_z_final_mIoU": 0.6628906887891883,
+    "difference": 0.0,
+    "atol": 1e-08
+  },
+  "definition": {
+    "z_cur": "frozen C-V3 current logits",
+    "z_raw": "z_cur + upsample(DeltaZ_proposal_raw)",
+    "z_tanh": "z_cur + upsample(tanh(DeltaZ_proposal_raw))",
+    "z_final": "z_cur + upsample(gate) * upsample(tanh(DeltaZ_proposal_raw))",
+    "validity": "same full-resolution any-history-valid mask as deployed C-V8",
+    "rescue_mask": "same formal mask: C-V3 wrong AND any valid aligned history predicts GT",
+    "training": false,
+    "weights_modified": false
+  },
+  "c_v7_reference": {
+    "available": true,
+    "path": "results/kitti_step_c_v7_frozen_correction_decomposition/summary.json",
+    "metrics": {
+      "z_cur": {
+        "mIoU": 0.662706834793679,
+        "rescue_pixels": 31652575,
+        "rescue_recovery_rate": 0.0,
+        "rescue_margin_gain": 0.0,
+        "current_correct_pixels": 1227297192,
+        "current_correct_damage_rate": 0.0
+      },
+      "z_raw": {
+        "mIoU": 0.6400900051998155,
+        "rescue_pixels": 31652575,
+        "rescue_recovery_rate": 0.25721951531589454,
+        "rescue_margin_gain": 0.6328340889276591,
+        "current_correct_pixels": 1227297192,
+        "current_correct_damage_rate": 0.012697378517264627
+      },
+      "z_tanh": {
+        "mIoU": 0.6576266178089963,
+        "rescue_pixels": 31652575,
+        "rescue_recovery_rate": 0.18387312880547632,
+        "rescue_margin_gain": 0.28847233807683687,
+        "current_correct_pixels": 1227297192,
+        "current_correct_damage_rate": 0.006400055382836727
+      },
+      "z_final": {
+        "mIoU": 0.6628020923238017,
+        "rescue_pixels": 31652575,
+        "rescue_recovery_rate": 0.012492380161803582,
+        "rescue_margin_gain": 0.023333957681177558,
+        "current_correct_pixels": 1227297192,
+        "current_correct_damage_rate": 0.00029687837825673115
+      }
+    }
+  },
+  "delta_vs_c_v7_decomposition": {
+    "available": true,
+    "paths": {
+      "z_cur": {
+        "delta_rescue_recovery": 0.0,
+        "delta_rescue_margin_gain": 0.0,
+        "delta_current_correct_damage": 0.0,
+        "delta_mIoU": 0.0
+      },
+      "z_raw": {
+        "delta_rescue_recovery": -0.16731352820426143,
+        "delta_rescue_margin_gain": -0.43227133925623334,
+        "delta_current_correct_damage": -0.009842822976164685,
+        "delta_mIoU": 0.022243777004810728
+      },
+      "z_tanh": {
+        "delta_rescue_recovery": -0.09767129530535824,
+        "delta_rescue_margin_gain": -0.10072463926630759,
+        "delta_current_correct_damage": -0.0036989109317541726,
+        "delta_mIoU": 0.004899935772964437
+      },
+      "z_final": {
+        "delta_rescue_recovery": 0.005067455017482781,
+        "delta_rescue_margin_gain": 0.018053303186215116,
+        "delta_current_correct_damage": 0.00015040529808366088,
+        "delta_mIoU": 8.859646538661448e-05
+      }
+    }
+  }
+}
