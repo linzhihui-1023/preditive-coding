@@ -1,0 +1,72 @@
+{
+  "epoch": 2,
+  "train": {
+    "frames": 5003,
+    "optimizer_steps": 630,
+    "segmentation_ce": 0.11523570964016451,
+    "prediction_error_abs": 0.007492968794574591,
+    "dynamics_error_abs": 0.0030111543343091757,
+    "delta_z_abs": 0.6063373755472268,
+    "gate_mean": 0.06100177115070303,
+    "applied_correction_abs": 0.04248285594160065,
+    "error_reliability_mean": 0.8847070297264658,
+    "sign_agreement_mean": 0.6943756113904441,
+    "valid_fraction_mean": 0.9938577228120964
+  },
+  "metrics": {
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC8": 0.9379464611218211,
+      "mVC16": 0.9289708560902963
+    },
+    "c_v3_base": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC8": 0.94442277549366,
+      "mVC16": 0.9364251481219616
+    },
+    "c_v7": {
+      "mIoU": 0.6626611255528355,
+      "mTC": 0.7130000232839562,
+      "mVC8": 0.945631153462144,
+      "mVC16": 0.9380210912754141
+    }
+  },
+  "diagnostics": {
+    "frames_with_correction_path": 2963,
+    "delta_z_abs": 0.7067933070812521,
+    "gate_mean": 0.023984606907405323,
+    "applied_correction_abs": 0.017729913729733,
+    "error_reliability_mean": 0.8770110683589218,
+    "sign_agreement_mean": 0.6922224660479777,
+    "history_length": 4,
+    "history_source": "raw detached frozen C-V3 logits",
+    "raw_history_enters_correction_head": false,
+    "error_hidden_motion_aligned": true,
+    "error_hidden_reliability_gated": true,
+    "z_cur_detached": true,
+    "bounded_logit_residual": true,
+    "g_max": 0.25,
+    "raft_training": false,
+    "raft_inference_decision": false,
+    "raft_metric_only": true
+  },
+  "delta_vs_host": {
+    "mIoU": 0.008543719016041007,
+    "mTC": 0.005215917281645277,
+    "mVC8": 0.007684692340322874,
+    "mVC16": 0.009050235185117828
+  },
+  "delta_vs_c_v3": {
+    "mIoU": -4.5709240843461174e-05,
+    "mTC": 0.0013156603135756617,
+    "mVC8": 0.0012083779684839424,
+    "mVC16": 0.0015959431534524615
+  },
+  "selection_key": [
+    0,
+    0.6626611255528355,
+    0.7130000232839562
+  ]
+}
