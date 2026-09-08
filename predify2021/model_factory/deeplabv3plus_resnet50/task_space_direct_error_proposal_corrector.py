@@ -12,9 +12,10 @@ Research boundary / 研究边界
    and serves temporal context / reliability, not the sole semantic readout.
 5. Gate is proposal-aware: it explicitly observes DeltaZ_proposal together with
    H_err, Dynamics Error（动力学误差）and reliability evidence.
-6. Proposal is detached only on the Gate-input branch, keeping proposal-content
-   and proposal-acceptance gradients separated while preserving the same
-   inference-time numeric value.
+6. Proposal and Gate are jointly optimized by the final segmentation CE.  The
+   inference responsibility remains separated because Proposal depends only on
+   Prediction Error, while Gate decides proposal acceptance from temporal/safety
+   context plus the proposal itself.
 7. tanh bounded residual（双曲正切有界残差）and scalar g_max Gate are retained.
 """
 
@@ -84,9 +85,9 @@ class DirectErrorProposalCorrector(nn.Module):
         )
 
         # Gate evidence keeps the validated temporal/reliability context and adds
-        # the actual 19D semantic proposal.  The proposal branch is detached in
-        # forward() before concatenation so acceptance gradients do not redefine
-        # proposal content through this side path.
+        # the actual 19D semantic proposal.  No extra stop-gradient is introduced:
+        # the first architecture test changes the information path, not the
+        # optimization graph beyond what follows naturally from that path.
         gate_channels = (
             self.hidden_channels
             + 2 * self.num_classes
@@ -205,7 +206,6 @@ class DirectErrorProposalCorrector(nn.Module):
         delta_z_raw,
     ):
         best_history_margin = torch.stack(history_margins, dim=1).max(dim=1).values
-        proposal_for_gate = delta_z_raw.detach()
         return torch.cat(
             (
                 hidden,
@@ -216,7 +216,7 @@ class DirectErrorProposalCorrector(nn.Module):
                 memory_reliability_low,
                 aggregate["valid_fraction"],
                 aggregate["any_history_valid"],
-                proposal_for_gate,
+                delta_z_raw,
             ),
             dim=1,
         )
@@ -284,7 +284,7 @@ class DirectErrorProposalCorrector(nn.Module):
         delta_z_raw = self.proposal_head(aggregate["proposal_input"])
         delta_z = torch.tanh(delta_z_raw)
 
-        # Temporal memory now conditions acceptance, not semantic proposal content.
+        # Temporal memory conditions acceptance; Gate also sees proposal content.
         gate_evidence = self._build_gate_evidence(
             hidden,
             dynamics_error,
@@ -304,7 +304,7 @@ class DirectErrorProposalCorrector(nn.Module):
             "warped_hidden": warped_hidden,
             "error_reliability": error_reliability,
             "proposal_input": aggregate["proposal_input"],
-            "proposal_for_gate": delta_z_raw.detach(),
+            "proposal_for_gate": delta_z_raw,
             "gate_evidence": gate_evidence,
             # Keep C-V7-compatible output names for the shared training/eval path.
             "delta_z_raw": delta_z_raw,
