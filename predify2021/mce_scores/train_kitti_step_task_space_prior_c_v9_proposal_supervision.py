@@ -6,7 +6,7 @@ Evidence-driven change / 基于已有证据的唯一变化
 ------------------------------------------------
 C-V8 frozen decomposition showed that the largest capability gap is before
 Gate/tanh: error_76 has strong linear semantic decodability, while the trained
-C-V8 raw Proposal recovers only a small fraction of Rescue pixels.  Therefore
+C-V8 raw Proposal recovers only a small fraction of Rescue pixels. Therefore
 this experiment changes Proposal learning, not the inference architecture.
 
 Architecture / 推理结构
@@ -18,7 +18,9 @@ Z_final = Z_cur + g * tanh(DeltaZ_proposal)
 
 Training / 训练
 --------------
-L = L_final_CE + L_proposal_rescue_CE
+Within each TBPTT window:
+    L = mean_all_frames(L_final_CE)
+        + mean_rescue_frames(L_proposal_rescue_CE)
 
 L_final_CE is unchanged C-V8 final segmentation CE.
 L_proposal_rescue_CE is computed on the *raw*, ungated, unbounded proposal path:
@@ -26,10 +28,11 @@ L_proposal_rescue_CE is computed on the *raw*, ungated, unbounded proposal path:
 and only on Rescue pixels:
     C-V3 wrong AND at least one valid motion-aligned history predicts GT.
 
-The Rescue definition is exactly the formal semantic-decoding diagnostic mask.
-GT is used only for supervised training roles/losses; it is never a model input
-and creates no inference-time dependency.  Proposal loss weight is fixed to 1.0
-and is intentionally not exposed as a sweep parameter.
+Frames without Rescue do not enter the Proposal-loss mean, so the fixed Proposal
+loss weight 1.0 is not diluted by the fraction of Rescue-bearing frames in a
+TBPTT window. The Rescue definition is exactly the formal semantic-decoding
+diagnostic mask. GT is used only for supervised training roles/losses; it is
+never a model input and creates no inference-time dependency.
 """
 
 import argparse
@@ -87,7 +90,7 @@ def _proposal_rescue_ce(
 ):
     """Directly supervise the raw Proposal on formal Rescue pixels only.
 
-    Returns (loss, z_raw, rescue_pixels).  No Gate, tanh, H_err or reliability
+    Returns (loss, z_raw, rescue_pixels). No Gate, tanh, H_err or reliability
     tensor enters this function, so this auxiliary loss can update Proposal Head
     but cannot directly train Gate/Error Memory.
     """
@@ -119,10 +122,27 @@ def _proposal_rescue_ce(
     if rescue_pixels:
         loss = per_pixel[rescue].mean()
     else:
-        # Keep a graph-connected exact zero so the caller can combine losses
-        # without special gradient handling.
         loss = per_pixel.sum() * 0.0
     return loss, z_raw, rescue_pixels
+
+
+def _compose_window_loss(final_losses, proposal_losses):
+    """Compose the exact C-V9 TBPTT objective without Rescue-frame dilution.
+
+    Final CE is averaged over every frame in the TBPTT window. Proposal CE is
+    averaged only over frames that contain at least one formal Rescue pixel.
+    Thus PROPOSAL_LOSS_WEIGHT=1.0 remains 1.0 regardless of how many non-Rescue
+    frames are present in the same window.
+    """
+    if not final_losses:
+        raise ValueError("final_losses must be non-empty")
+    final_mean = torch.stack(final_losses).mean()
+    if proposal_losses:
+        proposal_mean = torch.stack(proposal_losses).mean()
+    else:
+        proposal_mean = final_mean * 0.0
+    total = final_mean + PROPOSAL_LOSS_WEIGHT * proposal_mean
+    return total, final_mean, proposal_mean
 
 
 def _train_sequence(
@@ -159,7 +179,8 @@ def _train_sequence(
     error_hidden = None
     dynamics_state = None
 
-    buffered_losses = []
+    buffered_final_losses = []
+    buffered_proposal_losses = []
     frames_in_window = 0
     totals = {
         "frames": 0,
@@ -169,6 +190,8 @@ def _train_sequence(
         "segmentation_ce": 0.0,
         "proposal_rescue_ce_sum": 0.0,
         "total_loss": 0.0,
+        "window_final_ce": 0.0,
+        "window_proposal_rescue_ce": 0.0,
         "prediction_error_abs": 0.0,
         "dynamics_error_abs": 0.0,
         "delta_z_abs": 0.0,
@@ -262,10 +285,11 @@ def _train_sequence(
             current_gt,
             masks["rescue"],
         )
-        total_loss = segmentation_ce + PROPOSAL_LOSS_WEIGHT * proposal_rescue_ce
-        if not torch.isfinite(total_loss):
-            raise FloatingPointError("Non-finite C-V9 training loss")
-        buffered_losses.append(total_loss)
+        if not torch.isfinite(segmentation_ce) or not torch.isfinite(proposal_rescue_ce):
+            raise FloatingPointError("Non-finite C-V9 training loss component")
+        buffered_final_losses.append(segmentation_ce)
+        if rescue_pixels:
+            buffered_proposal_losses.append(proposal_rescue_ce)
 
         with torch.no_grad():
             observed_motion = c_v5._observe_motion(
@@ -285,7 +309,6 @@ def _train_sequence(
             row = evidence["row"]
             totals["frames"] += 1
             totals["segmentation_ce"] += float(segmentation_ce.detach().item())
-            totals["total_loss"] += float(total_loss.detach().item())
             totals["prediction_error_abs"] += float(
                 evidence["prediction_error"].abs().mean().item()
             )
@@ -327,13 +350,24 @@ def _train_sequence(
         frames_in_window += 1
         boundary = frames_in_window >= tbptt_steps or frame_index == len(samples) - 1
         if boundary:
-            if buffered_losses:
-                window_loss = torch.stack(buffered_losses).mean()
+            if buffered_final_losses:
+                window_loss, window_final, window_proposal = _compose_window_loss(
+                    buffered_final_losses,
+                    buffered_proposal_losses,
+                )
+                if not torch.isfinite(window_loss):
+                    raise FloatingPointError("Non-finite C-V9 TBPTT window loss")
                 optimizer.zero_grad(set_to_none=True)
                 window_loss.backward()
                 optimizer.step()
                 totals["optimizer_steps"] += 1
-            buffered_losses = []
+                totals["total_loss"] += float(window_loss.detach().item())
+                totals["window_final_ce"] += float(window_final.detach().item())
+                totals["window_proposal_rescue_ce"] += float(
+                    window_proposal.detach().item()
+                )
+            buffered_final_losses = []
+            buffered_proposal_losses = []
             frames_in_window = 0
             if error_hidden is not None:
                 error_hidden = error_hidden.detach()
@@ -354,7 +388,6 @@ def _train_sequence(
     frames = max(totals["frames"], 1)
     for key in (
         "segmentation_ce",
-        "total_loss",
         "prediction_error_abs",
         "dynamics_error_abs",
         "delta_z_abs",
@@ -365,6 +398,10 @@ def _train_sequence(
         "valid_fraction_mean",
     ):
         totals[key] /= frames
+
+    optimizer_steps = max(totals["optimizer_steps"], 1)
+    for key in ("total_loss", "window_final_ce", "window_proposal_rescue_ce"):
+        totals[key] /= optimizer_steps
 
     rescue_den = max(totals["rescue_pixels"], 1)
     totals["proposal_rescue_ce"] = totals.pop("proposal_rescue_ce_sum") / rescue_den
@@ -416,6 +453,7 @@ def _train_epoch(
         raise RuntimeError("No valid C-V9 training sequences")
 
     frame_total = max(sum(row["frames"] for row in rows), 1)
+    step_total = max(sum(row["optimizer_steps"] for row in rows), 1)
     rescue_total = max(sum(row["rescue_pixels"] for row in rows), 1)
     correct_total = max(
         sum(row["proposal_raw_current_correct_pixels"] for row in rows),
@@ -427,10 +465,10 @@ def _train_epoch(
         "rescue_pixels": sum(row["rescue_pixels"] for row in rows),
         "optimizer_steps": sum(row["optimizer_steps"] for row in rows),
         "proposal_loss_weight": PROPOSAL_LOSS_WEIGHT,
+        "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
     }
     for key in (
         "segmentation_ce",
-        "total_loss",
         "prediction_error_abs",
         "dynamics_error_abs",
         "delta_z_abs",
@@ -441,6 +479,9 @@ def _train_epoch(
         "valid_fraction_mean",
     ):
         result[key] = sum(row[key] * row["frames"] for row in rows) / frame_total
+
+    for key in ("total_loss", "window_final_ce", "window_proposal_rescue_ce"):
+        result[key] = sum(row[key] * row["optimizer_steps"] for row in rows) / step_total
 
     result["proposal_rescue_ce"] = sum(
         row["proposal_rescue_ce"] * row["rescue_pixels"] for row in rows
@@ -516,8 +557,6 @@ def main(argv=None):
     )
     refiner, cv3_payload = c_v5._load_frozen_cv3_refiner(args.c_v3_checkpoint)
 
-    # Fresh C-V8 architecture initialization: do not continue from trained C-V8.
-    # This isolates the supervision change from continuation/pretraining effects.
     corrector = DirectErrorProposalCorrector(
         num_classes=c_v5.NUM_CLASSES,
         history_length=c_v5.HISTORY_LENGTH,
@@ -562,7 +601,6 @@ def main(argv=None):
     output.mkdir(parents=True, exist_ok=True)
     result_output.mkdir(parents=True, exist_ok=True)
 
-    # Same C-V8 evaluation protocol; RAFT remains metric-only.
     raft_metric = FrozenRAFT()
 
     history = []
@@ -603,6 +641,7 @@ def main(argv=None):
                 "proposal_supervision_scope": "formal Rescue pixels only",
                 "proposal_supervision_path": "Z_raw = Z_cur + upsample(DeltaZ_proposal_raw)",
                 "proposal_loss_weight": PROPOSAL_LOSS_WEIGHT,
+                "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
                 "proposal_loss_gate_bypass": True,
                 "proposal_loss_tanh_bypass": True,
                 "proposal_loss_gt_model_input": False,
@@ -664,11 +703,12 @@ def main(argv=None):
                         "validity_order": "upsample first, full-resolution mask second",
                     },
                     "training_supervision": {
-                        "final_loss": "full-image segmentation CE",
-                        "proposal_loss": "raw Proposal CE on formal Rescue pixels only",
+                        "final_loss": "mean full-image segmentation CE over all TBPTT frames",
+                        "proposal_loss": "mean raw Proposal CE over Rescue-bearing TBPTT frames only",
                         "proposal_loss_weight": PROPOSAL_LOSS_WEIGHT,
                         "proposal_loss_path": "Z_raw = Z_cur + valid * upsample(DeltaZ_proposal_raw)",
                         "rescue_definition": "C-V3 wrong AND exists valid aligned history whose argmax equals GT",
+                        "rescue_frame_dilution": False,
                         "gate_target": False,
                         "temporal_loss": False,
                         "raft_training": False,
@@ -695,10 +735,12 @@ def main(argv=None):
             "fallback_if_all_fail_floor": "highest mIoU, then mTC",
         },
         "training_supervision": {
-            "total_loss": "L_final_CE + L_proposal_rescue_CE",
+            "total_loss": "mean_all_frames(L_final_CE) + mean_rescue_frames(L_proposal_rescue_CE)",
             "proposal_loss_weight": PROPOSAL_LOSS_WEIGHT,
             "proposal_loss_weight_sweep": False,
-            "proposal_loss_scope": "formal Rescue pixels only",
+            "proposal_loss_scope": "formal Rescue pixels on Rescue-bearing frames only",
+            "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
+            "rescue_frame_dilution": False,
             "proposal_loss_bypasses_gate": True,
             "proposal_loss_bypasses_tanh": True,
             "gate_supervision_changed": False,
