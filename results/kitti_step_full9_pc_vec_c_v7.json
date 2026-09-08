@@ -1,0 +1,629 @@
+{
+  "experiment": "KITTI-STEP Full9 prediction-only PC + VEC evaluation",
+  "full9": [
+    "0002",
+    "0006",
+    "0007",
+    "0008",
+    "0010",
+    "0013",
+    "0014",
+    "0016",
+    "0018"
+  ],
+  "prediction_sources": {
+    "host": "/home/lin/predify/predictions/kitti_step_full9_c_v7/host",
+    "current_model": "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model"
+  },
+  "metrics": {
+    "host": {
+      "PC": 0.9857356355978053,
+      "VEC8": 0.6121778404263843,
+      "VEC16": 0.6468397696671272
+    },
+    "current_model": {
+      "PC": 0.9863054405792565,
+      "VEC8": 0.6107068183542579,
+      "VEC16": 0.6484782110519489
+    }
+  },
+  "metrics_sequence_macro": {
+    "host": {
+      "PC": 0.9862503901188209,
+      "VEC8": 0.6069945596303148,
+      "VEC16": 0.6392739342911886
+    },
+    "current_model": {
+      "PC": 0.9869919913284103,
+      "VEC8": 0.6060204856233772,
+      "VEC16": 0.6425329020532504
+    }
+  },
+  "delta_current_model_vs_host": {
+    "PC": 0.0005698049814512052,
+    "VEC8": -0.00147102207212646,
+    "VEC16": 0.0016384413848217205
+  },
+  "delta_sequence_macro_current_model_vs_host": {
+    "PC": 0.0007416012095894375,
+    "VEC8": -0.0009740740069376086,
+    "VEC16": 0.003258967762061804
+  },
+  "counts": {
+    "pc_consecutive_pairs": {
+      "host": 2972,
+      "current_model": 2972
+    },
+    "vec_windows": {
+      "8": {
+        "host": 2918,
+        "current_model": 2918
+      },
+      "16": {
+        "host": 2846,
+        "current_model": 2846
+      }
+    },
+    "vec_mean_valid_classes_per_window": {
+      "8": {
+        "host": 8.301576422206992,
+        "current_model": 8.373200822481152
+      },
+      "16": {
+        "host": 6.980674631061138,
+        "current_model": 7.013000702740689
+      }
+    }
+  },
+  "protocol": {
+    "PC": {
+      "paper": "Zhang et al., Perceptual Consistency in Video Segmentation, WACV 2022",
+      "reference_code": "yizhezhang2000/SPC/example.py",
+      "feature_extractor": "ImageNet pretrained ResNet-18 children()[:-4] (through layer2)",
+      "feature_stride": 8,
+      "segmentation_resize": "nearest to perceptual feature HxW",
+      "pair_definition": "consecutive frames",
+      "pair_score": "paper Eq.3, bidirectional minimum",
+      "video_score": "paper Eq.4 mean over consecutive pairs",
+      "full9_primary_aggregation": "project convention: pair-weighted over all Full9 sequences",
+      "full9_secondary_aggregation": "macro mean of nine per-sequence PC scores"
+    },
+    "VEC": {
+      "paper": "Xu et al., DTERN, ICCV 2025",
+      "definition": "paper Eq.17: class-wise IoU of GT-persistent and prediction-persistent C-frame regions",
+      "lengths": [
+        8,
+        16
+      ],
+      "window_stride": 1,
+      "window_alignment": "same sliding complete windows as existing mVC8/mVC16",
+      "empty_class_convention": "classes with empty persistent GT/pred union are excluded from the clip macro mean; Eq.17 does not specify the 0/0 implementation case",
+      "ignore_handling": "KITTI-STEP convention: positions with GT ignore in any frame of a clip are excluded from that clip",
+      "full9_primary_aggregation": "project convention: window-weighted over all Full9 sequences",
+      "full9_secondary_aggregation": "macro mean of nine per-sequence VEC scores",
+      "official_code_status": "DTERN repository exposes VC_perclip.py; no dedicated VEC evaluator was used as a source for empty-class/ignore edge cases"
+    }
+  },
+  "stored_prediction_policy": {
+    "hard_masks": "nearest resize only if stored hard mask resolution differs",
+    "class_scores": "bilinear resize scores first, then argmax",
+    "prediction_ignore_label_allowed": false,
+    "segmentation_model_inference": false
+  },
+  "no_segmentation_model_inference": true,
+  "per_sequence": {
+    "0002": {
+      "frames": 233,
+      "pc_pair_count": {
+        "host": 232,
+        "current_model": 232
+      },
+      "metrics": {
+        "host": {
+          "PC": 0.9869796769886181,
+          "VEC8": 0.5765786954580145,
+          "VEC16": 0.6124585136228913
+        },
+        "current_model": {
+          "PC": 0.9876152079167038,
+          "VEC8": 0.6013367193506597,
+          "VEC16": 0.630260406548209
+        }
+      },
+      "vec_window_counts": {
+        "8": {
+          "host": 226,
+          "current_model": 226
+        },
+        "16": {
+          "host": 218,
+          "current_model": 218
+        }
+      },
+      "vec_mean_valid_class_counts": {
+        "8": {
+          "host": 10.982300884955752,
+          "current_model": 10.929203539823009
+        },
+        "16": {
+          "host": 9.206422018348624,
+          "current_model": 9.169724770642201
+        }
+      },
+      "prediction_source_kinds": {
+        "host": {
+          "hard_mask": 233
+        },
+        "current_model": {
+          "hard_mask": 233
+        }
+      },
+      "prediction_first_last": {
+        "host": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0002/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0002/000232.png"
+        ],
+        "current_model": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0002/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0002/000232.png"
+        ]
+      }
+    },
+    "0006": {
+      "frames": 270,
+      "pc_pair_count": {
+        "host": 269,
+        "current_model": 269
+      },
+      "metrics": {
+        "host": {
+          "PC": 0.9902135747516022,
+          "VEC8": 0.5333274712561713,
+          "VEC16": 0.5265221850877572
+        },
+        "current_model": {
+          "PC": 0.990952142109215,
+          "VEC8": 0.5503911404042033,
+          "VEC16": 0.5492356035504367
+        }
+      },
+      "vec_window_counts": {
+        "8": {
+          "host": 263,
+          "current_model": 263
+        },
+        "16": {
+          "host": 255,
+          "current_model": 255
+        }
+      },
+      "vec_mean_valid_class_counts": {
+        "8": {
+          "host": 10.688212927756654,
+          "current_model": 10.593155893536121
+        },
+        "16": {
+          "host": 9.588235294117647,
+          "current_model": 9.415686274509804
+        }
+      },
+      "prediction_source_kinds": {
+        "host": {
+          "hard_mask": 270
+        },
+        "current_model": {
+          "hard_mask": 270
+        }
+      },
+      "prediction_first_last": {
+        "host": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0006/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0006/000269.png"
+        ],
+        "current_model": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0006/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0006/000269.png"
+        ]
+      }
+    },
+    "0007": {
+      "frames": 800,
+      "pc_pair_count": {
+        "host": 799,
+        "current_model": 799
+      },
+      "metrics": {
+        "host": {
+          "PC": 0.9830600076234982,
+          "VEC8": 0.6198910799511638,
+          "VEC16": 0.6572984768940727
+        },
+        "current_model": {
+          "PC": 0.9832770866207844,
+          "VEC8": 0.615882849056793,
+          "VEC16": 0.6551894540202691
+        }
+      },
+      "vec_window_counts": {
+        "8": {
+          "host": 793,
+          "current_model": 793
+        },
+        "16": {
+          "host": 785,
+          "current_model": 785
+        }
+      },
+      "vec_mean_valid_class_counts": {
+        "8": {
+          "host": 7.080706179066834,
+          "current_model": 7.185372005044136
+        },
+        "16": {
+          "host": 5.5044585987261145,
+          "current_model": 5.589808917197452
+        }
+      },
+      "prediction_source_kinds": {
+        "host": {
+          "hard_mask": 800
+        },
+        "current_model": {
+          "hard_mask": 800
+        }
+      },
+      "prediction_first_last": {
+        "host": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0007/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0007/000799.png"
+        ],
+        "current_model": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0007/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0007/000799.png"
+        ]
+      }
+    },
+    "0008": {
+      "frames": 390,
+      "pc_pair_count": {
+        "host": 389,
+        "current_model": 389
+      },
+      "metrics": {
+        "host": {
+          "PC": 0.9877452838083772,
+          "VEC8": 0.6023779703522819,
+          "VEC16": 0.6607076876118896
+        },
+        "current_model": {
+          "PC": 0.9882040819043059,
+          "VEC8": 0.6090889367028024,
+          "VEC16": 0.666264932599253
+        }
+      },
+      "vec_window_counts": {
+        "8": {
+          "host": 383,
+          "current_model": 383
+        },
+        "16": {
+          "host": 375,
+          "current_model": 375
+        }
+      },
+      "vec_mean_valid_class_counts": {
+        "8": {
+          "host": 8.300261096605745,
+          "current_model": 8.386422976501306
+        },
+        "16": {
+          "host": 6.770666666666667,
+          "current_model": 6.898666666666666
+        }
+      },
+      "prediction_source_kinds": {
+        "host": {
+          "hard_mask": 390
+        },
+        "current_model": {
+          "hard_mask": 390
+        }
+      },
+      "prediction_first_last": {
+        "host": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0008/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0008/000389.png"
+        ],
+        "current_model": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0008/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0008/000389.png"
+        ]
+      }
+    },
+    "0010": {
+      "frames": 294,
+      "pc_pair_count": {
+        "host": 293,
+        "current_model": 293
+      },
+      "metrics": {
+        "host": {
+          "PC": 0.9832326704731573,
+          "VEC8": 0.7116838492887614,
+          "VEC16": 0.735794551595723
+        },
+        "current_model": {
+          "PC": 0.98400230415852,
+          "VEC8": 0.7191864882539402,
+          "VEC16": 0.7469159014349481
+        }
+      },
+      "vec_window_counts": {
+        "8": {
+          "host": 287,
+          "current_model": 287
+        },
+        "16": {
+          "host": 279,
+          "current_model": 279
+        }
+      },
+      "vec_mean_valid_class_counts": {
+        "8": {
+          "host": 7.313588850174216,
+          "current_model": 7.337979094076655
+        },
+        "16": {
+          "host": 6.594982078853047,
+          "current_model": 6.587813620071684
+        }
+      },
+      "prediction_source_kinds": {
+        "host": {
+          "hard_mask": 294
+        },
+        "current_model": {
+          "hard_mask": 294
+        }
+      },
+      "prediction_first_last": {
+        "host": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0010/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0010/000293.png"
+        ],
+        "current_model": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0010/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0010/000293.png"
+        ]
+      }
+    },
+    "0013": {
+      "frames": 340,
+      "pc_pair_count": {
+        "host": 339,
+        "current_model": 339
+      },
+      "metrics": {
+        "host": {
+          "PC": 0.9841903557116303,
+          "VEC8": 0.5171263561195509,
+          "VEC16": 0.61946602288265
+        },
+        "current_model": {
+          "PC": 0.984406937540105,
+          "VEC8": 0.5119861512687275,
+          "VEC16": 0.6263862769150629
+        }
+      },
+      "vec_window_counts": {
+        "8": {
+          "host": 333,
+          "current_model": 333
+        },
+        "16": {
+          "host": 325,
+          "current_model": 325
+        }
+      },
+      "vec_mean_valid_class_counts": {
+        "8": {
+          "host": 7.666666666666667,
+          "current_model": 7.906906906906907
+        },
+        "16": {
+          "host": 5.581538461538462,
+          "current_model": 5.618461538461538
+        }
+      },
+      "prediction_source_kinds": {
+        "host": {
+          "hard_mask": 340
+        },
+        "current_model": {
+          "hard_mask": 340
+        }
+      },
+      "prediction_first_last": {
+        "host": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0013/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0013/000339.png"
+        ],
+        "current_model": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0013/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0013/000339.png"
+        ]
+      }
+    },
+    "0014": {
+      "frames": 106,
+      "pc_pair_count": {
+        "host": 105,
+        "current_model": 105
+      },
+      "metrics": {
+        "host": {
+          "PC": 0.9854243494215466,
+          "VEC8": 0.5751792574212677,
+          "VEC16": 0.6299550236002288
+        },
+        "current_model": {
+          "PC": 0.9869169848305839,
+          "VEC8": 0.5782054346183308,
+          "VEC16": 0.651665152498005
+        }
+      },
+      "vec_window_counts": {
+        "8": {
+          "host": 99,
+          "current_model": 99
+        },
+        "16": {
+          "host": 91,
+          "current_model": 91
+        }
+      },
+      "vec_mean_valid_class_counts": {
+        "8": {
+          "host": 6.292929292929293,
+          "current_model": 6.373737373737374
+        },
+        "16": {
+          "host": 4.483516483516484,
+          "current_model": 4.549450549450549
+        }
+      },
+      "prediction_source_kinds": {
+        "host": {
+          "hard_mask": 106
+        },
+        "current_model": {
+          "hard_mask": 106
+        }
+      },
+      "prediction_first_last": {
+        "host": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0014/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0014/000105.png"
+        ],
+        "current_model": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0014/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0014/000105.png"
+        ]
+      }
+    },
+    "0016": {
+      "frames": 209,
+      "pc_pair_count": {
+        "host": 208,
+        "current_model": 208
+      },
+      "metrics": {
+        "host": {
+          "PC": 0.9871024237229273,
+          "VEC8": 0.618565531387606,
+          "VEC16": 0.6108158101844469
+        },
+        "current_model": {
+          "PC": 0.9885288405303772,
+          "VEC8": 0.5803099326666079,
+          "VEC16": 0.5734702618503853
+        }
+      },
+      "vec_window_counts": {
+        "8": {
+          "host": 202,
+          "current_model": 202
+        },
+        "16": {
+          "host": 194,
+          "current_model": 194
+        }
+      },
+      "vec_mean_valid_class_counts": {
+        "8": {
+          "host": 12.064356435643564,
+          "current_model": 12.069306930693068
+        },
+        "16": {
+          "host": 11.639175257731958,
+          "current_model": 11.6340206185567
+        }
+      },
+      "prediction_source_kinds": {
+        "host": {
+          "hard_mask": 209
+        },
+        "current_model": {
+          "hard_mask": 209
+        }
+      },
+      "prediction_first_last": {
+        "host": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0016/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0016/000208.png"
+        ],
+        "current_model": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0016/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0016/000208.png"
+        ]
+      }
+    },
+    "0018": {
+      "frames": 339,
+      "pc_pair_count": {
+        "host": 338,
+        "current_model": 338
+      },
+      "metrics": {
+        "host": {
+          "PC": 0.9883051685680299,
+          "VEC8": 0.7082208254380159,
+          "VEC16": 0.7004471371410375
+        },
+        "current_model": {
+          "PC": 0.989024336345097,
+          "VEC8": 0.6877967182883298,
+          "VEC16": 0.6834081290626842
+        }
+      },
+      "vec_window_counts": {
+        "8": {
+          "host": 332,
+          "current_model": 332
+        },
+        "16": {
+          "host": 324,
+          "current_model": 324
+        }
+      },
+      "vec_mean_valid_class_counts": {
+        "8": {
+          "host": 7.304216867469879,
+          "current_model": 7.406626506024097
+        },
+        "16": {
+          "host": 6.898148148148148,
+          "current_model": 6.941358024691358
+        }
+      },
+      "prediction_source_kinds": {
+        "host": {
+          "hard_mask": 339
+        },
+        "current_model": {
+          "hard_mask": 339
+        }
+      },
+      "prediction_first_last": {
+        "host": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0018/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/host/0018/000338.png"
+        ],
+        "current_model": [
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0018/000000.png",
+          "/home/lin/predify/predictions/kitti_step_full9_c_v7/current_model/0018/000338.png"
+        ]
+      }
+    }
+  }
+}

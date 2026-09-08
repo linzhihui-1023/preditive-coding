@@ -307,7 +307,14 @@ def main(argv=None):
         args.output_root,
         args.overwrite,
     )
-    verified = export_base._verify_saved_masks(groups, args.output_root)
+    verified_metrics, verified_read_counts, verified_disk_counts = (
+        export_base._verify_saved_masks(groups, args.output_root)
+    )
+    verified = {
+        "metrics": verified_metrics,
+        "read_counts": verified_read_counts,
+        "disk_counts": verified_disk_counts,
+    }
     reference = _reference_metrics(payload)
     comparison = export_base._compare_reference(
         verified["metrics"],
