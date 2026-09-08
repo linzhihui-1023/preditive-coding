@@ -164,9 +164,13 @@ def _check_proposal_aware_gate_and_gradient_separation(model, inputs):
     if not torch.equal(proposal_slice.detach(), proposal.detach()):
         raise RuntimeError("Gate does not explicitly observe the 19D semantic proposal")
 
-    # Gate-side proposal observation must be detached: acceptance gradients may
-    # learn Gate weights but cannot redefine Proposal Head through this side path.
-    gate_only_scalar = proposal_slice.sum()
+    # Gate-side proposal observation must be detached.  First check the stored
+    # Gate slice itself, then differentiate the actual Gate output with respect
+    # to the non-detached proposal tensor.  allow_unused=True should return None
+    # because the only proposal->Gate edge is intentionally cut by detach().
+    if proposal_slice.requires_grad:
+        raise RuntimeError("Gate proposal slice unexpectedly retains autograd history")
+    gate_only_scalar = row["gate"].sum()
     gradient = torch.autograd.grad(
         gate_only_scalar,
         proposal,
