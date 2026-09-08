@@ -31,9 +31,6 @@ from predify2021.mce_scores import (
     train_kitti_step_task_space_prior_c_v5_multiframe_candidate_memory as c_v5,
 )
 from predify2021.mce_scores import (
-    train_kitti_step_task_space_prior_c_v7_error_residual_correction as c_v7,
-)
-from predify2021.mce_scores import (
     train_kitti_step_task_space_prior_c_v8_direct_error_proposal_gate as c_v8,
 )
 from predify2021.model_factory.deeplabv3plus_resnet50.task_space_direct_error_proposal_corrector import (
@@ -50,6 +47,8 @@ C_V7_REFERENCE_DEFAULT = (
     "results/kitti_step_c_v7_frozen_correction_decomposition/summary.json"
 )
 PATHS = ("z_cur", "z_raw", "z_tanh", "z_final")
+RECONSTRUCTION_ATOL = 1e-6
+METRIC_ATOL = 1e-8
 
 
 def _load_c_v8_corrector(checkpoint_path, device):
@@ -173,6 +172,7 @@ def _evaluate(
     }
     diag = {name: _new_diag() for name in PATHS}
     correction_frames = 0
+    final_reconstruction_max_abs_diff = 0.0
 
     for sequence in c_v5.FULL9:
         samples = groups[sequence]
@@ -200,6 +200,21 @@ def _evaluate(
             current_correct = frame["masks"]["current_correct"]
             current_margin = base._true_class_margin(frame["c_v3_logits"], gt_cpu)
             candidates = _logit_paths(frame)
+
+            # The decomposition must reconstruct the exact deployed C-V8 output.
+            # base._frozen_sequence_frames names this field c_v7_logits for legacy
+            # compatibility, but numerically it is the current corrector output.
+            frame_diff = float(
+                (candidates["z_final"] - frame["c_v7_logits"]).abs().max().item()
+            )
+            final_reconstruction_max_abs_diff = max(
+                final_reconstruction_max_abs_diff, frame_diff
+            )
+            if frame_diff > RECONSTRUCTION_ATOL:
+                raise RuntimeError(
+                    "C-V8 frozen decomposition does not reconstruct deployed output: "
+                    f"max_abs_diff={frame_diff}"
+                )
 
             n_rescue = int(rescue.sum().item())
             n_correct = int(current_correct.sum().item())
@@ -236,7 +251,11 @@ def _evaluate(
             "current_correct_pixels": row["current_correct_pixels"],
             "current_correct_damage_rate": row["current_correct_damaged"] / correct_den,
         }
-    return {"correction_path_frames": correction_frames, "metrics": metrics}
+    return {
+        "correction_path_frames": correction_frames,
+        "final_reconstruction_max_abs_diff": final_reconstruction_max_abs_diff,
+        "metrics": metrics,
+    }
 
 
 def _load_c_v7_reference(path):
@@ -280,6 +299,27 @@ def _compare_to_c_v7(current_metrics, reference):
             "delta_mIoU": current["mIoU"] - old["mIoU"],
         }
     return result
+
+
+def _checkpoint_metric_contract(payload, measured_final_miou):
+    metrics = payload.get("metrics") or {}
+    reference = metrics.get("c_v8")
+    if not isinstance(reference, dict) or "mIoU" not in reference:
+        return {"available": False}
+    checkpoint_miou = float(reference["mIoU"])
+    diff = measured_final_miou - checkpoint_miou
+    if abs(diff) > METRIC_ATOL:
+        raise RuntimeError(
+            "decomposition z_final mIoU differs from C-V8 checkpoint metric: "
+            f"measured={measured_final_miou} checkpoint={checkpoint_miou} diff={diff}"
+        )
+    return {
+        "available": True,
+        "checkpoint_mIoU": checkpoint_miou,
+        "measured_z_final_mIoU": measured_final_miou,
+        "difference": diff,
+        "atol": METRIC_ATOL,
+    }
 
 
 def main(argv=None):
@@ -334,6 +374,9 @@ def main(argv=None):
         "experiment": payload.get("experiment"),
         "g_max": corrector.g_max,
     }
+    result["checkpoint_metric_contract"] = _checkpoint_metric_contract(
+        payload, result["metrics"]["z_final"]["mIoU"]
+    )
     result["definition"] = {
         "z_cur": "frozen C-V3 current logits",
         "z_raw": "z_cur + upsample(DeltaZ_proposal_raw)",
