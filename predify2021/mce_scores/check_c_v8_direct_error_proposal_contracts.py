@@ -155,7 +155,7 @@ def _check_hidden_does_not_define_proposal(model, inputs):
         raise RuntimeError("synthetic Prediction Error did not create a semantic proposal")
 
 
-def _check_proposal_aware_gate_and_gradient_separation(model, inputs):
+def _check_proposal_aware_gate_and_joint_gradient(model, inputs):
     row = model(**inputs)
     proposal = row["delta_z_raw"]
     gate_evidence = row["gate_evidence"]
@@ -163,22 +163,20 @@ def _check_proposal_aware_gate_and_gradient_separation(model, inputs):
 
     if not torch.equal(proposal_slice.detach(), proposal.detach()):
         raise RuntimeError("Gate does not explicitly observe the 19D semantic proposal")
+    if not proposal_slice.requires_grad:
+        raise RuntimeError("Gate proposal input was unexpectedly detached")
 
-    # Gate-side proposal observation must be detached.  First check the stored
-    # Gate slice itself, then differentiate the actual Gate output with respect
-    # to the non-detached proposal tensor.  allow_unused=True should return None
-    # because the only proposal->Gate edge is intentionally cut by detach().
-    if proposal_slice.requires_grad:
-        raise RuntimeError("Gate proposal slice unexpectedly retains autograd history")
-    gate_only_scalar = row["gate"].sum()
-    gradient = torch.autograd.grad(
-        gate_only_scalar,
+    # The Gate graph must remain connected to the proposal tensor.  With the
+    # conservative zero-initialized Gate Head the derivative can be exactly zero,
+    # but it must not be None; None would mean a structural detach/cut edge.
+    gate_gradient = torch.autograd.grad(
+        row["gate"].sum(),
         proposal,
         allow_unused=True,
         retain_graph=True,
     )[0]
-    if gradient is not None and float(gradient.abs().sum().item()) != 0.0:
-        raise RuntimeError("Gate-input branch leaked gradient back into proposal content")
+    if gate_gradient is None:
+        raise RuntimeError("Proposal-aware Gate is not differentiably connected to proposal")
 
     # The actual residual path must still train Proposal Head on the first step.
     model.zero_grad(set_to_none=True)
@@ -213,7 +211,7 @@ def main():
     _check_interface_and_shapes(model)
     _check_zero_init_and_proposal_source(model, inputs)
     _check_hidden_does_not_define_proposal(model, inputs)
-    _check_proposal_aware_gate_and_gradient_separation(model, inputs)
+    _check_proposal_aware_gate_and_joint_gradient(model, inputs)
     _check_motion_aligned_error_memory(model)
 
     print(
@@ -227,7 +225,8 @@ def main():
             "h_err_enters_proposal": False,
             "h_err_role": "temporal context for Gate",
             "proposal_aware_gate": True,
-            "proposal_gate_input_detached": True,
+            "proposal_gate_input_detached": False,
+            "joint_end_to_end_ce_gradient": True,
             "gate_channels": 1,
             "tanh_bound": True,
             "g_max": G_MAX,
