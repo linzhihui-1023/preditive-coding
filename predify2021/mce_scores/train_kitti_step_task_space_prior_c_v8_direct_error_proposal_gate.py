@@ -5,7 +5,7 @@
 Architecture decision implemented from the frozen C-V7 diagnostics:
 - concat(e1..e4) directly produces the 19-class semantic proposal;
 - H_err remains motion-aligned recurrent temporal context for Gate decisions;
-- Gate explicitly observes the detached semantic proposal;
+- Gate explicitly observes the semantic proposal;
 - tanh bound and g_max=0.25 are retained;
 - Raw History never enters Proposal Head or Gate directly;
 - training remains final segmentation CE only; no Temporal Loss.
@@ -290,8 +290,9 @@ def main(argv=None):
                 "error_hidden_enters_proposal_head": False,
                 "error_hidden_role": "motion-aligned temporal context for proposal acceptance",
                 "proposal_aware_gate": True,
-                "proposal_gate_input_detached": True,
+                "proposal_gate_input_detached": False,
                 "proposal_gate_input_channels": c_v5.NUM_CLASSES,
+                "joint_end_to_end_ce_gradient": True,
                 "tanh_bound_retained": True,
                 "fixed_gate_operating_point": True,
             }
@@ -342,7 +343,8 @@ def main(argv=None):
                         "error_hidden_enters_proposal_head": False,
                         "error_hidden_role": "temporal context for Gate",
                         "proposal_aware_gate": True,
-                        "proposal_gate_input_detached": True,
+                        "proposal_gate_input_detached": False,
+                        "joint_end_to_end_ce_gradient": True,
                         "gate_channels": 1,
                         "g_max": corrector.g_max,
                         "gate_bias_init": corrector.gate_bias,
@@ -382,7 +384,8 @@ def main(argv=None):
             "proposal_head": "bias-free zero-init 1x1 Conv",
             "error_memory_role": "motion-aligned temporal context for Gate",
             "proposal_aware_gate": True,
-            "proposal_gate_input_detached": True,
+            "proposal_gate_input_detached": False,
+            "joint_end_to_end_ce_gradient": True,
             "raw_history_direct_fusion": False,
             "z_cur_detached": True,
             "tanh_bound": True,
