@@ -1,54 +1,29 @@
-"""C-V7 semantic decodability diagnostic with frozen linear probes.
+"""C-V7 frozen semantic-decoding diagnostic with minimal linear probes.
 
-中文：C-V7 语义可读出性判别实验。
+中文：C-V7 冻结语义可读出性判别实验。
 
-Purpose / 目的
---------------
-This is a diagnostic experiment, not a new model candidate.  It freezes the
-Host, E1, C-V3, and a trained CE-only C-V7 checkpoint, then asks whether
-class-specific semantic correction is linearly decodable from three points in
-the existing C-V7 information path:
+This is diagnostic-only. Host / E1 / C-V3 / trained CE-only C-V7 are frozen.
+Three representations are compared with the same zero-initialized, bias-free
+1x1 linear residual readout:
 
-1. error_76: concat(e1,e2,e3,e4), 4 * 19 = 76 channels;
-2. evidence_211: the exact pre-ConvGRU Error Evidence used by C-V7;
-3. hidden_32: the trained recurrent Error Memory H_err.
+  error_76      = concat(e1,e2,e3,e4), 76 channels
+  evidence_211  = exact C-V7 pre-ConvGRU Error Evidence, 211 channels
+  hidden_32     = trained recurrent Error Memory H_err, 32 channels
 
-Each source receives only a zero-initialized 1x1 Conv linear residual probe:
+For every probe:
 
-    feature -> 1x1 Conv -> DeltaZ_probe
-    Z_probe = detach(Z_C-V3) + DeltaZ_probe
+  feature -> bias-free 1x1 Conv -> DeltaZ_probe
+  Z_probe = detach(Z_C-V3) + DeltaZ_probe
 
-No existing C-V7 Correction Head, Gate, tanh bound, or g_max is used in the
-probe output.  This intentionally removes those mechanisms so the experiment
-measures linear semantic decodability rather than deployable correction safety.
+The existing C-V7 Correction Head, Gate, tanh, and g_max are bypassed. Probe
+training uses GT only to define diagnostic Rescue pixels:
 
-Training supervision is diagnostic-only Rescue CE:
+  Rescue = C-V3 wrong AND at least one valid aligned history predicts GT
+  L_probe = CE(Z_probe, GT) on Rescue pixels only
 
-    Rescue = C-V3 wrong AND at least one valid aligned history predicts GT
-    L_probe = CE(Z_probe, GT) on Rescue pixels only
-
-The GT-derived Rescue mask is never an inference input.  The historical age of
-the correct hypothesis is never provided to the probe.
-
-Default source checkpoint is the CE-only C-V7 best checkpoint (Epoch 1), not
-the later Task-Aware checkpoint, to avoid mixing the Task-Aware supervision
-change into this structural diagnostic.
-
-Outputs / 输出
---------------
-For frozen C-V7 and each probe on KITTI-STEP Full9:
-- Full9 mIoU（平均交并比）;
-- Rescue recovery rate（救回成功率）;
-- Rescue true-class margin gain（救回像素真实类别边际增益）;
-- Protection damage rate（保护像素伤害率）;
-- Current-correct damage rate（原本正确像素伤害率）.
-
-Interpretation guardrail / 解释边界
----------------------------------
-A successful linear probe shows that the chosen representation contains
-linearly decodable semantic correction information.  A failed linear probe
-cannot prove that the information is absent; it only rejects this minimal
-linear readout under the present training protocol.
+No correct-history age target is supplied. Probe success means linearly
+decodable semantic correction information is present. Probe failure does not
+prove information absence; it rejects only this minimal linear readout.
 """
 
 import argparse
@@ -61,9 +36,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from predify2021.datasets.kitti_step import KITTISTEPSegmentationDataset
-from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import (
-    sequence_groups,
-)
+from predify2021.mce_scores.evaluate_kitti_step_dynamic_error_correction import sequence_groups
 from predify2021.mce_scores.export_kitti_step_full9_predictions_c_v7 import (
     DEFAULT_MODEL_CHECKPOINT as C_V7_CE_CHECKPOINT_DEFAULT,
     _build_dynamics,
@@ -76,37 +49,32 @@ from predify2021.mce_scores import (
     train_kitti_step_task_space_prior_c_v7_error_residual_correction as c_v7,
 )
 
-
 SEED = 0
 EPOCHS = 1
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-2
-OUTPUT_DEFAULT = (
-    "/home/lin/predify/experiments/"
-    "kitti_step_c_v7_semantic_decodability_probes"
-)
+OUTPUT_DEFAULT = "/home/lin/predify/experiments/kitti_step_c_v7_semantic_decodability_probes"
 RESULT_DEFAULT = "results/kitti_step_c_v7_semantic_decodability_probes"
 
 PROBE_ERROR_76 = "error_76"
 PROBE_EVIDENCE_211 = "evidence_211"
 PROBE_HIDDEN_32 = "hidden_32"
 PROBE_NAMES = (PROBE_ERROR_76, PROBE_EVIDENCE_211, PROBE_HIDDEN_32)
-
 BASELINE_C_V3 = "c_v3_base"
 BASELINE_C_V7 = "c_v7_existing"
 ALL_NAMES = (BASELINE_C_V3, BASELINE_C_V7, *PROBE_NAMES)
 
 
 class LinearResidualProbe(nn.Module):
-    """Zero-initialized 1x1 linear readout into 19-class logit residuals."""
+    """Bias-free zero-initialized 1x1 linear readout into 19-class DeltaZ."""
 
     def __init__(self, in_channels, num_classes=19):
         super().__init__()
         self.in_channels = int(in_channels)
         self.num_classes = int(num_classes)
-        self.head = nn.Conv2d(self.in_channels, self.num_classes, 1, bias=True)
+        # No bias: a global Rescue-class prior must not masquerade as feature decoding.
+        self.head = nn.Conv2d(self.in_channels, self.num_classes, 1, bias=False)
         nn.init.zeros_(self.head.weight)
-        nn.init.zeros_(self.head.bias)
 
     def forward(self, feature_low, full_size, any_valid_full):
         if feature_low.ndim != 4 or feature_low.shape[1] != self.in_channels:
@@ -127,7 +95,11 @@ class LinearResidualProbe(nn.Module):
 
 def _probe_channels(corrector):
     evidence_channels = int(corrector.error_pre[0].in_channels)
-    expected_evidence = 2 * c_v5.NUM_CLASSES * corrector.history_length + 3 * c_v5.NUM_CLASSES + 2
+    expected_evidence = (
+        2 * c_v5.NUM_CLASSES * corrector.history_length
+        + 3 * c_v5.NUM_CLASSES
+        + 2
+    )
     if evidence_channels != expected_evidence:
         raise RuntimeError(
             f"unexpected C-V7 evidence channels: {evidence_channels} != {expected_evidence}"
@@ -152,7 +124,7 @@ def _build_probes(corrector, device):
 
 @torch.no_grad()
 def _build_diagnostic_masks(c_v3_logits, candidate_rows, current_gt_cpu):
-    """Build Rescue/Protection masks without selecting a history age."""
+    """GT defines diagnostic roles only; no history age is selected."""
     gt = current_gt_cpu.to(c_v3_logits.device, non_blocking=True).long()
     valid_gt = gt != c_v5.IGNORE_LABEL
     current_pred = c_v3_logits.detach().argmax(1)[0]
@@ -161,7 +133,6 @@ def _build_diagnostic_masks(c_v3_logits, candidate_rows, current_gt_cpu):
     any_history_valid = torch.zeros_like(valid_gt)
     history_can_rescue = torch.zeros_like(valid_gt)
     history_conflict = torch.zeros_like(valid_gt)
-
     for row in candidate_rows:
         valid_history = row["valid_full"][0].bool() & valid_gt
         history_pred = row["logits"].detach().argmax(1)[0]
@@ -169,29 +140,25 @@ def _build_diagnostic_masks(c_v3_logits, candidate_rows, current_gt_cpu):
         history_can_rescue |= valid_history & (history_pred == gt)
         history_conflict |= valid_history & (history_pred != current_pred)
 
-    rescue = valid_gt & (~current_correct) & history_can_rescue
-    protection = valid_gt & current_correct & history_conflict
     return {
         "valid_gt": valid_gt,
         "current_correct": current_correct,
         "any_history_valid": any_history_valid,
         "history_can_rescue": history_can_rescue,
         "history_conflict": history_conflict,
-        "rescue": rescue,
-        "protection": protection,
+        "rescue": valid_gt & (~current_correct) & history_can_rescue,
+        "protection": valid_gt & current_correct & history_conflict,
     }
 
 
 def _true_class_margin(logits, gt_cpu):
-    """Z(y) - max_{c!=y} Z(c), returned as HxW."""
     gt = gt_cpu.to(logits.device, non_blocking=True).long()
     safe_gt = gt.clamp(0, c_v5.NUM_CLASSES - 1)
     index = safe_gt.unsqueeze(0).unsqueeze(0)
     true_logit = logits.gather(1, index)[:, 0]
     other_logits = logits.clone()
     other_logits.scatter_(1, index, float("-inf"))
-    best_other = other_logits.max(dim=1).values
-    return (true_logit - best_other)[0]
+    return (true_logit - other_logits.max(dim=1).values)[0]
 
 
 def _first_two_host_predictions(model, samples):
@@ -199,7 +166,8 @@ def _first_two_host_predictions(model, samples):
     for sample in samples[:2]:
         with torch.no_grad():
             _, host_logits, _, _, _ = c_v5._host_observation(model, sample)
-        rows.append((host_logits.detach(), c_v5.semantic_mask_from_panoptic_png(sample["mask_path"])))
+        gt = c_v5.semantic_mask_from_panoptic_png(sample["mask_path"])
+        rows.append((host_logits.detach(), gt))
     return rows
 
 
@@ -214,7 +182,7 @@ def _frozen_sequence_frames(
     dynamics,
     samples,
 ):
-    """Yield detached diagnostic features for correction-path frames only."""
+    """Yield detached C-V7 internal representations for frames t>=2."""
     if len(samples) < 3:
         return
 
@@ -222,10 +190,7 @@ def _frozen_sequence_frames(
         frame0 = c_v5._host_observation(model, samples[0])
         frame1 = c_v5._host_observation(model, samples[1])
         pending_motion, motion_hidden = c_v5._initialize_motion(
-            observer,
-            residual,
-            frame0,
-            frame1,
+            observer, residual, frame0, frame1
         )
         _, previous_host_logits, previous_low, previous_c1, _ = frame1
 
@@ -241,11 +206,9 @@ def _frozen_sequence_frames(
         sample = samples[frame_index]
         with torch.no_grad():
             _, host_logits, host_low, current_c1, output_size = c_v5._host_observation(
-                model,
-                sample,
+                model, sample
             )
             current_gt = c_v5.semantic_mask_from_panoptic_png(sample["mask_path"])
-
             prior_low, _ = c_v5.warp_low_logits(previous_low, pending_motion)
             e1 = c_v5._frozen_e1_step(
                 correction,
@@ -281,7 +244,6 @@ def _frozen_sequence_frames(
                 pending_motion,
                 corrector.history_length,
             )
-
             evidence = c_v7._correction_evidence(
                 corrector,
                 dynamics,
@@ -295,35 +257,29 @@ def _frozen_sequence_frames(
             )
             error_hidden = evidence["row"]["hidden"].detach()
             dynamics_state = evidence["dynamics_state"].detach()
-
             masks = _build_diagnostic_masks(c_v3_logits, candidate_rows, current_gt)
-            prediction_error_76 = torch.cat(
-                [error.detach() for error in evidence["prediction_errors"]],
-                dim=1,
-            )
-            exact_evidence = evidence["row"]["evidence"].detach()
-            hidden_32 = evidence["row"]["hidden"].detach()
 
+            features = {
+                PROBE_ERROR_76: torch.cat(
+                    [error.detach() for error in evidence["prediction_errors"]], dim=1
+                ),
+                PROBE_EVIDENCE_211: evidence["row"]["evidence"].detach(),
+                PROBE_HIDDEN_32: evidence["row"]["hidden"].detach(),
+            }
             expected_channels = _probe_channels(corrector)
-            if prediction_error_76.shape[1] != expected_channels[PROBE_ERROR_76]:
-                raise RuntimeError("prediction-error probe channel mismatch")
-            if exact_evidence.shape[1] != expected_channels[PROBE_EVIDENCE_211]:
-                raise RuntimeError("error-evidence probe channel mismatch")
-            if hidden_32.shape[1] != expected_channels[PROBE_HIDDEN_32]:
-                raise RuntimeError("error-hidden probe channel mismatch")
+            for name in PROBE_NAMES:
+                if features[name].shape[1] != expected_channels[name]:
+                    raise RuntimeError(
+                        f"{name} feature channels {features[name].shape[1]} "
+                        f"!= expected {expected_channels[name]}"
+                    )
 
             observed_motion = c_v5._observe_motion(
-                observer,
-                previous_low,
-                previous_c1,
-                host_low,
-                current_c1,
+                observer, previous_low, previous_c1, host_low, current_c1
             )
             motion_error = F.softmax(host_low, dim=1) - F.softmax(prior_low, dim=1)
             next_motion, _, next_motion_hidden = residual.predict_next(
-                observed_motion,
-                motion_error,
-                motion_hidden,
+                observed_motion, motion_error, motion_hidden
             )
 
             frame_row = {
@@ -334,11 +290,7 @@ def _frozen_sequence_frames(
                 "c_v7_logits": evidence["final_logits_full"].detach(),
                 "any_valid_full": evidence["any_valid_full"].detach(),
                 "masks": {key: value.detach() for key, value in masks.items()},
-                "features": {
-                    PROBE_ERROR_76: prediction_error_76,
-                    PROBE_EVIDENCE_211: exact_evidence,
-                    PROBE_HIDDEN_32: hidden_32,
-                },
+                "features": features,
             }
 
             raw_history.insert(0, c_v3_logits.detach())
@@ -349,9 +301,9 @@ def _frozen_sequence_frames(
             previous_c1 = current_c1.detach()
             pending_motion = next_motion.detach()
             motion_hidden = next_motion_hidden.detach()
+            semantic_state_low = semantic_state_low.detach()
             if memory_state is not None:
                 memory_state = memory_state.detach()
-            semantic_state_low = semantic_state_low.detach()
 
         yield frame_row
 
@@ -371,14 +323,9 @@ def _train_probe_epoch(
 ):
     probes.train()
     corrector.eval()
-    totals = {
-        "frames_seen": 0,
-        "frames_with_rescue": 0,
-        "optimizer_steps": 0,
-        "rescue_pixels": 0,
-        "loss_sum": {name: 0.0 for name in PROBE_NAMES},
-        "delta_abs_sum": {name: 0.0 for name in PROBE_NAMES},
-    }
+    frames_seen = frames_with_rescue = optimizer_steps = rescue_pixels = 0
+    loss_sum = {name: 0.0 for name in PROBE_NAMES}
+    delta_abs_sum = {name: 0.0 for name in PROBE_NAMES}
 
     for samples in groups.values():
         for frame in _frozen_sequence_frames(
@@ -392,27 +339,26 @@ def _train_probe_epoch(
             dynamics,
             samples,
         ):
-            totals["frames_seen"] += 1
+            frames_seen += 1
             rescue = frame["masks"]["rescue"]
-            rescue_count = int(rescue.sum().item())
-            if rescue_count == 0:
+            n_rescue = int(rescue.sum().item())
+            if n_rescue == 0:
                 continue
+            frames_with_rescue += 1
+            rescue_pixels += n_rescue
 
-            totals["frames_with_rescue"] += 1
-            totals["rescue_pixels"] += rescue_count
-            target = frame["gt_cpu"].to(frame["c_v3_logits"].device, non_blocking=True).long().unsqueeze(0)
+            target = frame["gt_cpu"].to(
+                frame["c_v3_logits"].device, non_blocking=True
+            ).long().unsqueeze(0)
             full_size = tuple(frame["c_v3_logits"].shape[-2:])
-
             optimizer.zero_grad(set_to_none=True)
             for name in PROBE_NAMES:
                 delta_full = probes[name](
-                    frame["features"][name],
-                    full_size,
-                    frame["any_valid_full"],
+                    frame["features"][name], full_size, frame["any_valid_full"]
                 )
-                probe_logits = frame["c_v3_logits"] + delta_full
+                logits = frame["c_v3_logits"] + delta_full
                 per_pixel = F.cross_entropy(
-                    probe_logits,
+                    logits,
                     target,
                     ignore_index=c_v5.IGNORE_LABEL,
                     reduction="none",
@@ -420,27 +366,22 @@ def _train_probe_epoch(
                 loss = per_pixel[rescue].mean()
                 if not bool(torch.isfinite(loss).item()):
                     raise FloatingPointError(f"non-finite {name} probe loss")
-                # Graphs are independent because all diagnostic features are detached.
+                # Each probe has disjoint parameters; all frozen features are detached.
                 loss.backward()
-                totals["loss_sum"][name] += float(loss.detach().item()) * rescue_count
-                totals["delta_abs_sum"][name] += float(delta_full.detach().abs().mean().item())
-
+                loss_sum[name] += float(loss.detach().item()) * n_rescue
+                delta_abs_sum[name] += float(delta_full.detach().abs().mean().item())
             optimizer.step()
-            totals["optimizer_steps"] += 1
+            optimizer_steps += 1
 
-    rescue_total = max(totals["rescue_pixels"], 1)
-    step_total = max(totals["optimizer_steps"], 1)
+    rescue_den = max(rescue_pixels, 1)
+    step_den = max(optimizer_steps, 1)
     return {
-        "frames_seen": totals["frames_seen"],
-        "frames_with_rescue": totals["frames_with_rescue"],
-        "optimizer_steps": totals["optimizer_steps"],
-        "rescue_pixels": totals["rescue_pixels"],
-        "rescue_ce": {
-            name: totals["loss_sum"][name] / rescue_total for name in PROBE_NAMES
-        },
-        "delta_abs": {
-            name: totals["delta_abs_sum"][name] / step_total for name in PROBE_NAMES
-        },
+        "frames_seen": frames_seen,
+        "frames_with_rescue": frames_with_rescue,
+        "optimizer_steps": optimizer_steps,
+        "rescue_pixels": rescue_pixels,
+        "rescue_ce": {name: loss_sum[name] / rescue_den for name in PROBE_NAMES},
+        "delta_abs": {name: delta_abs_sum[name] / step_den for name in PROBE_NAMES},
     }
 
 
@@ -471,8 +412,6 @@ def _evaluate_probes(
     groups,
 ):
     probes.eval()
-    corrector.eval()
-
     confusion = {
         name: torch.zeros((c_v5.NUM_CLASSES, c_v5.NUM_CLASSES), dtype=torch.int64)
         for name in ALL_NAMES
@@ -482,8 +421,7 @@ def _evaluate_probes(
 
     for sequence in c_v5.FULL9:
         samples = groups[sequence]
-
-        # Full9 metric compatibility: first two frames are Host fallback for all candidates.
+        # Existing protocol: first two frames fall back to Host for all candidates.
         for host_logits, gt_cpu in _first_two_host_predictions(model, samples):
             host_pred_cpu = host_logits.argmax(1)[0].cpu()
             for name in ALL_NAMES:
@@ -503,13 +441,12 @@ def _evaluate_probes(
             correction_frames += 1
             gt_cpu = frame["gt_cpu"]
             gt = gt_cpu.to(frame["c_v3_logits"].device, non_blocking=True).long()
-            masks = frame["masks"]
-            rescue = masks["rescue"]
-            protection = masks["protection"]
-            current_correct = masks["current_correct"]
-            rescue_count = int(rescue.sum().item())
-            protection_count = int(protection.sum().item())
-            current_correct_count = int(current_correct.sum().item())
+            rescue = frame["masks"]["rescue"]
+            protection = frame["masks"]["protection"]
+            current_correct = frame["masks"]["current_correct"]
+            n_rescue = int(rescue.sum().item())
+            n_protect = int(protection.sum().item())
+            n_correct = int(current_correct.sum().item())
 
             candidate_logits = {
                 BASELINE_C_V3: frame["c_v3_logits"],
@@ -517,37 +454,31 @@ def _evaluate_probes(
             }
             full_size = tuple(frame["c_v3_logits"].shape[-2:])
             for name in PROBE_NAMES:
-                delta_full = probes[name](
-                    frame["features"][name],
-                    full_size,
-                    frame["any_valid_full"],
+                candidate_logits[name] = frame["c_v3_logits"] + probes[name](
+                    frame["features"][name], full_size, frame["any_valid_full"]
                 )
-                candidate_logits[name] = frame["c_v3_logits"] + delta_full
 
             current_margin = _true_class_margin(frame["c_v3_logits"], gt_cpu)
             for name, logits in candidate_logits.items():
                 pred = logits.argmax(1)[0]
-                pred_cpu = pred.cpu()
-                c_v5.update_confusion_matrix(confusion[name], pred_cpu, gt_cpu)
-
+                c_v5.update_confusion_matrix(confusion[name], pred.cpu(), gt_cpu)
                 row = diag[name]
-                row["rescue_pixels"] += rescue_count
-                row["protection_pixels"] += protection_count
-                row["current_correct_pixels"] += current_correct_count
+                row["rescue_pixels"] += n_rescue
+                row["protection_pixels"] += n_protect
+                row["current_correct_pixels"] += n_correct
 
-                if rescue_count:
-                    candidate_margin = _true_class_margin(logits, gt_cpu)
-                    margin_gain = candidate_margin - current_margin
+                if n_rescue:
+                    margin_gain = _true_class_margin(logits, gt_cpu) - current_margin
                     row["rescue_recovered"] += int((rescue & (pred == gt)).sum().item())
                     row["rescue_margin_gain_sum"] += float(margin_gain[rescue].sum().item())
                     row["rescue_positive_margin_gain"] += int(
                         (margin_gain[rescue] > 0.0).sum().item()
                     )
-                if protection_count:
+                if n_protect:
                     row["protection_damaged"] += int(
                         (protection & (pred != gt)).sum().item()
                     )
-                if current_correct_count:
+                if n_correct:
                     row["current_correct_damaged"] += int(
                         (current_correct & (pred != gt)).sum().item()
                     )
@@ -594,14 +525,17 @@ def _zero_step_contract(probes, channels):
     for name in PROBE_NAMES:
         probe = probes[name]
         weight_max = float(probe.head.weight.detach().abs().max().item())
-        bias_max = float(probe.head.bias.detach().abs().max().item())
-        if weight_max != 0.0 or bias_max != 0.0:
+        if probe.head.bias is not None:
+            raise RuntimeError(f"{name} probe must be bias-free")
+        if weight_max != 0.0:
             raise RuntimeError(f"{name} probe must be exactly zero initialized")
         rows[name] = {
             "in_channels": channels[name],
-            "trainable_parameters": sum(parameter.numel() for parameter in probe.parameters()),
+            "trainable_parameters": sum(
+                parameter.numel() for parameter in probe.parameters() if parameter.requires_grad
+            ),
             "weight_abs_max": weight_max,
-            "bias_abs_max": bias_max,
+            "bias": False,
             "zero_step_equals_c_v3": True,
         }
     return rows
@@ -615,18 +549,15 @@ def _load_frozen_stack(args):
     observer, _ = c_v5._load_frozen_observer(args.observer_checkpoint)
     residual, _ = c_v5._load_frozen_residual(args.residual_checkpoint, observer)
     correction, mask_predictor, _ = c_v5._load_frozen_e1_base(
-        args.base_checkpoint,
-        observer,
+        args.base_checkpoint, observer
     )
     refiner, _ = c_v5._load_frozen_cv3_refiner(args.c_v3_checkpoint)
-    corrector, c_v7_payload = _load_corrector(args.c_v7_checkpoint, device)
-    dynamics = _build_dynamics(c_v7_payload)
-
+    corrector, payload = _load_corrector(args.c_v7_checkpoint, device)
+    dynamics = _build_dynamics(payload)
     for module in (observer, residual, correction, mask_predictor, refiner, corrector):
         if isinstance(module, nn.Module):
             module.eval()
             module.requires_grad_(False)
-
     return (
         model,
         observer,
@@ -636,7 +567,7 @@ def _load_frozen_stack(args):
         refiner,
         corrector,
         dynamics,
-        c_v7_payload,
+        payload,
     )
 
 
@@ -661,7 +592,6 @@ def main(argv=None):
         raise RuntimeError("CUDA is required")
     if args.epochs < 1:
         raise ValueError("epochs must be >= 1")
-
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
@@ -681,9 +611,7 @@ def main(argv=None):
     probes, channels = _build_probes(corrector, torch.device("cuda"))
     zero_step = _zero_step_contract(probes, channels)
     optimizer = torch.optim.AdamW(
-        probes.parameters(),
-        lr=args.lr,
-        weight_decay=args.weight_decay,
+        probes.parameters(), lr=args.lr, weight_decay=args.weight_decay
     )
 
     train = KITTISTEPSegmentationDataset.from_kitti_step_root(Path(args.root), "train")
@@ -727,11 +655,7 @@ def main(argv=None):
             dynamics,
             val_groups,
         )
-        row = {
-            "epoch": epoch,
-            "train": train_stats,
-            "full9": eval_stats,
-        }
+        row = {"epoch": epoch, "train": train_stats, "full9": eval_stats}
         history.append(row)
         with (result_output / f"epoch_{epoch:03d}.json").open("w") as handle:
             json.dump(row, handle, indent=2)
@@ -771,9 +695,9 @@ def main(argv=None):
             "g_max_bypassed_by_probes": True,
         },
         "probe_definitions": {
-            PROBE_ERROR_76: "concat signed e1..e4 -> zero-init 1x1 Conv -> 19D DeltaZ",
-            PROBE_EVIDENCE_211: "exact C-V7 Error Evidence -> zero-init 1x1 Conv -> 19D DeltaZ",
-            PROBE_HIDDEN_32: "trained C-V7 H_err -> zero-init 1x1 Conv -> 19D DeltaZ",
+            PROBE_ERROR_76: "concat signed e1..e4 -> bias-free zero-init 1x1 Conv -> 19D DeltaZ",
+            PROBE_EVIDENCE_211: "exact C-V7 Error Evidence -> bias-free zero-init 1x1 Conv -> 19D DeltaZ",
+            PROBE_HIDDEN_32: "trained C-V7 H_err -> bias-free zero-init 1x1 Conv -> 19D DeltaZ",
         },
         "training_target": (
             "Rescue-only CE: C-V3 wrong AND at least one valid aligned history predicts GT; "
@@ -784,8 +708,9 @@ def main(argv=None):
         "interpretation_guardrails": [
             "Probe success means linearly decodable semantic correction information is present.",
             "Probe failure does not prove information absence; it rejects only this minimal linear readout.",
-            "This experiment does not evaluate a deployable Gate/tanh/g_max correction policy.",
-            "No conclusion about a 32D information bottleneck is allowed unless the probe comparison supports it.",
+            "Probe heads are bias-free so Rescue class priors cannot create a feature-independent correction.",
+            "This experiment bypasses Gate/tanh/g_max and is not a deployable model evaluation.",
+            "No 32D bottleneck conclusion is allowed unless the probe comparison supports it.",
         ],
     }
     with (result_output / "summary.json").open("w") as handle:
