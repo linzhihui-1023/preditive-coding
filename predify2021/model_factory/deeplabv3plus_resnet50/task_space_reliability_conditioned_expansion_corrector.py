@@ -13,11 +13,11 @@ Research boundary / 研究边界
    C-V9 base gain 0.25 * Acceptance.
 4. Deployed gain:
       base_alpha = 0.25 * a
-      expansion  = (1 - base_alpha) * a * r
+      expansion  = (1 - base_alpha) * r
       alpha      = base_alpha + expansion
    where a is Acceptance and r is Expansion Reliability. Therefore alpha is in
-   [0,1], r=0 exactly recovers the C-V9 gain, and large expansion requires both
-   high Acceptance and high Reliability.
+   [0,1], r=0 exactly recovers the C-V9 gain, and r=1 permits full expansion
+   regardless of the current Acceptance value.
 5. The Reliability Head shares the validated C-V9 95D->32D Control Pre. Relative
    to C-V9 it adds only one 32D->1 head (33 trainable parameters).
 6. tanh bounded semantic proposal（双曲正切有界语义提议）is retained.
@@ -169,11 +169,7 @@ class ReliabilityConditionedExpansionCorrector(DirectErrorProposalCorrector):
         expansion_reliability = torch.sigmoid(reliability_logit)
 
         base_alpha = self.base_gain * acceptance
-        expansion = (
-            (1.0 - base_alpha)
-            * acceptance
-            * expansion_reliability
-        )
+        expansion = (1.0 - base_alpha) * expansion_reliability
         alpha = base_alpha + expansion
 
         return {
