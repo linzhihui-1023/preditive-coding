@@ -210,16 +210,17 @@ def _check_c_v4_baseline_and_training_protocol():
     for token in required_entry:
         if token not in entry_source:
             raise RuntimeError(f"C-V12 entrypoint lost dynamic C-V4 baseline contract: {token}")
-    forbidden = (
+    forbidden_control = (
         "c_v10_adaptive_amplitude",
         "c_v11_reliability_conditioned",
         "amplitude_head",
         "expansion_reliability_head",
-        "requires C-V4 balanced-best Epoch",
     )
-    for token in forbidden:
+    for token in forbidden_control:
         if token in helper_source or token in entry_source:
-            raise RuntimeError(f"C-V12 must not contain forbidden control/baseline coupling: {token}")
+            raise RuntimeError(f"C-V12 must not contain forbidden control machinery: {token}")
+    if "requires C-V4 balanced-best Epoch" in entry_source:
+        raise RuntimeError("C-V12 entrypoint must not hard-code one C-V4 epoch")
     if training.RESCUE_LOSS_WEIGHT != 1.0:
         raise RuntimeError("C-V12 fixed Rescue loss weight must be 1.0")
     if '"temporal_loss": False' not in entry_source or '"raft_training": False' not in entry_source:
