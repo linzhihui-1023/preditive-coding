@@ -193,10 +193,6 @@ def _check_joint_gradient_after_writeback_opens():
 def _check_c_v4_baseline_and_training_protocol():
     helper_source = inspect.getsource(training)
     entry_source = inspect.getsource(c_v12)
-    if training.C_V4_REFERENCE_EPOCH != 2:
-        raise RuntimeError("C-V12 must use C-V4 balanced-best Epoch 2")
-    if abs(training.C_V4_REFERENCE_MIOU - 0.6637739071008685) > 1e-15:
-        raise RuntimeError("C-V12 C-V4 mIoU reference drifted")
     required_helper = (
         'final_logits = baseline_logits.detach() + feature_delta_logits',
         'corrected_host_logits - observation["host_logits"].detach()',
@@ -206,15 +202,24 @@ def _check_c_v4_baseline_and_training_protocol():
     for token in required_helper:
         if token not in helper_source:
             raise RuntimeError(f"C-V12 helper lost required architecture/training contract: {token}")
+    required_entry = (
+        'reference = metrics["c_v4_frozen"]',
+        'c_v4_controller, cv4_payload = _load_frozen_c_v4_controller(args.c_v4_checkpoint)',
+        '"c_v4_reference_policy": "actual loaded checkpoint and same-run c_v4_frozen metrics"',
+    )
+    for token in required_entry:
+        if token not in entry_source:
+            raise RuntimeError(f"C-V12 entrypoint lost dynamic C-V4 baseline contract: {token}")
     forbidden = (
         "c_v10_adaptive_amplitude",
         "c_v11_reliability_conditioned",
         "amplitude_head",
         "expansion_reliability_head",
+        "requires C-V4 balanced-best Epoch",
     )
     for token in forbidden:
         if token in helper_source or token in entry_source:
-            raise RuntimeError(f"C-V12 must not inherit C-V10/C-V11 control machinery: {token}")
+            raise RuntimeError(f"C-V12 must not contain forbidden control/baseline coupling: {token}")
     if training.RESCUE_LOSS_WEIGHT != 1.0:
         raise RuntimeError("C-V12 fixed Rescue loss weight must be 1.0")
     if '"temporal_loss": False' not in entry_source or '"raft_training": False' not in entry_source:
@@ -222,14 +227,18 @@ def _check_c_v4_baseline_and_training_protocol():
 
 
 def _check_model_selection_prioritizes_both_goals():
+    reference = {"mIoU": 0.6635, "mTC": 0.7127}
     good = {
-        "c_v12": {"mIoU": c_v12.C_V4_MIOU_FLOOR + 1e-3, "mTC": c_v12.C_V4_MTC_FLOOR + 1e-3}
+        "c_v4_frozen": reference,
+        "c_v12": {"mIoU": reference["mIoU"] + 1e-3, "mTC": reference["mTC"] + 1e-3},
     }
     semantic_fail = {
-        "c_v12": {"mIoU": c_v12.C_V4_MIOU_FLOOR - 1e-5, "mTC": c_v12.C_V4_MTC_FLOOR + 1e-2}
+        "c_v4_frozen": reference,
+        "c_v12": {"mIoU": reference["mIoU"] - 1e-5, "mTC": reference["mTC"] + 1e-2},
     }
     temporal_fail = {
-        "c_v12": {"mIoU": c_v12.C_V4_MIOU_FLOOR + 1e-2, "mTC": c_v12.C_V4_MTC_FLOOR - 1e-5}
+        "c_v4_frozen": reference,
+        "c_v12": {"mIoU": reference["mIoU"] + 1e-2, "mTC": reference["mTC"] - 1e-5},
     }
     if c_v12._selection_key(good)[0] != 1:
         raise RuntimeError("C-V12 passing semantic+temporal candidate must pass selection gate")
@@ -257,6 +266,7 @@ def main():
         "temporal_modulation": "frozen C-V4 hidden + dynamics -> 128D channel-wise gain",
         "feature_target": "c4 2048D",
         "zero_step": "exact frozen C-V4 final composition",
+        "c_v4_reference": "actual loaded checkpoint and same-run c_v4_frozen metrics",
         "trainable_parameters": trainable,
         "history_feedback": False,
         "temporal_loss": False,
