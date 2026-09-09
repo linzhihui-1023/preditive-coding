@@ -26,9 +26,29 @@ _base_entry.PostWritebackReliabilityFeatureCorrector = (
     AlignedPostWritebackReliabilityFeatureCorrector
 )
 
+_original_architecture_metadata = _base_entry._architecture_metadata
+
+
+def _architecture_metadata(corrector, c_v4_epoch):
+    metadata = _original_architecture_metadata(corrector, c_v4_epoch)
+    metadata.update({
+        "aligned_reliability_revision": True,
+        "acceptance_supervision_mapping": (
+            "detached temporal context -> reliability logit -> sigmoid -> "
+            "c4 resize -> output resize -> BCE"
+        ),
+        "deployed_reliability_mapping": (
+            "reliability logit -> sigmoid -> c4 resize -> bounded Delta-c4 gating"
+        ),
+        "reliability_diagnostic_mapping": "deployed reliability_c4 -> output resize",
+    })
+    return metadata
+
+
+_base_entry._architecture_metadata = _architecture_metadata
+
 EXPERIMENT = _base_entry.EXPERIMENT
 _selection_key = _base_entry._selection_key
-_architecture_metadata = _base_entry._architecture_metadata
 main = _base_entry.main
 
 
