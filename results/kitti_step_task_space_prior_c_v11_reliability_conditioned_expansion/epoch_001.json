@@ -1,0 +1,121 @@
+{
+  "epoch": 1,
+  "train": {
+    "frames": 5003,
+    "frames_with_rescue": 5003,
+    "frames_with_reliability_supervision": 4995,
+    "rescue_pixels": 36918154,
+    "reliability_positive_pixels": 1230497,
+    "reliability_negative_pixels": 1576719,
+    "optimizer_steps": 630,
+    "proposal_loss_weight": 1.0,
+    "reliability_loss_weight": 1.0,
+    "segmentation_ce": 0.11736364329098618,
+    "prediction_error_abs": 0.007492968794574591,
+    "dynamics_error_abs": 0.0030111543343091757,
+    "delta_z_abs": 0.003415263395436777,
+    "alpha_full_mean": 0.03953329148785534,
+    "applied_correction_abs": 0.00029907286953090447,
+    "error_reliability_mean": 0.8847070297264658,
+    "sign_agreement_mean": 0.6943756113904441,
+    "valid_fraction_mean": 0.9938577228120964,
+    "total_loss": 4.726307058334351,
+    "window_final_ce": 0.11813236074078651,
+    "window_proposal_rescue_ce": 1.6175045702192519,
+    "window_reliability_ce": 2.990670120337653,
+    "proposal_rescue_ce": 1.649644314713317,
+    "proposal_raw_rescue_recovery_rate": 0.04364654852460933,
+    "proposal_raw_current_correct_pixels": 2144254922,
+    "proposal_raw_current_correct_damage_rate": 0.0007393234748979161,
+    "expansion_reliability_ce": 2.996332687965582,
+    "expansion_reliability_positive_mean": 0.08145224903753165,
+    "expansion_reliability_negative_mean": 0.02980389326167984,
+    "control_lowres": {
+      "control_frames": 5003,
+      "acceptance_mean": 0.14034074544906616,
+      "expansion_reliability_mean": 0.005602575372904539,
+      "base_alpha_mean": 0.03508518636226654,
+      "expansion_mean": 0.004475598689168692,
+      "alpha_mean": 0.03956072777509689
+    }
+  },
+  "metrics": {
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC8": 0.9379464611218211,
+      "mVC16": 0.9289708560902963
+    },
+    "c_v3_base": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC8": 0.94442277549366,
+      "mVC16": 0.9364251481219616
+    },
+    "c_v11": {
+      "mIoU": 0.6627019293076558,
+      "mTC": 0.7122943886617041,
+      "mVC8": 0.9454423566181115,
+      "mVC16": 0.9378566263965646
+    }
+  },
+  "diagnostics": {
+    "frames_with_correction_path": 2963,
+    "delta_z_abs": 0.0073150351347986056,
+    "applied_correction_abs": 0.000973333319697682,
+    "error_reliability_mean": 0.8770110683589218,
+    "sign_agreement_mean": 0.6922224660479777,
+    "history_length": 4,
+    "history_source": "raw detached frozen C-V3 logits",
+    "error_hidden_motion_aligned": true,
+    "error_hidden_reliability_gated": true,
+    "z_cur_detached": true,
+    "bounded_logit_residual": true,
+    "raft_training": false,
+    "raft_inference_decision": false,
+    "raft_metric_only": true,
+    "control_lowres": {
+      "control_frames": 2963,
+      "acceptance_mean": 0.16978521645069122,
+      "expansion_reliability_mean": 0.014055689796805382,
+      "base_alpha_mean": 0.042446304112672806,
+      "expansion_mean": 0.01086355373263359,
+      "alpha_mean": 0.05330999940633774
+    },
+    "alpha_full_mean": 0.05328066917994398,
+    "semantic_proposal_source": "concat validity-gated e1..e4",
+    "control_pre": "shared C-V9 95D->32D gate_pre",
+    "acceptance_head": "shared C-V9 32D->1 gate_head",
+    "expansion_reliability_head": "new shared-control 32D->1 sigmoid",
+    "additional_control_parameters_vs_c_v9": 33,
+    "base_gain": 0.25,
+    "adaptive_error_gain": "alpha = 0.25*a + (1-0.25*a)*r",
+    "full_reliability_reaches_alpha_one": true,
+    "reliability_supervision": true,
+    "reliability_positive": "current wrong AND 0.25 proposal wrong AND full proposal correct",
+    "reliability_negative": "current correct AND full proposal wrong",
+    "reliability_aux_detaches_control_hidden": true,
+    "reliability_loss_weight": 1.0,
+    "proposal_supervision": true,
+    "proposal_loss_weight": 1.0,
+    "temporal_loss": false,
+    "tanh_bound_retained": true
+  },
+  "delta_vs_host": {
+    "mIoU": 0.008584522770861303,
+    "mTC": 0.004510282659393239,
+    "mVC8": 0.007495895496290372,
+    "mVC16": 0.008885770306268359
+  },
+  "delta_vs_c_v3": {
+    "mIoU": -4.9054860231656505e-06,
+    "mTC": 0.0006100256913236235,
+    "mVC8": 0.0010195811244514408,
+    "mVC16": 0.001431478274602993
+  },
+  "selection_key": [
+    0,
+    0.6627019293076558,
+    0.7122943886617041
+  ]
+}
