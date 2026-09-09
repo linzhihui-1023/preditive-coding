@@ -5,8 +5,9 @@
 Fixed experiment / 固定实验
 ---------------------------
 - K=4 raw frozen C-V3 History Bank（历史库）, motion aligned once.
-- Frozen C-V4 E2 Stateful Semantic Hysteresis（有状态语义滞回） supplies the
-  temporal baseline and temporal hidden state.
+- A frozen C-V4 Stateful Semantic Hysteresis（有状态语义滞回）checkpoint supplies
+  the temporal baseline and temporal hidden state. The actually loaded checkpoint
+  is the reference; C-V12 is not hard-wired to one C-V4 epoch.
 - New semantic branch sees only e1..e4 and writes a residual into Host c4.
 - Frozen Host Decoder converts Delta-c4 into a semantic logit effect.
 - Final = frozen C-V4 logits + [Decoder(c4+Delta-c4)-Decoder(c4)].
@@ -30,6 +31,7 @@ from predify2021.mce_scores import (
 )
 from predify2021.model_factory.deeplabv3plus_resnet50.task_space_semantic_hysteresis import (
     EulerDynamicsError,
+    StatefulSemanticHysteresisController,
 )
 from predify2021.model_factory.deeplabv3plus_resnet50.task_space_temporal_semantic_feature_correction import (
     TemporalSemanticFeatureCorrector,
@@ -49,8 +51,6 @@ GRADIENT_ACCUMULATION_STEPS = 8
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-2
 SEED = 0
-C_V4_MIOU_FLOOR = training.C_V4_REFERENCE_MIOU
-C_V4_MTC_FLOOR = 0.7126707488339122
 
 
 def _delta(candidate, reference):
@@ -62,17 +62,38 @@ def _delta(candidate, reference):
 
 def _selection_key(metrics):
     candidate = metrics["c_v12"]
-    semantic_preserved = candidate["mIoU"] >= C_V4_MIOU_FLOOR
-    temporal_preserved = candidate["mTC"] >= C_V4_MTC_FLOOR
+    reference = metrics["c_v4_frozen"]
+    semantic_preserved = candidate["mIoU"] >= reference["mIoU"]
+    temporal_preserved = candidate["mTC"] >= reference["mTC"]
     if semantic_preserved and temporal_preserved:
-        # The new branch exists to recover semantic gain; mIoU is primary.
+        # C-V12 must improve semantic accuracy without sacrificing the actual
+        # frozen C-V4 temporal baseline loaded for this run.
         return (1, candidate["mIoU"], candidate["mTC"])
     return (0, candidate["mIoU"], candidate["mTC"])
 
 
-def _architecture_metadata(corrector):
+def _load_frozen_c_v4_controller(path):
+    """Load the supplied valid C-V4 checkpoint without hard-coding its epoch."""
+    payload = torch.load(Path(path), map_location="cpu", weights_only=False)
+    if payload.get("experiment") != "c_v4_stateful_semantic_hysteresis_main":
+        raise RuntimeError("Expected a C-V4 Stateful Semantic Hysteresis checkpoint")
+    if "controller_state_dict" not in payload:
+        raise RuntimeError("C-V4 checkpoint missing controller_state_dict")
+    epoch = int(payload.get("epoch", -1))
+    if epoch <= 0:
+        raise RuntimeError(f"C-V4 checkpoint has invalid epoch metadata: {payload.get('epoch')}")
+    controller = StatefulSemanticHysteresisController(
+        num_classes=c_v5.NUM_CLASSES,
+        hidden_channels=c_v5.CONTROLLER_HIDDEN_CHANNELS,
+    ).cuda()
+    controller.load_state_dict(payload["controller_state_dict"], strict=True)
+    controller.eval().requires_grad_(False)
+    return controller, payload
+
+
+def _architecture_metadata(corrector, c_v4_epoch):
     return {
-        "temporal_base": "frozen C-V4 E2 Stateful Semantic Hysteresis",
+        "temporal_base": f"frozen C-V4 Epoch {int(c_v4_epoch)} Stateful Semantic Hysteresis",
         "history_length": corrector.history_length,
         "history_source": "raw detached frozen C-V3 logits",
         "history_feedback": False,
@@ -92,6 +113,7 @@ def _architecture_metadata(corrector):
         "host_frozen": True,
         "c_v3_frozen": True,
         "c_v4_frozen": True,
+        "c_v4_reference_policy": "actual loaded checkpoint and same-run c_v4_frozen metrics",
     }
 
 
@@ -131,7 +153,8 @@ def main(argv=None):
     residual, residual_payload = c_v5._load_frozen_residual(args.residual_checkpoint, observer)
     correction, mask_predictor, base_payload = c_v5._load_frozen_e1_base(args.base_checkpoint, observer)
     refiner, cv3_payload = c_v5._load_frozen_cv3_refiner(args.c_v3_checkpoint)
-    c_v4_controller, cv4_payload = training.load_frozen_c_v4_controller(args.c_v4_checkpoint)
+    c_v4_controller, cv4_payload = _load_frozen_c_v4_controller(args.c_v4_checkpoint)
+    c_v4_epoch = int(cv4_payload["epoch"])
 
     corrector = TemporalSemanticFeatureCorrector(
         num_classes=c_v5.NUM_CLASSES,
@@ -221,7 +244,7 @@ def main(argv=None):
                     "metrics": metrics,
                     "diagnostics": diagnostics,
                     "train": train_stats,
-                    "architecture": _architecture_metadata(corrector),
+                    "architecture": _architecture_metadata(corrector, c_v4_epoch),
                     "training_supervision": {
                         "final_all_pixel_ce": True,
                         "formal_rescue_ce": True,
@@ -231,7 +254,8 @@ def main(argv=None):
                         "gt_inference_input": False,
                     },
                     "dynamics": dynamics.config(),
-                    "frozen_c_v4_epoch": cv4_payload.get("epoch"),
+                    "frozen_c_v4_epoch": c_v4_epoch,
+                    "frozen_c_v4_metrics": metrics["c_v4_frozen"],
                 },
                 output / "best.pt",
             )
@@ -240,6 +264,7 @@ def main(argv=None):
     if best is None:
         raise RuntimeError("C-V12 produced no epoch result")
 
+    frozen_reference = best["metrics"]["c_v4_frozen"]
     summary = {
         "experiment": "C-V12 Temporal-Conditioned Semantic Feature Correction",
         "architecture_decision": (
@@ -249,12 +274,13 @@ def main(argv=None):
         "best": best,
         "history": history,
         "selection_rule": {
-            "semantic_floor": C_V4_MIOU_FLOOR,
-            "temporal_floor": C_V4_MTC_FLOOR,
+            "reference": "same-run c_v4_frozen from the actually loaded checkpoint",
+            "semantic_floor": frozen_reference["mIoU"],
+            "temporal_floor": frozen_reference["mTC"],
             "objective_if_both_pass": "maximize mIoU, then mTC",
             "fallback": "highest mIoU, then mTC",
         },
-        "architecture": _architecture_metadata(corrector),
+        "architecture": _architecture_metadata(corrector, c_v4_epoch),
         "frozen_checkpoints": {
             "fast_b": args.fast_b_checkpoint,
             "observer": args.observer_checkpoint,
@@ -263,7 +289,7 @@ def main(argv=None):
             "c_v3_base": args.c_v3_checkpoint,
             "c_v4": args.c_v4_checkpoint,
             "c_v3_checkpoint_epoch": cv3_payload.get("epoch"),
-            "c_v4_checkpoint_epoch": cv4_payload.get("epoch"),
+            "c_v4_checkpoint_epoch": c_v4_epoch,
             "residual_experiment": residual_payload.get("experiment"),
             "e1_experiment": base_payload.get("experiment"),
         },
