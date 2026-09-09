@@ -1,0 +1,101 @@
+{
+  "epoch": 2,
+  "train": {
+    "frames": 5003,
+    "optimizer_steps": 630,
+    "rescue_pixels": 33584511,
+    "rescue_recovered": 8155296,
+    "baseline_correct_pixels": 2144613467,
+    "baseline_correct_damaged": 18675749,
+    "protection_loss_weight": 1.0,
+    "rescue_supervision": false,
+    "final_ce": 0.11408329944124633,
+    "protection_kl": 0.010921352990820494,
+    "delta_c4_abs": 0.005050228361973724,
+    "delta_c4_rms_ratio": 0.06765019618140061,
+    "raw_delta_c4_abs": 1.4498893178131207,
+    "feature_delta_logits_abs": 0.10466028335641056,
+    "temporal_reliability_mean": 0.8737519991986399,
+    "temporal_reliability_std": 0.06845706038276791,
+    "rescue_recovery_rate": 0.24282908272804687,
+    "baseline_correct_damage_rate": 0.008708212126507178
+  },
+  "metrics": {
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC8": 0.9379464611218211,
+      "mVC16": 0.9289708560902963
+    },
+    "c_v3_base": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC8": 0.94442277549366,
+      "mVC16": 0.9364251481219616
+    },
+    "c_v4_frozen": {
+      "mIoU": 0.6635358153321175,
+      "mTC": 0.7132536018314909,
+      "mVC8": 0.9481737336323761,
+      "mVC16": 0.9413745640702833
+    },
+    "c_v13": {
+      "mIoU": 0.6581776047761521,
+      "mTC": 0.7129595852838974,
+      "mVC8": 0.9442699314348363,
+      "mVC16": 0.9383151634895549
+    }
+  },
+  "diagnostics": {
+    "correction_frames": 2963,
+    "delta_c4_abs": 0.0061135207523833526,
+    "delta_c4_rms_ratio": 0.08126591158313523,
+    "raw_delta_c4_abs": 2.1511433587619835,
+    "feature_delta_logits_abs": 0.13180164681006395,
+    "temporal_reliability_mean": 0.9409927626015003,
+    "temporal_reliability_std": 0.03656927561195686,
+    "rescue_pixels": 29325996,
+    "rescue_recovered": 5729231,
+    "baseline_correct_pixels": 1227527398,
+    "baseline_correct_damaged": 14985976,
+    "rescue_recovery_rate": 0.19536356071248184,
+    "baseline_correct_damage_rate": 0.01220826192915655,
+    "temporal_base": "frozen C-V4 Stateful Semantic Hysteresis",
+    "history_length": 4,
+    "history_source": "raw detached frozen C-V3 logits",
+    "semantic_correction_target": "current Host c4 2048D feature",
+    "semantic_correction_source": "concat validity-gated e1..e4 only",
+    "bounded_residual_scale": 0.1,
+    "temporal_reliability_range": "[0,1]",
+    "final_composition": "Decoder(c4 + bounded Delta-c4)",
+    "c_v4_role": "frozen temporal reference/teacher + hidden state; not logit composition",
+    "controller_output_feedback": false,
+    "corrected_output_history_feedback": false,
+    "rescue_supervision": false,
+    "raft_training": false,
+    "raft_metric_only": true
+  },
+  "delta_vs_host": {
+    "mIoU": 0.004060198239357549,
+    "mTC": 0.005175479281586459,
+    "mVC8": 0.006323470313015167,
+    "mVC16": 0.009344307399258622
+  },
+  "delta_vs_c_v3": {
+    "mIoU": -0.0045292300175269196,
+    "mTC": 0.001275222313516844,
+    "mVC8": -0.0001528440588237645,
+    "mVC16": 0.0018900153675932563
+  },
+  "delta_vs_c_v4": {
+    "mIoU": -0.005358210555965415,
+    "mTC": -0.00029401654759353413,
+    "mVC8": -0.0039038021975398296,
+    "mVC16": -0.0030594005807283997
+  },
+  "selection_key": [
+    0,
+    0.6581776047761521,
+    0.7129595852838974
+  ]
+}
