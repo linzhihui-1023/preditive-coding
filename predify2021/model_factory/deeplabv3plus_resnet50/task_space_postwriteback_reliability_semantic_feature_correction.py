@@ -7,14 +7,16 @@ Research boundary / 研究边界
 1. K=4 signed Prediction Errors（预测误差）provide semantic correction content.
 2. Semantic proposal is generated independently of temporal reliability.
 3. Host-conditioned Writeback first produces a bounded semantic Delta-c4 proposal.
-4. Frozen C-V4 temporal hidden + Dynamics Error + reliability evidence produce a
-   single-channel pixel-wise acceptance probability g_t in [0,1].
+4. Frozen C-V4 temporal hidden + Dynamics Error（动力学误差）+ reliability evidence
+   produce a single-channel pixel-wise acceptance probability g_t in [0,1].
 5. Acceptance is applied AFTER Writeback and AFTER the 0.10 feature-relative bound:
       final_Delta-c4 = g_t * semantic_Delta-c4_proposal.
    Therefore g_t=0 strictly removes the deployed correction and downstream trainable
    layers cannot compensate for the suppression.
-6. Raw History never directly enters correction generation.
+6. Raw History（原始历史）never directly enters correction generation.
 """
+
+import math
 
 import torch
 from torch import nn
@@ -24,7 +26,7 @@ from .adapters import HostConditionedResidualWriteback
 
 
 class PostWritebackReliabilitySemanticFeatureCorrector(nn.Module):
-    """Prediction Error -> bounded proposal; temporal evidence -> post-writeback acceptance."""
+    """Prediction Error -> bounded c4 proposal; temporal evidence -> post-writeback acceptance."""
 
     def __init__(
         self,
@@ -34,6 +36,7 @@ class PostWritebackReliabilitySemanticFeatureCorrector(nn.Module):
         temporal_hidden_channels=32,
         host_channels=2048,
         residual_scale=0.10,
+        acceptance_init=0.95,
     ):
         super().__init__()
         self.num_classes = int(num_classes)
@@ -42,6 +45,7 @@ class PostWritebackReliabilitySemanticFeatureCorrector(nn.Module):
         self.temporal_hidden_channels = int(temporal_hidden_channels)
         self.host_channels = int(host_channels)
         self.residual_scale = float(residual_scale)
+        self.acceptance_init = float(acceptance_init)
 
         if self.history_length < 1:
             raise ValueError("history_length must be >= 1")
@@ -49,13 +53,15 @@ class PostWritebackReliabilitySemanticFeatureCorrector(nn.Module):
             raise ValueError("semantic_channels must be divisible by 8")
         if not (0.0 < self.residual_scale <= 1.0):
             raise ValueError("residual_scale must be in (0,1]")
+        if not (0.0 < self.acceptance_init < 1.0):
+            raise ValueError("acceptance_init must be in (0,1)")
 
         self.semantic_input_channels = self.history_length * self.num_classes
         groups = min(32, self.semantic_channels)
         while self.semantic_channels % groups != 0:
             groups -= 1
 
-        # Kept structurally identical to C-V13: concat(e1..e4) -> 128D semantic command.
+        # Structurally identical to C-V13: concat(e1..e4) -> 128D semantic command.
         self.semantic_encoder = nn.Sequential(
             nn.Conv2d(
                 self.semantic_input_channels,
@@ -77,7 +83,7 @@ class PostWritebackReliabilitySemanticFeatureCorrector(nn.Module):
             nn.SiLU(),
         )
 
-        # Kept structurally identical to C-V13 up to the final head.
+        # Structurally identical to C-V13 up to the final head.
         # Inputs: frozen C-V4 H_t (32D), epsilon_t (19D), T, Q,
         # any-valid, valid-fraction, cross-history sign agreement.
         self.temporal_input_channels = self.temporal_hidden_channels + self.num_classes + 5
@@ -92,8 +98,9 @@ class PostWritebackReliabilitySemanticFeatureCorrector(nn.Module):
             nn.GroupNorm(groups, self.semantic_channels),
             nn.SiLU(),
         )
-        # C-V14 changes C-V13's 128D pre-writeback reliability into one pixel-wise
-        # post-writeback acceptance probability.
+
+        # C-V14 replaces C-V13's 128D pre-writeback reliability with one
+        # single-channel pixel-wise post-writeback acceptance probability.
         self.acceptance_head = nn.Conv2d(
             self.semantic_channels,
             1,
@@ -101,9 +108,13 @@ class PostWritebackReliabilitySemanticFeatureCorrector(nn.Module):
             bias=True,
         )
         nn.init.zeros_(self.acceptance_head.weight)
-        nn.init.zeros_(self.acceptance_head.bias)
+        # Start near pass-through rather than mechanically halving a transferred
+        # C-V13 proposal. C-V13 E3 reliability was already near one; 0.95 keeps
+        # the structural comparison clean while leaving useful sigmoid gradient.
+        acceptance_bias = math.log(self.acceptance_init / (1.0 - self.acceptance_init))
+        nn.init.constant_(self.acceptance_head.bias, acceptance_bias)
 
-        # Same semantic writeback structure as C-V13.
+        # Same Host-conditioned semantic writeback structure as C-V13.
         self.writeback = HostConditionedResidualWriteback(self.host_channels)
 
     def _aggregate_prediction_errors(self, prediction_errors, history_validities_low):
@@ -176,7 +187,7 @@ class PostWritebackReliabilitySemanticFeatureCorrector(nn.Module):
         if current_c4.ndim != 4 or current_c4.shape[1] != self.host_channels:
             raise ValueError("current_c4 must be BCHW with host_channels")
 
-        # Semantic proposal is independent of the temporal acceptance branch.
+        # Semantic proposal is independent of temporal acceptance.
         semantic_latent = self.semantic_encoder(aggregate["semantic_input"])
         target_size = tuple(current_c4.shape[-2:])
         semantic_latent_c4 = F.interpolate(
@@ -227,8 +238,8 @@ class PostWritebackReliabilitySemanticFeatureCorrector(nn.Module):
         final_delta_c4 = proposal_delta_c4 * acceptance_c4
         corrected_c4 = current_c4 + final_delta_c4
 
-        # Same numerical logit, but detached temporal context ensures the auxiliary
-        # acceptance BCE updates only acceptance_head, not temporal_pre or proposal.
+        # Same numerical head with detached temporal context: auxiliary BCE can
+        # update only Acceptance Head; final CE still trains the deployed path.
         acceptance_logit_aux = self.acceptance_head(temporal_latent.detach())
 
         return {
