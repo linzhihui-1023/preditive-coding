@@ -75,7 +75,7 @@ def _check_gain_formula_and_initialization():
     a0 = 1.0 / (1.0 + math.exp(-c_v11.ACCEPTANCE_BIAS))
     r0 = c_v11.RELIABILITY_INIT
     base0 = c_v11.BASE_GAIN * a0
-    alpha0 = base0 + (1.0 - base0) * a0 * r0
+    alpha0 = base0 + (1.0 - base0) * r0
     if not torch.allclose(out["acceptance"], torch.full_like(out["acceptance"], a0), atol=1e-7, rtol=0.0):
         raise RuntimeError("initial Acceptance mismatch")
     if not torch.allclose(out["expansion_reliability"], torch.full_like(out["expansion_reliability"], r0), atol=1e-7, rtol=0.0):
@@ -95,6 +95,19 @@ def _check_gain_formula_and_initialization():
     if diff > 1e-10:
         raise RuntimeError(f"Reliability-off path does not recover C-V9 base gain: {diff}")
 
+    # Full Reliability must remove the former amplitude reachability limit.
+    # Keep Acceptance at its normal low initial value; r -> 1 still must allow alpha -> 1.
+    model = _model().eval()
+    with torch.no_grad():
+        model.expansion_reliability_head.bias.fill_(30.0)
+    out = model(**_inputs())
+    reachability_error = (1.0 - out["alpha"]).abs().max().item()
+    if reachability_error > 1e-6:
+        raise RuntimeError(
+            "Full Reliability must permit full expansion independent of Acceptance: "
+            f"max error from alpha=1 is {reachability_error}"
+        )
+
 
 def _check_reliability_aux_gradient_isolation():
     model = _model().train()
@@ -102,7 +115,6 @@ def _check_reliability_aux_gradient_isolation():
         model.proposal_head.weight.normal_(0.0, 0.02)
     row = model(**_inputs(size=4))
     supervised_logit = model.expansion_reliability_head(row["control_hidden"].detach())
-    # Synthetic labels exercise both positive and negative BCE without model/GT dependencies.
     positive_loss = torch.nn.functional.softplus(-supervised_logit[:, :, :2]).mean()
     negative_loss = torch.nn.functional.softplus(supervised_logit[:, :, 2:]).mean()
     loss = 0.5 * (positive_loss + negative_loss)
@@ -151,6 +163,8 @@ def _check_training_protocol():
         raise RuntimeError("Reliability auxiliary must detach shared Control Pre features")
     if "c_v9._proposal_rescue_ce" not in helper_source:
         raise RuntimeError("C-V11 must preserve C-V9 Proposal supervision")
+    if 'alpha = 0.25*a + (1-0.25*a)*r' not in source:
+        raise RuntimeError("C-V11 metadata must record the corrected reachability formula")
 
 
 def main():
@@ -168,7 +182,9 @@ def main():
         "acceptance": "same C-V9 32D->1",
         "expansion_reliability": "new 32D->1",
         "additional_parameters_vs_c_v9": 33,
-        "alpha": "0.25*a + (1-0.25*a)*a*r",
+        "alpha": "0.25*a + (1-0.25*a)*r",
+        "reliability_off_recovers_c_v9": True,
+        "full_reliability_reaches_alpha_one": True,
         "reliability_aux_only_trains_new_head": True,
         "proposal_supervision": "unchanged C-V9",
         "temporal_loss": False,
