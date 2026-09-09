@@ -1,0 +1,127 @@
+{
+  "epoch": 2,
+  "train": {
+    "frames": 5003,
+    "optimizer_steps": 630,
+    "acceptance_supervised_pixels": 23260923,
+    "acceptance_positive_pixels": 15142530,
+    "acceptance_negative_pixels": 8118393,
+    "hard_positive_accepted": 15000369,
+    "hard_negative_rejected": 147516,
+    "rescue_pixels": 33584511,
+    "rescue_recovered": 7922930,
+    "baseline_correct_pixels": 2144613467,
+    "baseline_correct_damaged": 20334261,
+    "protection_loss_weight": 1.0,
+    "acceptance_loss_weight": 1.0,
+    "rescue_supervision": false,
+    "acceptance_supervision": "Host wrong->proposal correct positive; Host correct->proposal wrong negative; others ignored",
+    "final_ce": 0.11650583559400364,
+    "protection_kl": 0.012016225824932647,
+    "acceptance_bce": 0.6379076315657082,
+    "delta_c4_abs": 0.0036046667982342568,
+    "delta_c4_rms_ratio": 0.04644870814274793,
+    "bounded_semantic_delta_rms_ratio": 0.07712264633163222,
+    "raw_semantic_delta_c4_abs": 1.9459001428957536,
+    "feature_delta_logits_abs": 0.0850333334461477,
+    "reliability_mean": 0.5934259150115437,
+    "reliability_std": 0.05181622064098874,
+    "rescue_recovery_rate": 0.23591023850250492,
+    "baseline_correct_damage_rate": 0.009481550551132485,
+    "positive_reliability_mean": 0.6607182815770938,
+    "negative_reliability_mean": 0.6215197967824192,
+    "hard_positive_accept_recall": 0.990611806613558,
+    "hard_negative_reject_rate": 0.01817059115024365
+  },
+  "metrics": {
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC8": 0.9379464611218211,
+      "mVC16": 0.9289708560902963
+    },
+    "c_v3_base": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC8": 0.94442277549366,
+      "mVC16": 0.9364251481219616
+    },
+    "c_v4_frozen": {
+      "mIoU": 0.6635358153321175,
+      "mTC": 0.7132536018314909,
+      "mVC8": 0.9481737336323761,
+      "mVC16": 0.9413745640702833
+    },
+    "c_v14": {
+      "mIoU": 0.658041725833934,
+      "mTC": 0.7124417326085595,
+      "mVC8": 0.9436174624078587,
+      "mVC16": 0.9373239317131579
+    }
+  },
+  "diagnostics": {
+    "correction_frames": 2963,
+    "delta_c4_abs": 0.004532943399094354,
+    "delta_c4_rms_ratio": 0.05954821851988359,
+    "bounded_semantic_delta_rms_ratio": 0.08618312751496518,
+    "raw_semantic_delta_c4_abs": 2.6826186291559138,
+    "feature_delta_logits_abs": 0.11273987111492492,
+    "reliability_mean": 0.6856290624224572,
+    "reliability_std": 0.06761379631998729,
+    "acceptance_positive_pixels": 12387583,
+    "acceptance_negative_pixels": 14346628,
+    "positive_reliability_sum": 9422363.1618042,
+    "negative_reliability_sum": 10733313.10818863,
+    "hard_positive_accepted": 12387583,
+    "hard_negative_rejected": 0,
+    "rescue_pixels": 29325996,
+    "rescue_recovered": 5757813,
+    "baseline_correct_pixels": 1227527398,
+    "baseline_correct_damaged": 14863664,
+    "rescue_recovery_rate": 0.19633819086656085,
+    "baseline_correct_damage_rate": 0.01210862097596945,
+    "positive_reliability_mean": 0.7606296693878216,
+    "negative_reliability_mean": 0.7481418705627991,
+    "hard_positive_accept_recall": 1.0,
+    "hard_negative_reject_rate": 0.0,
+    "temporal_base": "frozen C-V4 Stateful Semantic Hysteresis",
+    "history_length": 4,
+    "history_source": "raw detached frozen C-V3 logits",
+    "semantic_correction_target": "current Host c4 2048D feature",
+    "semantic_correction_source": "concat validity-gated e1..e4 only",
+    "bounded_residual_scale": 0.1,
+    "reliability_shape": "single-channel pixel-wise",
+    "reliability_position": "after bounded semantic writeback",
+    "final_composition": "Decoder(c4 + reliability * bounded semantic Delta-c4)",
+    "c_v4_role": "frozen temporal reference/teacher + hidden state; not logit composition",
+    "controller_output_feedback": false,
+    "corrected_output_history_feedback": false,
+    "rescue_supervision": false,
+    "acceptance_supervision": "training-only beneficial/harmful proposal target",
+    "raft_training": false,
+    "raft_metric_only": true
+  },
+  "delta_vs_host": {
+    "mIoU": 0.003924319297139545,
+    "mTC": 0.004657626606248577,
+    "mVC8": 0.005671001286037591,
+    "mVC16": 0.008353075622861583
+  },
+  "delta_vs_c_v3": {
+    "mIoU": -0.004665108959744924,
+    "mTC": 0.0007573696381789619,
+    "mVC8": -0.0008053130858013402,
+    "mVC16": 0.0008987835911962172
+  },
+  "delta_vs_c_v4": {
+    "mIoU": -0.005494089498183419,
+    "mTC": -0.0008118692229314162,
+    "mVC8": -0.004556271224517405,
+    "mVC16": -0.004050632357125439
+  },
+  "selection_key": [
+    0,
+    0.658041725833934,
+    0.7124417326085595
+  ]
+}
