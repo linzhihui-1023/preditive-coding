@@ -3,6 +3,7 @@
 import inspect
 
 import torch
+from torch.nn import functional as F
 
 from predify2021.mce_scores import c_v12_temporal_semantic_feature_training as training
 from predify2021.mce_scores import (
@@ -69,13 +70,15 @@ def _check_predictive_coding_boundary():
 
 def _check_feature_target_and_zero_step():
     model = _model().eval()
-    out = model(**_inputs())
+    data = _inputs()
+    current_c4 = data["current_c4"].clone()
+    out = model(**data)
     if out["delta_c4"].shape[1] != C4:
         raise RuntimeError("C-V12 must write a 2048D c4 residual")
     if float(out["delta_c4"].abs().max().item()) != 0.0:
         raise RuntimeError("C-V12 Delta-c4 must be exactly zero at initialization")
-    if not torch.equal(out["corrected_c4"], _cached_current := out["corrected_c4"] - out["delta_c4"]):
-        raise RuntimeError("C-V12 corrected c4 must equal current c4 at zero step")
+    if not torch.equal(out["corrected_c4"], current_c4):
+        raise RuntimeError("C-V12 corrected c4 must equal the actual input current_c4 at zero step")
     if not torch.allclose(
         out["temporal_gain"],
         torch.ones_like(out["temporal_gain"]),
@@ -85,6 +88,57 @@ def _check_feature_target_and_zero_step():
         raise RuntimeError("C-V12 temporal modulation must be exactly neutral at initialization")
     if float(model.writeback.output_projection.weight.abs().max().item()) != 0.0:
         raise RuntimeError("C-V12 writeback final projection must be zero initialized")
+
+
+def _check_zero_step_final_composition():
+    class DummyDecoder:
+        @staticmethod
+        def decode_from_host_feature(host_feature):
+            logits = host_feature.tensor[:, :NUM_CLASSES]
+            return F.interpolate(
+                logits,
+                size=host_feature.output_size,
+                mode="bilinear",
+                align_corners=False,
+            )
+
+    corrector = _model().eval()
+    data = _inputs(error_size=8, c4_size=4)
+    decoder = DummyDecoder()
+    output_size = (8, 8)
+    host_logits = decoder.decode_from_host_feature(
+        training.HostFeature(
+            data["current_c4"],
+            torch.zeros(1, 1, 8, 8),
+            output_size,
+        )
+    )
+    baseline_logits = torch.randn(1, NUM_CLASSES, *output_size)
+    observation = {
+        "c4": data["current_c4"],
+        "c1": torch.zeros(1, 1, 8, 8),
+        "output_size": output_size,
+        "host_logits": host_logits,
+    }
+    error_row = {
+        "prediction_errors": data["prediction_errors"],
+        "history_validities_low": data["history_validities_low"],
+        "temporal_hidden": data["temporal_hidden"],
+        "dynamics_state": data["dynamics_error"],
+    }
+    final_logits, feature_delta_logits, _ = training.decode_feature_correction(
+        decoder,
+        corrector,
+        observation,
+        baseline_logits,
+        error_row,
+        data["transportability_low"],
+        data["memory_reliability_low"],
+    )
+    if float(feature_delta_logits.abs().max().item()) != 0.0:
+        raise RuntimeError("C-V12 decoded feature effect must be exactly zero at initialization")
+    if not torch.equal(final_logits, baseline_logits):
+        raise RuntimeError("C-V12 zero-step final logits must exactly equal frozen C-V4 baseline logits")
 
 
 def _check_deep_history_semantic_content():
@@ -188,6 +242,7 @@ def _check_model_selection_prioritizes_both_goals():
 def main():
     _check_predictive_coding_boundary()
     _check_feature_target_and_zero_step()
+    _check_zero_step_final_composition()
     _check_deep_history_semantic_content()
     _check_temporal_branch_is_feature_wise()
     _check_joint_gradient_after_writeback_opens()
