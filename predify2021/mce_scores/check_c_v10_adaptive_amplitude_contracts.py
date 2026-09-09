@@ -16,6 +16,9 @@ from predify2021.mce_scores import (
 from predify2021.model_factory.deeplabv3plus_resnet50.task_space_adaptive_amplitude_proposal_corrector import (
     AdaptiveAmplitudeProposalCorrector,
 )
+from predify2021.model_factory.deeplabv3plus_resnet50.task_space_direct_error_proposal_corrector import (
+    DirectErrorProposalCorrector,
+)
 
 
 NUM_CLASSES = 19
@@ -125,33 +128,42 @@ def _check_initial_operating_point():
         raise RuntimeError("shared evaluator gate slot must equal C-V10 alpha")
 
 
-def _check_separate_control_heads():
+def _check_shared_control_encoder_and_parameter_delta():
     model = _model()
     if model.decision_channels != 95:
-        raise RuntimeError(f"C-V10 decision evidence must be 95D, got {model.decision_channels}")
-    if model.acceptance_pre is model.amplitude_pre:
-        raise RuntimeError("Acceptance and Amplitude must not share their pre block")
-    if model.acceptance_head is model.amplitude_head:
-        raise RuntimeError("Acceptance and Amplitude must have separate heads")
+        raise RuntimeError(f"C-V10 decision evidence must remain 95D, got {model.decision_channels}")
+    if model.control_pre is not model.gate_pre:
+        raise RuntimeError("C-V10 must reuse C-V9 gate_pre as the shared Control Pre")
+    if model.acceptance_head is not model.gate_head:
+        raise RuntimeError("C-V10 Acceptance Head must reuse the C-V9 gate_head slot")
+    if hasattr(model, "amplitude_pre"):
+        raise RuntimeError("C-V10 must not add a second 95D->32D control encoder")
+    if model.amplitude_head.in_channels != HIDDEN or model.amplitude_head.out_channels != 1:
+        raise RuntimeError("C-V10 Amplitude Head must be exactly 32D->1")
 
-    acceptance_params = {id(p) for p in model.acceptance_pre.parameters()} | {
-        id(p) for p in model.acceptance_head.parameters()
-    }
-    amplitude_params = {id(p) for p in model.amplitude_pre.parameters()} | {
-        id(p) for p in model.amplitude_head.parameters()
-    }
-    if acceptance_params & amplitude_params:
-        raise RuntimeError("Acceptance and Amplitude parameter sets unexpectedly overlap")
+    c_v9 = DirectErrorProposalCorrector(
+        num_classes=NUM_CLASSES,
+        history_length=HISTORY_LENGTH,
+        hidden_channels=HIDDEN,
+        g_max=0.25,
+        gate_bias=-2.0,
+    )
+    c_v9_params = sum(p.numel() for p in c_v9.parameters() if p.requires_grad)
+    c_v10_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    expected_extra = HIDDEN + 1
+    if c_v10_params - c_v9_params != expected_extra:
+        raise RuntimeError(
+            "C-V10 must add only one 32D->1 Amplitude Head: "
+            f"expected +{expected_extra}, got +{c_v10_params - c_v9_params}"
+        )
 
 
 def _check_fixed_025_cap_removed():
     model = _model().eval()
-    # Keep both final-head weights zero and move only their biases. If the old
-    # fixed 0.25 multiplier still exists, alpha cannot exceed 0.25.
     target = 0.8
     logit = math.log(target / (1.0 - target))
     with torch.no_grad():
-        model.acceptance_head.bias.fill_(logit)
+        model.gate_head.bias.fill_(logit)
         model.amplitude_head.bias.fill_(logit)
     out = model(**_inputs())
     alpha = float(out["alpha"].mean().item())
@@ -177,7 +189,7 @@ def _check_joint_final_gradient():
     model = _model().train()
     with torch.no_grad():
         model.proposal_head.weight.normal_(mean=0.0, std=0.02)
-        model.acceptance_head.weight.normal_(mean=0.0, std=0.02)
+        model.gate_head.weight.normal_(mean=0.0, std=0.02)
         model.amplitude_head.weight.normal_(mean=0.0, std=0.02)
     out = model(**_inputs())
     applied = out["gate"] * out["delta_z"]
@@ -187,7 +199,8 @@ def _check_joint_final_gradient():
 
     required = {
         "proposal_head": model.proposal_head.weight.grad,
-        "acceptance_head": model.acceptance_head.weight.grad,
+        "control_pre": model.gate_pre[0].weight.grad,
+        "acceptance_head": model.gate_head.weight.grad,
         "amplitude_head": model.amplitude_head.weight.grad,
     }
     for name, grad in required.items():
@@ -195,7 +208,7 @@ def _check_joint_final_gradient():
             raise RuntimeError(f"final correction loss did not train {name}")
 
 
-def _check_training_protocol_single_change():
+def _check_training_protocol_and_metadata():
     source = inspect.getsource(c_v10.main)
     if "c_v9._train_epoch" not in source:
         raise RuntimeError("C-V10 must reuse the validated C-V9 supervision path")
@@ -211,23 +224,33 @@ def _check_training_protocol_single_change():
             raise RuntimeError(f"C-V10 must not expose architecture sweep argument {token}")
     if c_v10.PROPOSAL_LOSS_WEIGHT != 1.0:
         raise RuntimeError("C-V10 must preserve C-V9 Proposal loss weight 1.0")
+    if 'diagnostics.pop("g_max", None)' not in source:
+        raise RuntimeError("C-V10 must remove legacy evaluator g_max metadata")
+    if 'diagnostics["alpha_full_mean"] = diagnostics.pop("gate_mean")' not in source:
+        raise RuntimeError("C-V10 must rename legacy gate_mean to alpha_full_mean")
+
+    hook_source = inspect.getsource(c_v10._ControlStats._hook)
+    if ".item()" in hook_source:
+        raise RuntimeError("C-V10 control hook must not synchronize GPU per frame")
 
 
 def main():
     _check_predictive_coding_boundary()
     _check_initial_operating_point()
-    _check_separate_control_heads()
+    _check_shared_control_encoder_and_parameter_delta()
     _check_fixed_025_cap_removed()
     _check_proposal_independent_of_temporal_control()
     _check_joint_final_gradient()
-    _check_training_protocol_single_change()
+    _check_training_protocol_and_metadata()
     print(
         {
             "passed": True,
             "causal_path": "History -> Prediction -> Prediction Error -> Proposal -> Adaptive Error Gain -> Correction",
             "proposal": "same C-V9 concat(e1..e4) 76D->19D",
-            "acceptance": "95D->32D->1 sigmoid",
-            "amplitude": "95D->32D->1 sigmoid",
+            "control_pre": "shared C-V9 95D->32D gate_pre",
+            "acceptance": "shared-control 32D->1 sigmoid",
+            "amplitude": "new shared-control 32D->1 sigmoid",
+            "extra_control_parameters_vs_c_v9": HIDDEN + 1,
             "alpha": "acceptance * amplitude in [0,1]",
             "fixed_025_cap_removed": True,
             "initial_alpha_matches_c_v9": True,
@@ -236,6 +259,9 @@ def main():
             "amplitude_oracle_target": False,
             "temporal_loss": False,
             "inference_uses_raw_history_directly": False,
+            "legacy_g_max_metadata_removed": True,
+            "legacy_gate_mean_renamed_to_alpha_full_mean": True,
+            "per_frame_control_item_sync": False,
         }
     )
 
