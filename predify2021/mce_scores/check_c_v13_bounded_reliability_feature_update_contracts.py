@@ -72,6 +72,54 @@ def _check_zero_step_and_reliability_range():
         raise RuntimeError("C-V13 temporal reliability must initialize at 0.5")
 
 
+def _check_zero_step_final_is_host():
+    class DummyDecoder:
+        @staticmethod
+        def decode_from_host_feature(host_feature):
+            logits = host_feature.tensor[:, :NUM_CLASSES]
+            return F.interpolate(
+                logits,
+                size=host_feature.output_size,
+                mode="bilinear",
+                align_corners=False,
+            )
+
+    corrector = _model().eval()
+    data = _inputs(error_size=8, c4_size=4)
+    decoder = DummyDecoder()
+    output_size = (8, 8)
+    c1 = torch.zeros(1, 1, 8, 8)
+    host_logits = decoder.decode_from_host_feature(
+        training.HostFeature(data["current_c4"], c1, output_size)
+    )
+    observation = {
+        "c4": data["current_c4"],
+        "c1": c1,
+        "output_size": output_size,
+        "host_logits": host_logits,
+    }
+    error_row = {
+        "prediction_errors": data["prediction_errors"],
+        "history_validities_low": data["history_validities_low"],
+        "temporal_hidden": data["temporal_hidden"],
+        "dynamics_state": data["dynamics_error"],
+    }
+    final_logits, feature_delta_logits, row = training.decode_bounded_feature_update(
+        decoder,
+        corrector,
+        observation,
+        error_row,
+        data["transportability_low"],
+        data["memory_reliability_low"],
+    )
+    if float(row["delta_c4"].abs().max().item()) != 0.0:
+        raise RuntimeError("C-V13 zero-step deployed path must have zero Delta-c4")
+    if float(feature_delta_logits.abs().max().item()) != 0.0:
+        raise RuntimeError("C-V13 zero-step decoded feature effect must be exactly zero")
+    if not torch.equal(final_logits, host_logits):
+        raise RuntimeError("C-V13 zero-step final logits must exactly equal current Host logits")
+
+
 def _check_bounded_feature_update():
     model = _model().eval()
     with torch.no_grad():
@@ -152,6 +200,9 @@ def _check_protection_supervision():
 def _check_training_and_final_composition_contract():
     helper_source = inspect.getsource(training)
     entry_source = inspect.getsource(c_v13)
+    decode_parameters = set(inspect.signature(training.decode_bounded_feature_update).parameters)
+    if "baseline_logits" in decode_parameters or "c_v4_logits" in decode_parameters:
+        raise RuntimeError("C-V13 deployed decoder must not take C-V4/baseline logits as composition input")
     required_helper = (
         'final_logits = model.decode_from_host_feature(',
         'row["corrected_c4"]',
@@ -201,6 +252,7 @@ def _check_model_selection():
 def main():
     _check_predictive_coding_boundary()
     _check_zero_step_and_reliability_range()
+    _check_zero_step_final_is_host()
     _check_bounded_feature_update()
     _check_deep_history_and_temporal_conditioning()
     _check_joint_gradient_after_writeback_opens()
@@ -213,7 +265,9 @@ def main():
         "passed": True,
         "architecture": "C-V4 temporal reference + K=4 Prediction Error + bounded c4 feature update",
         "semantic_content": "e1..e4 -> 128D",
-        "temporal_reliability": "128D sigmoid in [0,1]",
+        "temporal_reliability": "128D sigmoid in [0,1] before bounded writeback",
+        "hard_safety_guarantee": "final Delta-c4 is capped by 0.10 x per-channel RMS(c4)",
+        "zero_step": "final logits exactly equal current Host logits",
         "residual_bound": "0.10 x per-channel RMS(c4) x tanh(raw_delta)",
         "final_composition": "Decoder(c4 + bounded Delta-c4)",
         "training": "all-pixel CE + C-V4-correct-region protection KL",
