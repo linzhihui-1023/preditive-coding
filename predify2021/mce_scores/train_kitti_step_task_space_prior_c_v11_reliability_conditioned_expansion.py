@@ -79,7 +79,7 @@ def _zero_step_equality_check(model, observer, residual, correction, mask_predic
     alpha = float(row["alpha"].mean().item())
     expected_a = 1.0 / (1.0 + math.exp(-ACCEPTANCE_BIAS))
     expected_base = BASE_GAIN * expected_a
-    expected_alpha = expected_base + (1.0 - expected_base) * expected_a * RELIABILITY_INIT
+    expected_alpha = expected_base + (1.0 - expected_base) * RELIABILITY_INIT
     if proposal_weight_max != 0.0 or delta_raw_max != 0.0 or equality_max != 0.0:
         raise RuntimeError("C-V11 zero-step C-V3 equality failed")
     if abs(acceptance - expected_a) > 1e-7 or abs(reliability - RELIABILITY_INIT) > 1e-7:
@@ -180,7 +180,8 @@ def main(argv=None):
             "expansion_reliability_head": "new shared-control 32D->1 sigmoid",
             "additional_control_parameters_vs_c_v9": 33,
             "base_gain": BASE_GAIN,
-            "adaptive_error_gain": "alpha = 0.25*a + (1-0.25*a)*a*r",
+            "adaptive_error_gain": "alpha = 0.25*a + (1-0.25*a)*r",
+            "full_reliability_reaches_alpha_one": True,
             "reliability_supervision": True,
             "reliability_positive": "current wrong AND 0.25 proposal wrong AND full proposal correct",
             "reliability_negative": "current correct AND full proposal wrong",
@@ -223,7 +224,8 @@ def main(argv=None):
                     "additional_control_parameters_vs_c_v9": 33,
                     "base_gain": BASE_GAIN,
                     "reliability_init": RELIABILITY_INIT,
-                    "alpha": "0.25*a + (1-0.25*a)*a*r",
+                    "alpha": "0.25*a + (1-0.25*a)*r",
+                    "full_reliability_reaches_alpha_one": True,
                     "raw_history_direct_fusion": False,
                 },
                 "training_supervision": {
