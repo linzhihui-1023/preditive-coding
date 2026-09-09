@@ -48,6 +48,9 @@ class AdaptiveAmplitudeProposalCorrector(nn.Module):
         self.hidden_channels = int(hidden_channels)
         self.acceptance_bias = float(acceptance_bias)
         self.amplitude_init = float(amplitude_init)
+        # Compatibility for the shared C-V7 evaluator metadata only. C-V10 has
+        # no fixed scalar g_max multiplier; alpha itself is learned in [0,1].
+        self.g_max = 1.0
         if self.history_length < 1:
             raise ValueError("history_length must be >= 1")
         if not 0.0 < self.amplitude_init < 1.0:
