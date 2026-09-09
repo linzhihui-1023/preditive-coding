@@ -6,15 +6,16 @@ Architecture decision / 架构决策
 --------------------------------
 C-V9 Gate Acceptance Decomposition showed that the fixed g_max=0.25 cap makes
 75.7% of beneficial pixels unreachable, while the existing Gate already has
-useful acceptance/protection behavior. C-V10 therefore separates:
+useful acceptance/protection behavior. C-V10 therefore keeps the validated C-V9
+95D->32D control feature extractor and splits only its scalar output role:
 
   acceptance a_t = sigmoid(l_acc) : whether to accept the correction;
   amplitude  s_t = sigmoid(l_amp) : how strongly to apply it;
   alpha_t = a_t * s_t             : learned error gain in [0, 1].
 
+Relative to C-V9, the control path adds only one 32D->1 Amplitude Head.
 The predictive-coding causal boundary is unchanged:
 History -> Prediction -> Prediction Error -> Proposal -> Error-gain Correction.
-Raw History never enters Proposal / Acceptance / Amplitude directly.
 
 Training supervision / 训练监督
 ------------------------------
@@ -23,7 +24,8 @@ Exactly reuse C-V9 supervision:
       + mean_rescue_frames(L_proposal_rescue_CE)
 
 No Acceptance target, no Amplitude Oracle target, no temporal loss, no RAFT
-teacher. The only experimental variable is fixed-cap Gate -> Acceptance*Amplitude.
+teacher. The experimental variable is the fixed-cap scalar Gate becoming
+Acceptance * Adaptive Amplitude while preserving the C-V9 control encoder.
 """
 
 import argparse
@@ -72,26 +74,34 @@ AMPLITUDE_INIT = 0.25
 
 
 class _ControlStats:
-    """Collect detached Acceptance / Amplitude / alpha means with no graph change."""
+    """Accumulate detached low-resolution control means without per-frame sync."""
 
     def __init__(self, corrector):
         self.corrector = corrector
         self.handle = None
         self.count = 0
-        self.sums = {"acceptance_mean": 0.0, "amplitude_mean": 0.0, "alpha_mean": 0.0}
+        self.sums = {
+            "acceptance_mean": None,
+            "amplitude_mean": None,
+            "alpha_mean": None,
+        }
 
     def _hook(self, _module, _inputs, output):
         if not isinstance(output, dict):
             return
-        for key, out_key in (
-            ("acceptance_mean", "acceptance"),
-            ("amplitude_mean", "amplitude"),
-            ("alpha_mean", "alpha"),
-        ):
-            value = output.get(out_key)
-            if value is None:
-                return
-            self.sums[key] += float(value.detach().mean().item())
+        values = {
+            "acceptance_mean": output.get("acceptance"),
+            "amplitude_mean": output.get("amplitude"),
+            "alpha_mean": output.get("alpha"),
+        }
+        if any(value is None for value in values.values()):
+            return
+        for key, value in values.items():
+            scalar = value.detach().mean()
+            if self.sums[key] is None:
+                self.sums[key] = scalar
+            else:
+                self.sums[key] = self.sums[key] + scalar
         self.count += 1
 
     def __enter__(self):
@@ -104,10 +114,19 @@ class _ControlStats:
             self.handle = None
 
     def result(self):
-        den = max(self.count, 1)
+        if self.count == 0:
+            return {
+                "control_frames": 0,
+                "acceptance_mean": 0.0,
+                "amplitude_mean": 0.0,
+                "alpha_mean": 0.0,
+            }
         return {
             "control_frames": self.count,
-            **{key: value / den for key, value in self.sums.items()},
+            **{
+                key: float((value / self.count).item())
+                for key, value in self.sums.items()
+            },
         }
 
 
@@ -141,7 +160,7 @@ def _zero_step_equality_check(
     dynamics,
     groups,
 ):
-    """Real-frame contract: C-V10 starts exactly at C-V3 with C-V9 alpha E0."""
+    """Real-frame contract: C-V10 starts at C-V3 with C-V9 initial alpha."""
     samples = next((rows for rows in groups.values() if len(rows) >= 3), None)
     if samples is None:
         raise RuntimeError("No sequence with at least three frames for C-V10 zero-step check")
@@ -276,7 +295,6 @@ def main(argv=None):
     )
     refiner, cv3_payload = c_v5._load_frozen_cv3_refiner(args.c_v3_checkpoint)
 
-    # Fresh initialization: isolate the architecture decision from continuation.
     corrector = AdaptiveAmplitudeProposalCorrector(
         num_classes=c_v5.NUM_CLASSES,
         history_length=c_v5.HISTORY_LENGTH,
@@ -340,7 +358,9 @@ def main(argv=None):
                 optimizer,
                 args.tbptt_steps,
             )
-        train_stats["control"] = train_control.result()
+        train_stats["control_lowres"] = train_control.result()
+        if "gate_mean" in train_stats:
+            train_stats["alpha_full_mean"] = train_stats.pop("gate_mean")
 
         with _ControlStats(corrector) as eval_control:
             raw_metrics, diagnostics = c_v7._evaluate(
@@ -355,7 +375,10 @@ def main(argv=None):
                 val_groups,
                 raft_metric,
             )
-        diagnostics["control"] = eval_control.result()
+        diagnostics["control_lowres"] = eval_control.result()
+        if "gate_mean" in diagnostics:
+            diagnostics["alpha_full_mean"] = diagnostics.pop("gate_mean")
+        diagnostics.pop("g_max", None)
         metrics = _rename_metrics(raw_metrics)
         diagnostics.pop("raw_history_enters_correction_head", None)
         diagnostics.update(
@@ -367,9 +390,11 @@ def main(argv=None):
                 "proposal_loss_weight": PROPOSAL_LOSS_WEIGHT,
                 "proposal_loss_gate_bypass": True,
                 "proposal_loss_tanh_bypass": True,
-                "acceptance_head": "95D->32D->1 sigmoid",
-                "amplitude_head": "95D->32D->1 sigmoid",
-                "acceptance_amplitude_separate_pre": True,
+                "control_pre": "shared C-V9 95D->32D gate_pre",
+                "acceptance_head": "shared-control 32D->1 sigmoid",
+                "amplitude_head": "new shared-control 32D->1 sigmoid",
+                "acceptance_amplitude_share_pre": True,
+                "additional_control_parameters_vs_c_v9": corrector.hidden_channels + 1,
                 "adaptive_error_gain": "alpha = acceptance * amplitude",
                 "fixed_g_max_removed": True,
                 "alpha_range": [0.0, 1.0],
@@ -421,10 +446,12 @@ def main(argv=None):
                         "proposal_output_channels": c_v5.NUM_CLASSES,
                         "error_hidden_role": "motion-aligned temporal reliability context",
                         "decision_evidence_channels": corrector.decision_channels,
-                        "acceptance_head": "95D->32D->1 sigmoid",
-                        "amplitude_head": "95D->32D->1 sigmoid",
+                        "control_pre": "shared C-V9 95D->32D gate_pre",
+                        "acceptance_head": "32D->1 sigmoid",
+                        "amplitude_head": "32D->1 sigmoid",
                         "acceptance_amplitude_share_input": True,
-                        "acceptance_amplitude_share_pre": False,
+                        "acceptance_amplitude_share_pre": True,
+                        "additional_control_parameters_vs_c_v9": corrector.hidden_channels + 1,
                         "alpha": "acceptance * amplitude",
                         "alpha_range": [0.0, 1.0],
                         "fixed_g_max": False,
@@ -458,7 +485,7 @@ def main(argv=None):
 
     summary = {
         "experiment": "C-V10 Adaptive-Amplitude Proposal Acceptance",
-        "architecture_decision": "replace fixed 0.25 Gate cap with Acceptance * Adaptive Amplitude",
+        "architecture_decision": "retain C-V9 control encoder; replace fixed 0.25 cap with Acceptance * Adaptive Amplitude",
         "best": best,
         "history": history,
         "zero_step": zero_step,
