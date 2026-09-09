@@ -1,0 +1,116 @@
+{
+  "epoch": 1,
+  "train": {
+    "frames": 5003,
+    "frames_with_rescue": 5003,
+    "rescue_pixels": 36918154,
+    "optimizer_steps": 630,
+    "proposal_loss_weight": 1.0,
+    "proposal_loss_window_normalization": "mean over Rescue-bearing frames only",
+    "segmentation_ce": 0.11720070387969285,
+    "prediction_error_abs": 0.007492968794574591,
+    "dynamics_error_abs": 0.0030111543343091757,
+    "delta_z_abs": 0.00341964255313614,
+    "applied_correction_abs": 0.0007228002461964239,
+    "error_reliability_mean": 0.8847070297264658,
+    "sign_agreement_mean": 0.6943756113904441,
+    "valid_fraction_mean": 0.9938577228120964,
+    "total_loss": 1.7354381078765506,
+    "window_final_ce": 0.11796803965218483,
+    "window_proposal_rescue_ce": 1.6174700680233183,
+    "proposal_rescue_ce": 1.6496106917388957,
+    "proposal_raw_rescue_recovery_rate": 0.04366675538543991,
+    "proposal_raw_current_correct_pixels": 2144254922,
+    "proposal_raw_current_correct_damage_rate": 0.0007397114884645232,
+    "control_lowres": {
+      "control_frames": 5003,
+      "acceptance_mean": 0.16090834140777588,
+      "amplitude_mean": 0.29968389868736267,
+      "alpha_mean": 0.06502809375524521
+    },
+    "alpha_full_mean": 0.06500064472844905
+  },
+  "metrics": {
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC8": 0.9379464611218211,
+      "mVC16": 0.9289708560902963
+    },
+    "c_v3_base": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC8": 0.94442277549366,
+      "mVC16": 0.9364251481219616
+    },
+    "c_v10": {
+      "mIoU": 0.6626389733074105,
+      "mTC": 0.7137202534203808,
+      "mVC8": 0.9465788745387906,
+      "mVC16": 0.9392513041694682
+    }
+  },
+  "diagnostics": {
+    "frames_with_correction_path": 2963,
+    "delta_z_abs": 0.007323491642570014,
+    "applied_correction_abs": 0.002397382689658667,
+    "error_reliability_mean": 0.8770110683589218,
+    "sign_agreement_mean": 0.6922224660479777,
+    "history_length": 4,
+    "history_source": "raw detached frozen C-V3 logits",
+    "error_hidden_motion_aligned": true,
+    "error_hidden_reliability_gated": true,
+    "z_cur_detached": true,
+    "bounded_logit_residual": true,
+    "raft_training": false,
+    "raft_inference_decision": false,
+    "raft_metric_only": true,
+    "control_lowres": {
+      "control_frames": 2963,
+      "acceptance_mean": 0.2162926197052002,
+      "amplitude_mean": 0.3619610071182251,
+      "alpha_mean": 0.11425390094518661
+    },
+    "alpha_full_mean": 0.11421418264935719,
+    "semantic_proposal_source": "concat validity-gated e1..e4",
+    "proposal_head": "same C-V9 bias-free zero-init 1x1 Conv 76D->19D",
+    "proposal_supervision": true,
+    "proposal_supervision_scope": "formal Rescue pixels only",
+    "proposal_loss_weight": 1.0,
+    "proposal_loss_gate_bypass": true,
+    "proposal_loss_tanh_bypass": true,
+    "control_pre": "shared C-V9 95D->32D gate_pre",
+    "acceptance_head": "shared-control 32D->1 sigmoid",
+    "amplitude_head": "new shared-control 32D->1 sigmoid",
+    "acceptance_amplitude_share_pre": true,
+    "additional_control_parameters_vs_c_v9": 33,
+    "adaptive_error_gain": "alpha = acceptance * amplitude",
+    "fixed_g_max_removed": true,
+    "alpha_range": [
+      0.0,
+      1.0
+    ],
+    "initial_operating_point_matches_c_v9": true,
+    "acceptance_direct_target": false,
+    "amplitude_oracle_target": false,
+    "joint_final_ce_gradient": true,
+    "tanh_bound_retained": true
+  },
+  "delta_vs_host": {
+    "mIoU": 0.008521566770615996,
+    "mTC": 0.005936147418069915,
+    "mVC8": 0.00863241341696952,
+    "mVC16": 0.010280448079171944
+  },
+  "delta_vs_c_v3": {
+    "mIoU": -6.786148626847233e-05,
+    "mTC": 0.0020358904500002994,
+    "mVC8": 0.0021560990451305884,
+    "mVC16": 0.0028261560475065783
+  },
+  "selection_key": [
+    0,
+    0.6626389733074105,
+    0.7137202534203808
+  ]
+}
