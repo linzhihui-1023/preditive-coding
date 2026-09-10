@@ -1,0 +1,203 @@
+{
+  "epoch": 2,
+  "train": {
+    "frames": 5003,
+    "optimizer_steps": 630,
+    "l_seg": true,
+    "l_accept": 0.0,
+    "l_protect": 0.0,
+    "gt_beneficial_harmful": 0.0,
+    "delta_c4_abs": 0.006788262241940134,
+    "reliability_mean": 0.9717498496010998,
+    "reliability_std": 0.02201510810125906,
+    "training_objective": "L_seg only",
+    "l_accept_backprop": false,
+    "l_protect_backprop": false,
+    "gt_beneficial_harmful_backprop": false,
+    "rescue_ce": false,
+    "temporal_loss": false,
+    "raft_training": false,
+    "gradient_contract": {
+      "gate_gradient_finite": true,
+      "gate_gradient_non_zero": true,
+      "gate_gradient_abs_sum": 0.08980505488216295,
+      "gate_gradient_by_module": {
+        "reliability_head": {
+          "gradient_present": true,
+          "gradient_finite": true,
+          "gradient_abs_sum": 0.01157832014723681,
+          "gradient_non_zero": true
+        },
+        "proposal_encoder": {
+          "gradient_present": true,
+          "gradient_finite": true,
+          "gradient_abs_sum": 0.012693461121671135,
+          "gradient_non_zero": true
+        },
+        "host_encoder": {
+          "gradient_present": true,
+          "gradient_finite": true,
+          "gradient_abs_sum": 0.003826364169071894,
+          "gradient_non_zero": true
+        },
+        "acceptance_fusion": {
+          "gradient_present": true,
+          "gradient_finite": true,
+          "gradient_abs_sum": 0.0515601473452989,
+          "gradient_non_zero": true
+        },
+        "acceptance_residual_head": {
+          "gradient_present": true,
+          "gradient_finite": true,
+          "gradient_abs_sum": 0.01014676209888421,
+          "gradient_non_zero": true
+        }
+      },
+      "proposal_gradient_present": true,
+      "proposal_parameters_receive_gradient": false
+    }
+  },
+  "metrics": {
+    "host": {
+      "mIoU": 0.6541174065367945,
+      "mTC": 0.7077841060023109,
+      "mVC8": 0.9379464611218211,
+      "mVC16": 0.9289708560902963
+    },
+    "c_v3_base": {
+      "mIoU": 0.662706834793679,
+      "mTC": 0.7116843629703805,
+      "mVC8": 0.94442277549366,
+      "mVC16": 0.9364251481219616
+    },
+    "c_v4_frozen": {
+      "mIoU": 0.6635358153321175,
+      "mTC": 0.7132536018314909,
+      "mVC8": 0.9481737336323761,
+      "mVC16": 0.9413745640702833
+    },
+    "c_v16_a": {
+      "mIoU": 0.6620032265353647,
+      "mTC": 0.7148934732444877,
+      "mVC8": 0.9461947531494554,
+      "mVC16": 0.9400304548585231
+    }
+  },
+  "diagnostics": {
+    "correction_frames": 2963,
+    "delta_c4_abs": 0.006771951049932135,
+    "delta_c4_rms_ratio": 0.08778520022750584,
+    "bounded_semantic_delta_rms_ratio": 0.08886517112344815,
+    "raw_semantic_delta_c4_abs": 3.089082874883239,
+    "feature_delta_logits_abs": 0.1271952877334755,
+    "reliability_mean": 0.9878146988372726,
+    "reliability_std": 0.009891340233557809,
+    "rescue_pixels": 29325996,
+    "rescue_recovered": 6445014,
+    "baseline_correct_pixels": 1227527398,
+    "baseline_correct_damaged": 14285674,
+    "host_reference_positive_pixels": 11911839,
+    "host_reference_negative_pixels": 10564151,
+    "host_reference_positive_reliability_sum": 11854962.478790283,
+    "host_reference_negative_reliability_sum": 10512913.278560638,
+    "host_reference_hard_positive_accepted": 11911839,
+    "host_reference_hard_negative_rejected": 0,
+    "cv4_reference_positive_pixels": 14538449,
+    "cv4_reference_negative_pixels": 14331361,
+    "cv4_reference_positive_reliability_sum": 14476397.392456055,
+    "cv4_reference_negative_reliability_sum": 14268160.45880127,
+    "cv4_reference_hard_positive_accepted": 14538449,
+    "cv4_reference_hard_negative_rejected": 0,
+    "source_cv14_host_reference_positive_pixels": 11911839,
+    "source_cv14_host_reference_negative_pixels": 10564151,
+    "source_cv14_host_reference_positive_reliability_sum": 10975556.354492188,
+    "source_cv14_host_reference_negative_reliability_sum": 9669599.750961304,
+    "source_cv14_host_reference_hard_positive_accepted": 11911839,
+    "source_cv14_host_reference_hard_negative_rejected": 0,
+    "source_cv14_cv4_reference_positive_pixels": 14538449,
+    "source_cv14_cv4_reference_negative_pixels": 14331361,
+    "source_cv14_cv4_reference_positive_reliability_sum": 13413245.928222656,
+    "source_cv14_cv4_reference_negative_reliability_sum": 13167638.940734863,
+    "source_cv14_cv4_reference_hard_positive_accepted": 14538449,
+    "source_cv14_cv4_reference_hard_negative_rejected": 0,
+    "host_reference_positive_reliability_mean": 0.9952252107160182,
+    "host_reference_negative_reliability_mean": 0.9951498495771821,
+    "host_reference_reliability_separation": 7.536113883610529e-05,
+    "host_reference_hard_positive_accept_recall": 1.0,
+    "host_reference_hard_negative_reject_rate": 0.0,
+    "cv4_reference_positive_reliability_mean": 0.9957318963292476,
+    "cv4_reference_negative_reliability_mean": 0.9955900530871611,
+    "cv4_reference_reliability_separation": 0.00014184324208654786,
+    "cv4_reference_hard_positive_accept_recall": 1.0,
+    "cv4_reference_hard_negative_reject_rate": 0.0,
+    "source_cv14_host_reference_positive_reliability_mean": 0.9213989841948156,
+    "source_cv14_host_reference_negative_reliability_mean": 0.9153219933112754,
+    "source_cv14_host_reference_reliability_separation": 0.00607699088354019,
+    "source_cv14_host_reference_hard_positive_accept_recall": 1.0,
+    "source_cv14_host_reference_hard_negative_reject_rate": 0.0,
+    "source_cv14_cv4_reference_positive_reliability_mean": 0.9226050129709611,
+    "source_cv14_cv4_reference_negative_reliability_mean": 0.9187989152415366,
+    "source_cv14_cv4_reference_reliability_separation": 0.003806097729424529,
+    "source_cv14_cv4_reference_hard_positive_accept_recall": 1.0,
+    "source_cv14_cv4_reference_hard_negative_reject_rate": 0.0,
+    "acceptance_positive_pixels": 11911839,
+    "acceptance_negative_pixels": 10564151,
+    "positive_reliability_mean": 0.9952252107160182,
+    "negative_reliability_mean": 0.9951498495771821,
+    "hard_positive_accept_recall": 1.0,
+    "hard_negative_reject_rate": 0.0,
+    "reliability_separation": 7.536113883610529e-05,
+    "host_reference_separation_gain_vs_source_cv14": -0.0060016297447040845,
+    "cv4_reference_separation_gain_vs_source_cv14": -0.003664254487337981,
+    "rescue_recovery_rate": 0.21977135917225113,
+    "baseline_correct_damage_rate": 0.011637763868468865,
+    "damage_rescue_ratio": 2.216546620379723,
+    "acceptance_semantics": "proposal-conditioned soft acceptance coefficient",
+    "training_acceptance_reference": "Host",
+    "validation_secondary_acceptance_reference": "frozen C-V4",
+    "cv4_reference_labels_backpropagated": false,
+    "acceptance_inputs": "frozen temporal latent + frozen semantic latent + normalized bounded Delta-c4 descriptor + current c4 descriptor",
+    "acceptance_supervision_mapping": "deployed reliability_c4 -> output resize -> Host-relative beneficial/harmful BCE",
+    "damage_rescue_reference": "frozen C-V4",
+    "cv14_proposal_generator_frozen": true,
+    "cv14_reliability_prior_frozen": true,
+    "training_objective": "L_seg only",
+    "l_seg": true,
+    "l_accept_backprop": false,
+    "l_protect_backprop": false,
+    "gt_beneficial_harmful_backprop": false,
+    "rescue_ce": false,
+    "temporal_loss": false,
+    "raft_training": false,
+    "evaluation_model": "C-V16-A fresh Gate"
+  },
+  "delta_vs_host": {
+    "mIoU": 0.007885819998570187,
+    "mTC": 0.007109367242176812,
+    "mVC8": 0.00824829202763433,
+    "mVC16": 0.01105959876822682
+  },
+  "delta_vs_c_v3": {
+    "mIoU": -0.0007036082583142811,
+    "mTC": 0.0032091102741071964,
+    "mVC8": 0.0017719776557953981,
+    "mVC16": 0.0036053067365614533
+  },
+  "delta_vs_c_v4": {
+    "mIoU": -0.0015325887967527763,
+    "mTC": 0.0016398714129968184,
+    "mVC8": -0.001978980482920667,
+    "mVC16": -0.0013441092117602027
+  },
+  "delta_vs_source_c_v15": {
+    "mIoU": 0.0024481195496718344,
+    "mTC": 0.002291290849749328,
+    "mVC8": 0.0016847186888528931,
+    "mVC16": 0.0016660241471483372
+  },
+  "selection_key": [
+    0,
+    0.6620032265353647,
+    0.7148934732444877
+  ]
+}
