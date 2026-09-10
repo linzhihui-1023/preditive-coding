@@ -24,14 +24,21 @@ def _logits(predictions):
 
 
 def _check_reference_targets_are_independent():
-    # GT        : [0,1,2,3]
-    # Host      : [4,1,2,4] -> proposal rescue at x0, damage at x1
-    # C-V4      : [0,4,2,3] -> proposal damage at x0, rescue at x1
-    # Proposal  : [0,4,2,4]
+    # Four pixels deliberately isolate the two reference systems:
+    #
+    # x0: Host wrong, C-V4 correct, Proposal correct -> Host positive only
+    # x1: Host correct, C-V4 wrong, Proposal wrong   -> Host negative only
+    # x2: Host wrong, C-V4 correct, Proposal wrong   -> C-V4 negative only
+    # x3: Host correct, C-V4 wrong, Proposal correct -> C-V4 positive only
+    #
+    # GT       : [0,1,2,3]
+    # Host     : [4,1,5,3]
+    # C-V4     : [0,4,2,6]
+    # Proposal : [0,4,5,3]
     gt = torch.tensor([[0, 1, 2, 3]], dtype=torch.long)
-    host = _logits([4, 1, 2, 4])
-    c_v4 = _logits([0, 4, 2, 3])
-    proposal = _logits([0, 4, 2, 4])
+    host = _logits([4, 1, 5, 3])
+    c_v4 = _logits([0, 4, 2, 6])
+    proposal = _logits([0, 4, 5, 3])
 
     host_positive, host_negative = training.reference_acceptance_targets(
         host, proposal, gt
@@ -44,10 +51,16 @@ def _check_reference_targets_are_independent():
         raise RuntimeError("Host-reference positive target is wrong")
     if host_negative.tolist() != [[False, True, False, False]]:
         raise RuntimeError("Host-reference negative target is wrong")
-    if cv4_positive.tolist() != [[False, True, False, False]]:
+    if cv4_positive.tolist() != [[False, False, False, True]]:
         raise RuntimeError("C-V4-reference positive target is wrong")
-    if cv4_negative.tolist() != [[True, False, False, True]]:
+    if cv4_negative.tolist() != [[False, False, True, False]]:
         raise RuntimeError("C-V4-reference negative target is wrong")
+
+    # Ensure the synthetic case truly distinguishes the two reference systems.
+    if bool((host_positive & cv4_positive).any().item()):
+        raise RuntimeError("Host/C-V4 positive synthetic targets unexpectedly overlap")
+    if bool((host_negative & cv4_negative).any().item()):
+        raise RuntimeError("Host/C-V4 negative synthetic targets unexpectedly overlap")
 
 
 def _check_training_target_stays_host_relative():
