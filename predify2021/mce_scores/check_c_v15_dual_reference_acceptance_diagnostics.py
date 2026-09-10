@@ -54,22 +54,18 @@ def _check_training_target_stays_host_relative():
     source = inspect.getsource(training)
     required = (
         "Training supervision deliberately remains Host-relative",
-        "reference_acceptance_targets(c_v4_logits.detach(), proposal_logits, gt_gpu)",
+        "cv4_positive, cv4_negative = reference_acceptance_targets(",
+        "c_v4_logits.detach(),",
         '"cv4_reference_labels_backpropagated": False',
         '"training_acceptance_reference": "Host"',
         '"damage_rescue_reference": "frozen C-V4"',
         '"host_reference_separation_gain_vs_source_cv14"',
         '"cv4_reference_separation_gain_vs_source_cv14"',
+        "proposal_acceptance_targets = _base.proposal_acceptance_targets",
     )
     for token in required:
         if token not in source:
             raise RuntimeError(f"C-V15 dual-reference diagnostic contract lost: {token}")
-
-    # The actual training label must still come from the inherited C-V14 target.
-    if "_base.proposal_acceptance_targets" not in source:
-        # Re-export below is also accepted as proof that the inherited target is used.
-        if "proposal_acceptance_targets = _base.proposal_acceptance_targets" not in source:
-            raise RuntimeError("C-V15 no longer exposes the unchanged Host-relative target")
 
 
 def main():
